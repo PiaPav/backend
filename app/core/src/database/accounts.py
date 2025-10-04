@@ -1,11 +1,10 @@
 from typing import Optional
 
-from sqlalchemy import String, select
-from sqlalchemy.orm import Mapped, mapped_column
-
 from database.base import SQLBase
 from database.datamanager import DataManager
 from models.account_models import AccountCreateData
+from sqlalchemy import String, select
+from sqlalchemy.orm import Mapped, mapped_column
 
 
 class Account(SQLBase):

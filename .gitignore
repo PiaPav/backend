@@ -1,5 +1,15 @@
-.venv/
-__pycache__/
-.idea/
-/app/core/uv.lock
+/app/algorithm/service_algoritm.egg-info/
+/services/core/service_auth.egg-info/
+/services/core/uv.lock
+/services/algorithm/uv.lock
+/.idea/vcs.xml
+/.idea/PyV.iml
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/modules.xml
+/.idea/misc.xml
 /app/core/src/utils/config-local.yml
+/local scripts
+/app/core/uv.lock
+/tokens
+/app/core/.env
+/.env
