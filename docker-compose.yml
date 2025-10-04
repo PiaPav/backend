@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE}
+    container_name: postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    networks:
+      - backend
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  core-service:
+    image: ${FASTAPI_IMAGE}
+    container_name: fastapi
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./config.yml:/config.yml:ro
+    ports:
+      - "${FASTAPI_PORT}:${FASTAPI_PORT}"
+    networks:
+      - backend
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:${FASTAPI_PORT}/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+networks:
+  backend:
+
+volumes:
+  pgdata:

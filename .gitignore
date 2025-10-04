@@ -1,4 +1,4 @@
-/services/algorithm/service_algoritm.egg-info/
+/app/algorithm/service_algoritm.egg-info/
 /services/core/service_auth.egg-info/
 /services/core/uv.lock
 /services/algorithm/uv.lock
@@ -7,3 +7,6 @@
 /.idea/inspectionProfiles/profiles_settings.xml
 /.idea/modules.xml
 /.idea/misc.xml
+/app/core/src/utils/config-local.yml
+/local scripts
+/app/core/uv.lock
