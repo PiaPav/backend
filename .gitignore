@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+.idea/
+/app/core/uv.lock
+/app/core/src/utils/config-local.yml
