@@ -62,7 +62,7 @@ jobs:
           echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> .env
           echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
           echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
-          echo "CORE_SERVICE=ghcr.io/${{ github.repository_owner }}/core-service:latest" >> .env
+          echo "CORE_SERVICE=ghcr.io/piapav/core-service:latest" >> .env
           echo "ACCESS_SECRET_KEY=${{ secrets.ACCESS_SECRET_KEY }}" >> .env
           echo "REFRESH_SECRET_KEY=${{ secrets.REFRESH_SECRET_KEY }}" >> .env
           echo "ALGORITHM=${{ secrets.ALGORITHM }}" >> .env
@@ -101,7 +101,7 @@ jobs:
             script: |
               cd ~/deploy
               docker-compose down --remove-orphans
-              docker image rm -f ghcr.io/${{ github.repository_owner }}/core-service:latest || true
+              docker image rm -f ghcr.io/piapav/core-service:latest || true
 
       - name: Run docker-compose on VPS
         uses: appleboy/ssh-action@v0.1.10
