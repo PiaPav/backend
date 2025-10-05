@@ -26,7 +26,7 @@ jobs:
         with:
           registry: ghcr.io
           username: piapav      # Личный аккаунт, на который создан PAT
-          password: ${{ secrets.GHCR_TOKEN }} # PAT с write:packages
+          password: ${{ secrets.ORG_TOKEN }} # PAT с write:packages
 
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
