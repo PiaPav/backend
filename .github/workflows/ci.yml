@@ -34,7 +34,8 @@ jobs:
           context: ./
           file: ./Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/core_service:latest
+          tags: ghcr.io/piapav/core_service:latest
+
 
   deploy:
     runs-on: ubuntu-24.04
