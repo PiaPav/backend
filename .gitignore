@@ -11,3 +11,5 @@
 /local scripts
 /app/core/uv.lock
 /tokens
+/app/core/.env
+/.env

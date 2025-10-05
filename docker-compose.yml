@@ -1,5 +1,7 @@
 services:
   postgres:
+    env_file:
+      - .env
     image: ${POSTGRES_IMAGE}
     container_name: postgres
     environment:
