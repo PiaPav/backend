@@ -110,7 +110,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            echo "${{ secrets.ORG_GHCR_TOKEN }}" | docker login ghcr.io -u MoonliteSoda --password-stdin
+            echo "${{ secrets.TOKEN }}" | docker login ghcr.io -u MoonliteSoda --password-stdin
 
       - name: Pull images on VPS
         uses: appleboy/ssh-action@v0.1.10
