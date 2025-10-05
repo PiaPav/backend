@@ -21,12 +21,12 @@ services:
 
   core-service:
     image: ${core_service}
-    container_name: fastapi
+    container_name: core_service
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./config.yml:/config.yml:ro
+    env_file:
+      - .env
     ports:
       - "${CORE_PORT}:${CORE_PORT}"
     networks:

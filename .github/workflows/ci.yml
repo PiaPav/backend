@@ -58,8 +58,14 @@ jobs:
           echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> .env
           echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
           echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
-          echo "CORE-SERVICE=ghcr.io/${{ github.repository_owner }}/core-service:latest" >> .env
-          echo "CORE_PORT=8000" >> .env
+          echo "CORE_SERVICE=ghcr.io/${{ github.repository_owner }}/core-service:latest" >> .env
+          echo "ACCESS_SECRET_KEY=${{ secrets.ACCESS_SECRET_KEY }}" >> .env
+          echo "REFRESH_SECRET_KEY=${{ secrets.REFRESH_SECRET_KEY }}" >> .env
+          echo "ALGORITHM=${{ secrets.ALGORITHM }}" >> .env
+          echo "ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}" >> .env
+          echo "REFRESH_TOKEN_EXPIRE_DAYS=${{ secrets.REFRESH_TOKEN_EXPIRE_DAYS }}" >> .env
+          echo "CORE_HOST=${{ secrets.CORE_HOST }}" >> .env
+          echo "CORE_PORT=${{ secrets.CORE_PORT }}" >> .env
 
       - name: Prepare deploy directory on VPS
         uses: appleboy/ssh-action@v0.1.10
@@ -79,29 +85,8 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "./docker-compose.yml,./scripts/generate_config.sh"
+          source: "./docker-compose.yml,./.env"
           target: "~/deploy/"
-
-      - name: Generate config.yml on VPS
-        uses: appleboy/ssh-action@v0.1.10
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          env:
-            ACCESS_SECRET_KEY: "${{ secrets.ACCESS_SECRET_KEY }}"
-            REFRESH_SECRET_KEY: "${{ secrets.REFRESH_SECRET_KEY }}"
-            ALGORITHM: "${{ secrets.ALGORITHM }}"
-            ACCESS_TOKEN_EXPIRE_MINUTES: ${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}
-            REFRESH_TOKEN_EXPIRE_DAYS: ${{ secrets.REFRESH_TOKEN_EXPIRE_DAYS }}
-            FASTAPI_HOST: ${{ secrets.CORE_HOST }}
-            FASTAPI_PORT: ${{ secrets.CORE_PORT }}
-            POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-            POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-            POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-
-          script: |
-            bash ~/deploy/generate_config.sh ~/deploy/config.yml
 
       - name: Run docker-compose on VPS
         uses: appleboy/ssh-action@v0.1.10
@@ -111,6 +96,6 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd ~/deploy
-            docker-compose pull
-            docker-compose up -d
+            docker-compose --env-file .env pull
+            docker-compose --env-file .env up -d
             docker-compose ps
