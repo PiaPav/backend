@@ -26,7 +26,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.TOKEN }}
+          password: ${{ secrets.ORG_TOKEN }}
 
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
@@ -34,7 +34,7 @@ jobs:
           context: ./app/core
           file: ./app/core/Dockerfile
           push: true
-          tags: ghcr.io/moonlitesoda/core_service:latest
+          tags: ghcr.io/piapav/core_service:latest
           # workaround он же ебучий костыль
           # в будущем пушить в реп организации а не в личный
 

@@ -10,3 +10,4 @@
 /app/core/src/utils/config-local.yml
 /local scripts
 /app/core/uv.lock
+/tokens
