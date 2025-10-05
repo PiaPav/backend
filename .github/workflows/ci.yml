@@ -27,7 +27,7 @@ jobs:
           registry: ghcr.io
           username: moonlitesoda
           #брать из github переводить в lowercase
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.TOKEN }}
 
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
