@@ -25,7 +25,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: moonlitesoda
+          #брать из github переводить в lowercase
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Push Docker Image
@@ -34,7 +35,7 @@ jobs:
           context: ./app/core
           file: ./app/core/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.actor }}/core_service:latest
+          tags: ghcr.io/moonlitesoda/core_service:latest
           # workaround он же ебучий костыль
           # в будущем пушить в реп организации а не в личный
 
