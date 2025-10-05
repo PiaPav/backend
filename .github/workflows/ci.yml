@@ -109,10 +109,8 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          envs:
-            GHCR_PAT: ${{ secrets.ORG_TOKEN }}
           script: |
-            echo "$GHCR_PAT" | docker login ghcr.io -u MoonliteSoda --password-stdin
+            echo "${{ secrets.ORG_TOKEN }}" | docker login ghcr.io -u MoonliteSoda --password-stdin
 
       - name: Run docker-compose on VPS
         uses: appleboy/ssh-action@v0.1.10
