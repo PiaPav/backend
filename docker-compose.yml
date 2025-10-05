@@ -20,7 +20,7 @@ services:
       retries: 5
 
   core-service:
-    image: ${FASTAPI_IMAGE}
+    image: ${CORE-SERVICE}
     container_name: fastapi
     depends_on:
       postgres:
@@ -28,12 +28,12 @@ services:
     volumes:
       - ./config.yml:/config.yml:ro
     ports:
-      - "${FASTAPI_PORT}:${FASTAPI_PORT}"
+      - "${CORE_PORT}:${CORE_PORT}"
     networks:
       - backend
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:${FASTAPI_PORT}/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:${CORE_PORT}/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5

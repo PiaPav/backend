@@ -1,5 +1,4 @@
-name: CI for core only + postgres
-
+name: CI for core + postgres
 
 on:
   push:
@@ -10,46 +9,57 @@ jobs:
   build-core-service:
     runs-on: ubuntu-24.04
     steps:
-    - name: Copy rep for core-service
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
-        sparse-checkout: |
-          core/*
+      - name: Copy repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            app/core/*
 
-    - name: Set Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.13'
+      #- name: Setup Python
+      #  uses: actions/setup-python@v5
+      #  with:
+      #    python-version: '3.13'
 
-    - name: Login to GHCR
-      uses: docker/login-action@v2
-      with:
-        registry: ghcr.io
-        username: ${{github.actor}}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Build Docker Image
-      run: docker build -t ghcr.io/${{ github.repository_owner }}/core-service:latest .
-
-    - name: Push Docker Image to GHCR
-      run: docker push ghcr.io/${{ github.repository_owner }}/core-service:latest
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/core-service:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max # магия
 
   deploy:
     runs-on: ubuntu-24.04
-    needs: [build-core-service] # добавлять сюда при добавлении микросервисов в build
-    if: github.ref == 'refs/heads/main' # если ветка main то деплоим
+    needs: [build-core-service]
+    if: github.ref == 'refs/heads/main'  # деплой только из main
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            docker-compose.yml  # берём compose из репа
+
       - name: Create .env file
         run: |
           echo "POSTGRES_IMAGE=postgres:16" > .env
           echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> .env
           echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
           echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
-          echo "core-service=ghcr.io/${{ github.repository_owner }}/core-service:latest" >> .env
+          echo "CORE-SERVICE=ghcr.io/${{ github.repository_owner }}/core-service:latest" >> .env
           echo "CORE_PORT=8000" >> .env
 
-      - name: Deploy for SSH to VPS
+      - name: Prepare deploy directory on VPS
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -57,10 +67,8 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             set -e
-            mkdir -p ~/project/core
-            cd ~/project/core
-
-            
+            mkdir -p ~/deploy
+            cd ~/deploy
             rm -f docker-compose.yml .env
 
       - name: Copy files to server
@@ -69,17 +77,38 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "./docker-compose.yml,./.env"
-          target: "~/deploy/core/"
+          source: "./docker-compose.yml,./scripts/generate_config.sh"
+          target: "~/deploy/"
 
-      - name: Run docker-compose
+      - name: Generate config.yml on VPS
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          env:
+            ACCESS_SECRET_KEY: ${{ secrets.ACCESS_SECRET_KEY }}
+            REFRESH_SECRET_KEY: ${{ secrets.REFRESH_SECRET_KEY }}
+            ALGORITHM: ${{ secrets.ALGORITHM }}
+            ACCESS_TOKEN_EXPIRE_MINUTES: ${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}
+            REFRESH_TOKEN_EXPIRE_DAYS: ${{ secrets.REFRESH_TOKEN_EXPIRE_DAYS }}
+            FASTAPI_HOST: ${{ secrets.CORE_HOST }}
+            FASTAPI_PORT: ${{ secrets.CORE_PORT }}
+            POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+            POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+            POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+
+          script: |
+            bash ~/deploy/generate_config.sh ~/deploy/config.yml
+
+      - name: Run docker-compose on VPS
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd ~/deploy/core
-            docker compose pull
-            docker compose up -d
-            docker compose ps
+            cd ~/deploy
+            docker-compose pull
+            docker-compose up -d
+            docker-compose ps
