@@ -28,7 +28,7 @@ jobs:
         with:
           registry: ghcr.io
           username: MoonliteSoda    # выпустивший ниже токен НЕ ТРОГАТЬ
-          password: ${{ secrets.ORG_TOKEN }} # орговский токен с правами
+          password: ${{ secrets.TOKEN }} # орговский токен с правами
 
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v5
@@ -62,7 +62,7 @@ jobs:
           echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> .env
           echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
           echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
-          echo "CORE_SERVICE=ghcr.io/piapav/core-service:latest" >> .env
+          echo "CORE_SERVICE_IMAGE=ghcr.io/piapav/core-service:latest" >> .env
           echo "ACCESS_SECRET_KEY=${{ secrets.ACCESS_SECRET_KEY }}" >> .env
           echo "REFRESH_SECRET_KEY=${{ secrets.REFRESH_SECRET_KEY }}" >> .env
           echo "ALGORITHM=${{ secrets.ALGORITHM }}" >> .env
@@ -110,7 +110,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            echo "${{ secrets.ORG_TOKEN }}" | docker login ghcr.io -u MoonliteSoda --password-stdin
+            echo "${{ secrets.TOKEN }}" | docker login ghcr.io -u MoonliteSoda --password-stdin
 
 
       - name: Run docker-compose on VPS
