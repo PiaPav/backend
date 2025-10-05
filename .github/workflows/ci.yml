@@ -112,6 +112,7 @@ jobs:
           script: |
             echo "${{ secrets.ORG_TOKEN }}" | docker login ghcr.io -u MoonliteSoda --password-stdin
 
+
       - name: Run docker-compose on VPS
         uses: appleboy/ssh-action@v0.1.10
         with:
