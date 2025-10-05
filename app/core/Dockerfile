@@ -18,4 +18,4 @@ COPY src/ /src
 
 EXPOSE 8000
 
-ENTRYPOINT ["python", "main.py"]
+ENTRYPOINT ["uv","run","python", "main.py"]
