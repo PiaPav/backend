@@ -7,6 +7,7 @@ on:
 jobs:
 
   build-core-service:
+    environment: prod
     runs-on: ubuntu-24.04
     steps:
       - name: Copy repository
@@ -25,7 +26,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: Sergeii    # Личный аккаунт PAT
+          username: ${{ github.actor }}    # Личный аккаунт PAT
           password: ${{ secrets.TOKEN }} # PAT с write:packages
 
       - name: Build and Push Docker Image
@@ -41,6 +42,7 @@ jobs:
 
 
   deploy:
+    environment: prod   # указываем environment
     runs-on: ubuntu-24.04
     needs: [build-core-service]
     if: github.ref == 'refs/heads/main'
