@@ -7,6 +7,7 @@ on:
 jobs:
 
   build-core-service:
+    #enviroment важно не трогать
     environment: prod
     runs-on: ubuntu-24.04
     steps:
@@ -26,7 +27,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: MoonliteSoda    # выпустивший ниже токен
+          username: MoonliteSoda    # выпустивший ниже токен НЕ ТРОГАТЬ
           password: ${{ secrets.ORG_TOKEN }} # орговский токен с правами
 
       - name: Build and Push Docker Image
@@ -41,7 +42,8 @@ jobs:
 
 
   deploy:
-    environment: prod   # указываем environment
+    #enviroment важно не трогать
+    environment: prod
     runs-on: ubuntu-24.04
     needs: [build-core-service]
     if: github.ref == 'refs/heads/main'
