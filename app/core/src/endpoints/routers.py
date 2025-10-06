@@ -1,5 +1,7 @@
 from database.datamanager import DataManager
 from endpoints.auth_endpoints import router as AuthRouter
+from endpoints.core_endpoints import router as CoreRouter
+from endpoints.account_endpoints import router as AccountRouter
 from fastapi import FastAPI
 
 app = FastAPI(title="PiaPav")
@@ -16,3 +18,5 @@ async def shutdown_event():
 
 
 app.include_router(AuthRouter)
+app.include_router(CoreRouter)
+app.include_router(AccountRouter)

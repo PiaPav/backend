@@ -4,6 +4,8 @@ import bcrypt
 from database.accounts import Account
 from fastapi import HTTPException, status
 from jwt import PyJWT, DecodeError
+
+from database.base import DataBaseEntityNotExists
 from models.account_models import AccountData, AccountCreateData, EncodeData
 from models.auth_models import LoginData, AuthResponseData, RefreshData, RegistrationData
 from utils.config import CONFIG
@@ -19,8 +21,8 @@ class AuthService:
     async def registration(data: RegistrationData) -> AccountData:
         hashed_password = await AuthService.hash_password(password=data.password)
         try:
-            account_exist = await Account.get_account_by_login(data.login)
-            if account_exist is not None:
+            account_exist = await Account.is_login_exists(data.login)
+            if account_exist:
                 log.error(f"Логин {data.login} занят")
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Логин {data.login} занят")
             account = await Account.create_account(create_data=AccountCreateData(name=data.name,
@@ -67,22 +69,18 @@ class AuthService:
     @staticmethod
     async def login(login_data: LoginData) -> AuthResponseData:
         try:
-            bd_account = await Account.get_account_by_login(login_data.login)
-            log.info(f"Account {bd_account is None}")
-            if bd_account is None:
-                log.error(f"Неверный логин {login_data}")
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Неверный логин")
-
-            if not await AuthService.verify_password(login_data.password,
-                                                     bd_account.hashed_password):
-                log.error(f"Неверный пароль {login_data}")
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Неверный пароль")
+            bd_account = await Account.get_account_by_login(login_data.login) # Может вызвать DataBaseEntityNotExists если нет логина
+            await AuthService.verify_password(login_data.password, bd_account.hashed_password)
 
             data_to_token = AccountData(id=bd_account.id, name=bd_account.name, surname=bd_account.surname)
             access = await AuthService.encode_to_token(data_to_token, CONFIG.auth.ACCESS_TOKEN_EXPIRE_MINUTES,
                                                        secret_key=CONFIG.auth.ACCESS_SECRET_KEY)
             refresh = await AuthService.encode_to_token(data_to_token, CONFIG.auth.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60,
                                                         secret_key=CONFIG.auth.REFRESH_SECRET_KEY)
+
+        except DataBaseEntityNotExists:
+            log.error(f"Неверный логин")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Неверный логин")
 
         except HTTPException:
             raise
@@ -94,7 +92,7 @@ class AuthService:
 
         return AuthResponseData(access_token=access,
                                 refresh_token=refresh,
-                                token_type="bearer", )
+                                token_type="bearer")
 
     @staticmethod
     async def refresh(refresh_data: RefreshData) -> AuthResponseData:
@@ -119,7 +117,7 @@ class AuthService:
                                                        secret_key=CONFIG.auth.ACCESS_SECRET_KEY)
             refresh = await AuthService.encode_to_token(data_to_token, CONFIG.auth.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60,
                                                         secret_key=CONFIG.auth.REFRESH_SECRET_KEY)
-        except DecodeError:
+        except (DecodeError, DataBaseEntityNotExists): # ошибка декодирования | отсутствие аккаунта в бд (прислали поддельный токен)
             log.error(f"Неверный токен")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный токен")
 
@@ -160,4 +158,7 @@ class AuthService:
 
     @staticmethod
     async def verify_password(password: str, hashed_password: str) -> bool:
-        return bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8"))
+        result = bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8"))
+        if not result:
+            log.error(f"Неверный пароль")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Неверный пароль")

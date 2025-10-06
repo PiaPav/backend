@@ -1,8 +1,14 @@
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel
 
+class AccountFullData(BaseModel):
+    id: int
+    name: str
+    surname: str
+    login: str
 
 class AccountData(BaseModel):
     id: int
@@ -24,3 +30,7 @@ class EncodeData:
     surname: str
     startDate: datetime
     endDate: datetime
+
+class AccountPatchData(BaseModel):
+    name: Optional[str]
+    surname: Optional[str]

@@ -1,6 +1,9 @@
 import os
 from dataclasses import dataclass
+from dotenv import load_dotenv
 
+# Загружаем переменные из .env файла
+load_dotenv()
 
 @dataclass
 class ConfigAuth:
@@ -53,7 +56,7 @@ def load_config() -> Config:
             name=os.environ["POSTGRES_DB"],
             user=os.environ["POSTGRES_USER"],
             password=os.environ["POSTGRES_PASSWORD"],
-            echo=bool(os.environ["POSTGRES_ECHO"])
+            echo=bool(int(os.environ["POSTGRES_ECHO"]))
         ),
     )
 

@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 from typing import TypeVar
 
 from database.base import Base
@@ -47,16 +47,19 @@ class DatabaseManager:
                 await conn.run_sync(Base.metadata.create_all)
 
     @asynccontextmanager
-    async def session(self) -> AsyncGenerator[AsyncSession, None]:
-        async with self.session_factory() as session:
-            try:
-                yield session
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
-            finally:
-                await session.close()
+    async def session(self, exist_session: Optional[AsyncSession] = None) -> AsyncGenerator[AsyncSession, None]:
+        if exist_session is not None:
+            yield exist_session
+        else:
+            async with self.session_factory() as session:
+                try:
+                    yield session
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                    raise
+                finally:
+                    await session.close()
 
     async def close(self):
         await self.engine.dispose()
