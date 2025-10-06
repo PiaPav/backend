@@ -8,5 +8,9 @@
 /.idea/modules.xml
 /.idea/misc.xml
 /app/core/src/utils/config-local.yml
-/local scripts
+/scripts/local scripts
 /app/core/uv.lock
+/scripts/tokens
+/app/core/.env
+/.env
+/scripts/

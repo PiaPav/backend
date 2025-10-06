@@ -1,7 +1,7 @@
-version: "3.9"
-
 services:
   postgres:
+    env_file:
+      - .env
     image: ${POSTGRES_IMAGE}
     container_name: postgres
     environment:
@@ -20,13 +20,13 @@ services:
       retries: 5
 
   core-service:
-    image: ${core_service}
-    container_name: fastapi
+    image: ${CORE_SERVICE_IMAGE}
+    container_name: core_service
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./config.yml:/config.yml:ro
+    env_file:
+      - .env
     ports:
       - "${CORE_PORT}:${CORE_PORT}"
     networks:

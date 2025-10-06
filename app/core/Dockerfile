@@ -1,6 +1,6 @@
 FROM python:3.13-slim
 
-WORKDIR /app
+WORKDIR /src
 
 RUN apt-get update && apt-get install -y \
     curl \
@@ -18,4 +18,4 @@ COPY src/ /src
 
 EXPOSE 8000
 
-CMD ["uv", "run", "python", "main.py"]
+ENTRYPOINT ["uv","run","python", "main.py"]
