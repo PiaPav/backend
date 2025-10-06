@@ -1,7 +1,6 @@
-from fastapi import FastAPI
-
-from endpoints.auth_endpoints import router as AuthRouter
 from database.datamanager import DataManager
+from endpoints.auth_endpoints import router as AuthRouter
+from fastapi import FastAPI
 
 app = FastAPI(title="PiaPav")
 

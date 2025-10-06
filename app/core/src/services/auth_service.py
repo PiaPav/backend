@@ -1,10 +1,9 @@
 from datetime import datetime, timedelta
 
 import bcrypt
+from database.accounts import Account
 from fastapi import HTTPException, status
 from jwt import PyJWT, DecodeError
-
-from database.accounts import Account
 from models.account_models import AccountData, AccountCreateData, EncodeData
 from models.auth_models import LoginData, AuthResponseData, RefreshData, RegistrationData
 from utils.config import CONFIG

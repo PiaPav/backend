@@ -1,5 +1,6 @@
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
+
 
 @dataclass
 class ConfigAuth:
@@ -9,10 +10,12 @@ class ConfigAuth:
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     REFRESH_TOKEN_EXPIRE_DAYS: int
 
+
 @dataclass
 class ConfigServer:
     host: str
     port: int
+
 
 @dataclass
 class ConfigDB:
@@ -23,11 +26,13 @@ class ConfigDB:
     password: str
     echo: bool
 
+
 @dataclass
 class Config:
     auth: ConfigAuth
     server: ConfigServer
     db: ConfigDB
+
 
 def load_config() -> Config:
     return Config(
@@ -51,5 +56,6 @@ def load_config() -> Config:
             echo=bool(os.environ["POSTGRES_ECHO"])
         ),
     )
+
 
 CONFIG = load_config()
