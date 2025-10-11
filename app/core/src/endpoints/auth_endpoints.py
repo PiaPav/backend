@@ -18,7 +18,7 @@ async def login(login_model: LoginData, service: AuthService = Depends()) -> Aut
     return result
 
 
-@router.post("/refresh", status_code=status.HTTP_200_OK)
+@router.post("/refresh", status_code=status.HTTP_200_OK, response_model=AuthResponseData)
 async def refresh(refresh_model: RefreshData, service: AuthService = Depends()) -> AuthResponseData:
     log.info("Обновление токена - начало")
     result = await service.refresh(refresh_data=refresh_model)
@@ -26,7 +26,7 @@ async def refresh(refresh_model: RefreshData, service: AuthService = Depends()) 
     return result
 
 
-@router.post("/registration")
+@router.post("/registration", response_model=AccountData)
 async def registration(data: RegistrationData, auth_service: AuthService = Depends()) -> AccountData:
     log.info("Регистрация аккаунта - начало")
     result = await auth_service.registration(data=data)

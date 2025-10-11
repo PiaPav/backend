@@ -1,4 +1,5 @@
 from fastapi import HTTPException, status
+
 from database.accounts import Account
 from database.base import DataBaseEntityNotExists
 from models.account_models import AccountFullData, AccountPatchData
@@ -17,8 +18,8 @@ class AccountService:
             return result
 
         except DataBaseEntityNotExists as e:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                    detail=e.message)
+            log.error(f"Аккаунт не найден. Детали: {e.message}")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Аккаунт не найден")
 
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")
@@ -33,9 +34,10 @@ class AccountService:
 
             return result
 
+
         except DataBaseEntityNotExists as e:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                    detail=e.message)
+            log.error(f"Аккаунт не найден. Детали: {e.message}")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Аккаунт не найден")
 
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")

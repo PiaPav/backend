@@ -12,16 +12,20 @@ router = APIRouter(prefix="/v1/account", tags=["Accounts"])
 
 security = HTTPBearer()
 
+
 @router.get("", status_code=status.HTTP_200_OK, response_model=AccountFullData)
-async def get_account(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(), service: AccountService = Depends()) -> AccountFullData:
+async def get_account(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(),
+                      service: AccountService = Depends()) -> AccountFullData:
     log.info(f"Получение данных аккаунта - начало")
     user = await auth_service.verify_token(token=token.credentials)
     result = await service.get_account_by_id(user.id)
     log.info(f"Получение данных аккаунта - конец")
     return result
 
+
 @router.patch("", status_code=status.HTTP_200_OK, response_model=AccountFullData)
-async def patch_account(patch_data: AccountPatchData, token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(), service: AccountService = Depends()) -> AccountFullData:
+async def patch_account(patch_data: AccountPatchData, token: HTTPAuthorizationCredentials = Depends(security),
+                        auth_service: AuthService = Depends(), service: AccountService = Depends()) -> AccountFullData:
     log.info(f"Изменение данных аккаунта - начало")
     user = await auth_service.verify_token(token=token.credentials)
     result = await service.patch_account_by_id(user.id, patch_data)

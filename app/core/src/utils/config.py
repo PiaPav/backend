@@ -1,9 +1,11 @@
 import os
 from dataclasses import dataclass
+
 from dotenv import load_dotenv
 
 # Загружаем переменные из .env файла
 load_dotenv()
+
 
 @dataclass
 class ConfigAuth:
