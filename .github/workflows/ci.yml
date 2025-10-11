@@ -1,0 +1,135 @@
+name: CI for core + postgres
+
+on:
+  push:
+    branches: [main, dev-test]
+
+jobs:
+
+  build-core-service:
+    #enviroment важно не трогать
+    environment: prod
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Copy repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            app/core
+
+      #- name: Setup Python
+      #  uses: actions/setup-python@v5
+      #  with:
+      #    python-version: '3.13'
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: MoonliteSoda    # выпустивший ниже токен НЕ ТРОГАТЬ
+          password: ${{ secrets.TOKEN }} #это мой токен с правами
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app/core
+          file: ./app/core/Dockerfile
+          push: true
+          tags: ghcr.io/piapav/core_service:latest
+          # lowercase
+          # workaround он же ебучий костыль
+
+
+  deploy:
+    #enviroment важно не трогать
+    environment: prod
+    runs-on: ubuntu-24.04
+    needs: [build-core-service]
+    if: github.ref == 'refs/heads/main'
+    # деплой только из main
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            docker-compose.yml  # берём compose из репа
+
+      - name: Create .env file
+        run: |
+          echo "POSTGRES_IMAGE=postgres:16" > .env
+          echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> .env
+          echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
+          echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
+          echo "CORE_SERVICE_IMAGE=ghcr.io/piapav/core_service:latest" >> .env
+          echo "ACCESS_SECRET_KEY=${{ secrets.ACCESS_SECRET_KEY }}" >> .env
+          echo "REFRESH_SECRET_KEY=${{ secrets.REFRESH_SECRET_KEY }}" >> .env
+          echo "ALGORITHM=${{ secrets.ALGORITHM }}" >> .env
+          echo "ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}" >> .env
+          echo "REFRESH_TOKEN_EXPIRE_DAYS=${{ secrets.REFRESH_TOKEN_EXPIRE_DAYS }}" >> .env
+          echo "CORE_HOST=${{ secrets.CORE_HOST }}" >> .env
+          echo "CORE_PORT=${{ secrets.CORE_PORT }}" >> .env
+          echo "POSTGRES_ECHO=${{ secrets.DB_ECHO}}" >> .env
+
+      - name: Prepare deploy directory on VPS
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+            mkdir -p ~/deploy
+            cd ~/deploy
+            rm -f docker-compose.yml .env
+
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "./docker-compose.yml, ./.env"
+          target: "~/deploy/"
+
+      - name: Clean old containers on VPS
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+            host: ${{ secrets.SERVER_HOST }}
+            username: ${{ secrets.SERVER_USER }}
+            key: ${{ secrets.SERVER_SSH_KEY }}
+            script: |
+              cd ~/deploy
+              docker-compose down --remove-orphans
+              docker image rm -f ghcr.io/piapav/core-service:latest || true
+
+      - name: Login to GHCR on VPS
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            echo "${{ secrets.TOKEN }}" | docker login ghcr.io -u MoonliteSoda --password-stdin
+
+      - name: Pull images on VPS
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            docker pull ghcr.io/piapav/core_service:latest
+            docker pull postgres:16
+
+      - name: Run docker-compose on VPS
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd ~/deploy
+            docker-compose --env-file .env up -d
+            docker-compose ps
