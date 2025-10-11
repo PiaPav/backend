@@ -18,5 +18,5 @@ class DataBaseException(Exception):
 
 class DataBaseEntityNotExists(DataBaseException):
     def __init__(self, message: str):
-        self.message = "DataBaseEntityNotExists" + message
+        self.message = "DataBaseEntityNotExists: " + message
         super().__init__(self.message)

@@ -4,11 +4,13 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+
 class AccountFullData(BaseModel):
     id: int
     name: str
     surname: str
     login: str
+
 
 class AccountData(BaseModel):
     id: int
@@ -24,12 +26,13 @@ class AccountCreateData(BaseModel):
 
 
 @dataclass
-class EncodeData:
+class AccountEncodeData:
     id: int
     name: str
     surname: str
     startDate: datetime
     endDate: datetime
+
 
 class AccountPatchData(BaseModel):
     name: Optional[str]

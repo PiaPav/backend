@@ -68,10 +68,6 @@ class Account(SQLBase):
         async with DataManager.session() as session:
             account = await Account.get_account_by_id(account_id, session)
 
-            if account is None:
-                log.error(f"Аккаунт с id {account_id} не существует")
-                raise DataBaseEntityNotExists(f"Аккаунт с id {account_id} не существует")
-
             for field, value in patch_data.model_dump().items():
                 if value is not None:
                     setattr(account, field, value)

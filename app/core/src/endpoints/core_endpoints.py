@@ -14,10 +14,10 @@ security = HTTPBearer()
 
 
 @router.get("/home", status_code=status.HTTP_200_OK, response_model=HomePageData)
-async def homepage(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(), service: CoreService = Depends()) -> HomePageData:
+async def homepage(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(),
+                   service: CoreService = Depends()) -> HomePageData:
     log.info(f"Получение главной страницы - начало")
     user = await auth_service.verify_token(token=token.credentials)
     result = await service.get_homepage(user_data=user)
     log.info(f"Получение главной страницы - конец")
     return result
-
