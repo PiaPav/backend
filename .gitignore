@@ -11,10 +11,5 @@
 /local scripts
 /app/core/uv.lock
 /tokens
-/scripts/local/scripts
-/app/core/uv.lock
-/scripts/tokens
-/app/core/.env
 /.env
-/scripts/
-/app/core/merge-commit.sh
+/.env

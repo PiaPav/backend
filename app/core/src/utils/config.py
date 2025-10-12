@@ -56,7 +56,7 @@ def load_config() -> Config:
             name=os.environ["POSTGRES_DB"],
             user=os.environ["POSTGRES_USER"],
             password=os.environ["POSTGRES_PASSWORD"],
-            echo=bool(int(os.environ["POSTGRES_ECHO"]))
+            echo=os.environ.get("POSTGRES_ECHO", "false").lower() in ["true", "1", "yes",1]
         ),
     )
 
