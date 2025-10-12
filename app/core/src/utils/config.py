@@ -15,12 +15,10 @@ class ConfigAuth:
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     REFRESH_TOKEN_EXPIRE_DAYS: int
 
-
 @dataclass
 class ConfigServer:
     host: str
     port: int
-
 
 @dataclass
 class ConfigDB:
