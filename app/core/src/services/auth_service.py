@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 import bcrypt
+from database.accounts import Account
 from fastapi import HTTPException, status
 from jwt import PyJWT, DecodeError
 
