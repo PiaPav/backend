@@ -71,6 +71,12 @@ jobs:
           echo "CORE_HOST=${{ secrets.CORE_HOST }}" >> .env
           echo "CORE_PORT=${{ secrets.CORE_PORT }}" >> .env
           echo "POSTGRES_ECHO=${{ secrets.DB_ECHO}}" >> .env
+          echo "S3_API_PORT=${{ secrets.S3_API_PORT}}" >> .env
+          echo "S3_CONSOLE_PORT=${{ secrets.S3_CONSOLE_PORT}}" >> .env
+          echo "MINIO_ROOT_USER=${{ secrets.MINIO_ROOT_USER}}" >> .env
+          echo "MINIO_ROOT_PASSWORD=${{ secrets.MINIO_ROOT_PASSWORD}}" >> .env
+
+          
 
       - name: Prepare deploy directory on VPS
         uses: appleboy/ssh-action@v0.1.10
