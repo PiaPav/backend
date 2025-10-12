@@ -4,7 +4,10 @@ import bcrypt
 from database.accounts import Account
 from fastapi import HTTPException, status
 from jwt import PyJWT, DecodeError
-from models.account_models import AccountData, AccountCreateData, EncodeData
+
+from database.accounts import Account
+from database.base import DataBaseEntityNotExists
+from models.account_models import AccountData, AccountCreateData, AccountEncodeData
 from models.auth_models import LoginData, AuthResponseData, RefreshData, RegistrationData
 from utils.config import CONFIG
 from utils.logger import create_logger
@@ -19,8 +22,8 @@ class AuthService:
     async def registration(data: RegistrationData) -> AccountData:
         hashed_password = await AuthService.hash_password(password=data.password)
         try:
-            account_exist = await Account.get_account_by_login(data.login)
-            if account_exist is not None:
+            account_exist = await Account.is_login_exists(data.login)
+            if account_exist:
                 log.error(f"Логин {data.login} занят")
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Логин {data.login} занят")
             account = await Account.create_account(create_data=AccountCreateData(name=data.name,
@@ -36,12 +39,10 @@ class AuthService:
             # Пока заглушка, надо сделать проверки ошибок орм и бд
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
 
-        return AccountData(id=account.id,
-                           name=account.name,
-                           surname=account.surname)
+        return AccountData.model_validate(account, from_attributes=True)
 
     @staticmethod
-    async def verify_token(token: str) -> EncodeData:
+    async def verify_token(token: str) -> AccountEncodeData:
         try:
             result = await AuthService.check_access_token(token)
             return result
@@ -58,7 +59,7 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
 
     @staticmethod
-    async def check_access_token(token: str):
+    async def check_access_token(token: str) -> AccountEncodeData:
         user_data = await AuthService.decode_token(token, secret_key=CONFIG.auth.ACCESS_SECRET_KEY)
         if user_data.endDate < datetime.now():
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Токен access просрочен")
@@ -67,22 +68,19 @@ class AuthService:
     @staticmethod
     async def login(login_data: LoginData) -> AuthResponseData:
         try:
-            bd_account = await Account.get_account_by_login(login_data.login)
-            log.info(f"Account {bd_account is None}")
-            if bd_account is None:
-                log.error(f"Неверный логин {login_data}")
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Неверный логин")
-
-            if not await AuthService.verify_password(login_data.password,
-                                                     bd_account.hashed_password):
-                log.error(f"Неверный пароль {login_data}")
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Неверный пароль")
+            bd_account = await Account.get_account_by_login(
+                login_data.login)  # Может вызвать DataBaseEntityNotExists если нет логина
+            await AuthService.verify_password(login_data.password, bd_account.hashed_password)
 
             data_to_token = AccountData(id=bd_account.id, name=bd_account.name, surname=bd_account.surname)
             access = await AuthService.encode_to_token(data_to_token, CONFIG.auth.ACCESS_TOKEN_EXPIRE_MINUTES,
                                                        secret_key=CONFIG.auth.ACCESS_SECRET_KEY)
             refresh = await AuthService.encode_to_token(data_to_token, CONFIG.auth.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60,
                                                         secret_key=CONFIG.auth.REFRESH_SECRET_KEY)
+
+        except DataBaseEntityNotExists as e:
+            log.error(f"Неверный логин. Детали: {e.message}")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Неверный логин")
 
         except HTTPException:
             raise
@@ -94,7 +92,7 @@ class AuthService:
 
         return AuthResponseData(access_token=access,
                                 refresh_token=refresh,
-                                token_type="bearer", )
+                                token_type="bearer")
 
     @staticmethod
     async def refresh(refresh_data: RefreshData) -> AuthResponseData:
@@ -119,7 +117,8 @@ class AuthService:
                                                        secret_key=CONFIG.auth.ACCESS_SECRET_KEY)
             refresh = await AuthService.encode_to_token(data_to_token, CONFIG.auth.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60,
                                                         secret_key=CONFIG.auth.REFRESH_SECRET_KEY)
-        except DecodeError:
+        except (DecodeError,
+                DataBaseEntityNotExists):  # ошибка декодирования | отсутствие аккаунта в бд (прислали поддельный токен)
             log.error(f"Неверный токен")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный токен")
 
@@ -147,10 +146,10 @@ class AuthService:
         return result
 
     @staticmethod
-    async def decode_token(token: str, secret_key: str) -> EncodeData:
+    async def decode_token(token: str, secret_key: str) -> AccountEncodeData:
         result = JWT.decode(jwt=token, key=secret_key, algorithms=CONFIG.auth.ALGORITHM)
-        return EncodeData(result["id"], result["name"], result["surname"],
-                          datetime.fromisoformat(result["startDate"]), datetime.fromisoformat(result["endDate"]))
+        return AccountEncodeData(result["id"], result["name"], result["surname"],
+                                 datetime.fromisoformat(result["startDate"]), datetime.fromisoformat(result["endDate"]))
 
     @staticmethod
     async def hash_password(password: str) -> str:
@@ -160,4 +159,8 @@ class AuthService:
 
     @staticmethod
     async def verify_password(password: str, hashed_password: str) -> bool:
-        return bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8"))
+        result = bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8"))
+        if not result:
+            log.error(f"Неверный пароль")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Неверный пароль")
+        return True

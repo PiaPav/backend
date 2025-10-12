@@ -1,18 +1,26 @@
-from database.datamanager import DataManager
-from endpoints.auth_endpoints import router as AuthRouter
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
-app = FastAPI(title="PiaPav")
+from database.datamanager import DataManager
+from endpoints.account_endpoints import router as AccountRouter
+from endpoints.auth_endpoints import router as AuthRouter
+from endpoints.core_endpoints import router as CoreRouter
+from endpoints.project_endpoints import router as ProjectRouter
 
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Перед запуском
     await DataManager.init_models()
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
+    yield
+    # После запуска
     await DataManager.close()
 
 
+app = FastAPI(title="PiaPav", lifespan=lifespan)
+
 app.include_router(AuthRouter)
+app.include_router(CoreRouter)
+app.include_router(AccountRouter)
+app.include_router(ProjectRouter)
