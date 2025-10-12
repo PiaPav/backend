@@ -75,6 +75,11 @@ jobs:
           echo "S3_CONSOLE_PORT=${{ secrets.S3_CONSOLE_PORT}}" >> .env
           echo "MINIO_ROOT_USER=${{ secrets.MINIO_ROOT_USER}}" >> .env
           echo "MINIO_ROOT_PASSWORD=${{ secrets.MINIO_ROOT_PASSWORD}}" >> .env
+          echo "RabbitMQ_API_PORT=${{ secrets.RabbitMQ_API_PORT}}" >> .env
+          echo "RabbitMQ_CONSOLE_PORT=${{ secrets.RabbitMQ_CONSOLE_PORT}}" >> .env
+          echo "RabbitMQ_USER=${{ secrets.RabbitMQ_USER}}" >> .env
+          echo RabbitMQ_PASSWORD=${{ secrets.RabbitMQ_PASSWORD}}" >> .env
+
 
           
 

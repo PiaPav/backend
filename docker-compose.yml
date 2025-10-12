@@ -19,6 +19,21 @@ services:
       timeout: 5s
       retries: 5
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:${RabbitMQ_API_PORT}"
+      - "15672:${RabbitMQ_CONSOLE_PORT}"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RabbitMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RabbitMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - backend
+    restart: unless-stopped
+
   minio:
     image: minio/minio:latest
     container_name: minio
