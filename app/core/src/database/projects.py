@@ -65,3 +65,10 @@ class Project(SQLBase):
             projects = result.scalars().all()
             total = len(projects)
             return total, projects
+
+    @staticmethod
+    async def delete_project(project_id: int, account_id: int) -> None:
+        async with DataManager.session() as session:
+            project = await Project.get_project_by_id(project_id, account_id, session)
+            await session.delete(project)
+            return
