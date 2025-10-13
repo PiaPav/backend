@@ -29,12 +29,19 @@ class ConfigDB:
     password: str
     echo: bool
 
+@dataclass
+class ConfigBroker:
+    host: str
+    queue: str
+    user: str
+    password: str
 
 @dataclass
 class Config:
     auth: ConfigAuth
     server: ConfigServer
     db: ConfigDB
+    broker: ConfigBroker
 
 
 def load_config() -> Config:
@@ -58,6 +65,13 @@ def load_config() -> Config:
             password=os.environ["POSTGRES_PASSWORD"],
             echo=os.environ.get("POSTGRES_ECHO", "false").lower() in ["true", "1", "yes",1]
         ),
+        broker = ConfigBroker(
+            host=os.environ.get("RABBIT_HOST","rabbitmq"),
+            queue=os.environ.get("RABBIT_QUEUE","tasks"),
+            user=os.environ["RabbitMQ_USER"],
+            password=os.environ["RabbitMQ_PASSWORD"]
+        ),
+
     )
 
 

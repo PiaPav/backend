@@ -81,8 +81,6 @@ jobs:
           echo RabbitMQ_PASSWORD=${{ secrets.RabbitMQ_PASSWORD}}" >> .env
 
 
-          
-
       - name: Prepare deploy directory on VPS
         uses: appleboy/ssh-action@v0.1.10
         with:
