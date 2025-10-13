@@ -1,7 +1,6 @@
 import aio_pika
 import json
 
-from aiormq.tools import awaitable
 from utils.config import CONFIG
 from utils.logger import create_logger
 
@@ -21,7 +20,6 @@ class Producer:
         self.exchange_type = exchange_type
         self.connection = None
         self.channel = None
-        self._connect()
 
     async def _connect(self):
         self.connection = await aio_pika.connect_robust(f"amqp://{self.user}:{self.password}@{self.host}/")

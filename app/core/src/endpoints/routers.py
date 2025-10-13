@@ -13,6 +13,7 @@ from endpoints.project_endpoints import router as ProjectRouter
 async def lifespan(app: FastAPI):
     # Перед запуском
     await DataManager.init_models()
+    # TODO добавить вызов connect для рэбит
     yield
     # После запуска
     await DataManager.close()
