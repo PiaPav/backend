@@ -27,11 +27,11 @@ class Producer:
         self.exchange = await self.channel.declare_exchange(
             self.exchange, self.exchange_type, durable=True
         )
-        log.info("Подключено к RabbitMQ")
+        log.info("Подключено к брокеру")
 
     async def close(self):
         await self.connection.close()
-        log.info("Подключение к RabbitMQ закрыто")
+        log.info("Подключение к брокеру закрыто")
 
     async def publish(self, routing_key: str, message: dict, persistent=True):
         body = json.dumps(message).encode()
@@ -40,7 +40,10 @@ class Producer:
             delivery_mode=aio_pika.DeliveryMode.PERSISTENT if persistent else aio_pika.DeliveryMode.NOT_PERSISTENT,
         )
         await self.exchange.publish(msg, routing_key=routing_key)
-        log.info(f"[→] async отправлено {routing_key}: {message}")
+        log.info(f"отправлено {routing_key}: {message}")
+
+
+producer = Producer()
 
 
 
