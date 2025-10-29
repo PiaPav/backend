@@ -7,6 +7,7 @@ from models.project_models import ProjectData, ArchitectureModel, ProjectCreateD
     ProjectListDataLite, ProjectDataLite
 from utils.logger import create_logger
 
+
 log = create_logger("ProjectService")
 
 
@@ -39,7 +40,9 @@ class ProjectService:
                              file: UploadFile) -> ProjectData:
         # TODO Сделать сохранение архива. Локально или в с3
         try:
+
             project = await Project.create_project(create_data=create_data, author_id=user_data.id)
+
 
             architecture = ArchitectureModel(data=project.architecture)
 
@@ -60,6 +63,8 @@ class ProjectService:
         try:
             project = await Project.patch_project_by_id(project_id=project_id, patch_data=patch_data,
                                                         account_id=user_data.id)
+
+
 
             architecture = ArchitectureModel(data=project.architecture)
 

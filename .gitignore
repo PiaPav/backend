@@ -16,3 +16,5 @@
 /scripts/
 /minio-data/
 /merge-commit.sh
+/app/core/src/infrastructure/broker/test_producer.py
+/app/core/src/infrastructure/broker/consumer test only/
