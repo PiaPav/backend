@@ -54,6 +54,7 @@ class ConnectionBrokerManager:
             await self.connection.close()
             log.info("Подключение к брокеру закрыто")
 
+
     async def _create_queue(self, queue_name: str) ->AbstractQueue:
         queue: AbstractQueue = await self.channel.declare_queue(queue_name, durable=True) #TODO разобраться с аннотацией либо с пайчармом
         log.info(f"Создана очередь: {queue_name}")

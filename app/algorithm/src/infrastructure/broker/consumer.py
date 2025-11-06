@@ -14,7 +14,6 @@ log = create_logger("Consumer")
 class Consumer:
     def __init__(self, connection:ConnectionBrokerManager):
         self.connection = connection
-        self.producer = Producer(connection)
 
     async def start(self, queue_name):
         if not self.connection.channel:
@@ -35,8 +34,6 @@ class Consumer:
 
                 result = await self.handle_task(body)
 
-                await self.producer.publish("result", result) #по хорошему надо рассмотреть и вынести как будто
-                log.info(f"Отправлен результат: {result}")
 
             except Exception as e:
                 log.error(f"Ошибка при обработке сообщения: {e}")
@@ -62,7 +59,7 @@ async def void_word():
 
 con = ConnectionBrokerManager()
 
-async def run():
+"""async def run():
     await con.connect()
     con.queue_task = await con._create_queue("tasks")
     con.queue_result  = await con._create_queue("result")
@@ -72,4 +69,4 @@ async def run():
     consumer = Consumer(con)
     await consumer.start("tasks")
 
-asyncio.run(run())
+asyncio.run(run())"""
