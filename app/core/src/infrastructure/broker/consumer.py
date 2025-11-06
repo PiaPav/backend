@@ -1,64 +1,67 @@
 import asyncio
 import json
-import aio_pika
+from typing import Optional
 
-from aio_pika.abc import AbstractIncomingMessage
+from aio_pika import RobustQueue
 
 from manager import ConnectionBrokerManager
-from producer import Producer
-from utils.config import CONFIG
 from utils.logger import create_logger
 
-log = create_logger("Consumer_Core")
+log = create_logger("BrokerConsumer")
 
 class Consumer:
     def __init__(self, connection:ConnectionBrokerManager):
-        self.connection = connection
-        self.producer = Producer(connection)
+        self.connection: ConnectionBrokerManager = connection
+        self.queue: Optional[RobustQueue] = None
 
     async def start(self, queue_name):
-        """подписано в процесс через корутину (через евентлуп)"""
         if not self.connection.channel:
-            raise RuntimeError("Брокер не подключен.")
+            await self.connection.connect()
 
-        queue = await self.connection.channel.declare_queue(queue_name, durable=True)
-        log.info(f"Подписан на очередь: {queue_name}")
+        if self.connection.queue is None:
+            self.queue = await self.connection.channel.declare_queue(queue_name, durable=True)
+            log.info(f"Подписан на очередь: {queue_name}")
+        else:
+            self.queue = self.connection.queue
+            #todo мейби убрать все это из-за явной инициализации в ConnectionBrokerManager
 
         await self.connection.channel.set_qos(prefetch_count=1) # одна задачу в один момент времени
 
-        await queue.consume(self._on_message)
+
         log.info("Ожидание сообщений")
-        await asyncio.Future()  # магия ебанная
 
-    async def _on_message(self, message: AbstractIncomingMessage):
-        async with message.process():
-            try:
-                body = json.loads(message.body)
-                log.info(f"Получено сообщение: {body}")
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            log.info("Consumer остановлен.")
 
-                result = await self.handle_task(body)
+    async def messages(self):
+        """
+        Асинхронный генератор, отдающий сообщения наружу.
+        """
+        if not self.connection.channel: #невозможно?
+            raise RuntimeError("Брокер не подключен. Сначала вызови connect()")
 
-                await self.producer.publish("result", result) #по хорошему надо указывать неявное имя
-                log.info(f"Отправлен результат: {result}")
-
-            except Exception as e:
-                log.error(f"Ошибка при обработке сообщения: {e}")
-
-    async def handle_task(self, task: dict) -> dict:
-        """чисто логика обрабоки, скорее всего инверсию бизнес логики писать сюда"""
-        log.info(f"Обработка задачи: {task}")
-
-        result = {
-                "task_id": task.get("task_id"),
-                "status": "done",
-                "processed_text": task.get("text", "").upper()
-            }
-
-        await void_word()
-
-        return result
+        async with self.queue.iterator() as queue_iter:
+            async for message in queue_iter:  # получаем сообщения
+                async with message.process():
+                    try:
+                        body = json.loads(message.body)
+                        log.info(f"Получено сообщение: {body}")
+                        yield body
+                    except Exception as e:
+                        log.error(f"Ошибка при чтении сообщения: {e}")
 
 
-async def void_word():
-    await asyncio.sleep(2)
-    return True
+
+"""async def run():
+    await con.connect()
+    con.queue_task = await con._create_queue("tasks")
+    con.queue_result  = await con._create_queue("result")
+    await con._bind_exchange_as_queue(con.queue_task, "tasks")
+    await con._bind_exchange_as_queue(con.queue_result, "result")
+
+    consumer = Consumer(con)
+    await consumer.start("tasks")
+
+asyncio.run(run())"""

@@ -9,7 +9,6 @@ from manager import ConnectionBrokerManager
 log = create_logger("BrokerProducer")
 
 
-
 con = ConnectionBrokerManager()
 
 
