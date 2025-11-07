@@ -1,0 +1,11 @@
+// algorithm - core
+syntax = "proto3";
+
+package core.api;
+
+import "shared/common.proto";
+
+service AlgorithmConnectionService {
+  // Алгоритм отправляет сообщения в Core
+  rpc ConnectToCore(stream common.GraphPartResponse) returns (common.Empty);
+}

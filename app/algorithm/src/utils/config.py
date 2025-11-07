@@ -37,8 +37,8 @@ def load_config() -> Config:
             host=os.environ.get("RABBIT_HOST","localhost"),
             queue_task=os.environ.get("RABBIT_QUEUE_TASKS","tasks"),
             queue_result=os.environ.get("RABBIT_QUEUE_RESULTS", "results"),
-            user=os.environ["RabbitMQ_USER"],
-            password=os.environ["RabbitMQ_PASSWORD"],
+            user=os.environ.get("RabbitMQ_USER", "guest"),
+            password=os.environ.get("RabbitMQ_PASSWORD", "guest"),
             exchange=os.environ.get("RABBIT_EXCHANGE","default_exchange")
         ),
 
@@ -46,3 +46,4 @@ def load_config() -> Config:
 
 
 CONFIG = load_config()
+

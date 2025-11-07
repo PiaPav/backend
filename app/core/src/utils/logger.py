@@ -7,7 +7,7 @@ def create_logger(name: str, level: str = logging.INFO) -> logging.Logger:
     logger.setLevel(level)
     if logger.handlers:
         return logger
-    format_str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format_str = "CORE: %(asctime)s - %(name)s - %(levelname)s - %(message)s"
     formatter = logging.Formatter(format_str)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)

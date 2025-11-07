@@ -1,3 +1,4 @@
+#manager.py
 import aio_pika
 from aio_pika import Exchange, RobustConnection, Channel
 from typing import Optional

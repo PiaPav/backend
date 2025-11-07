@@ -23,7 +23,7 @@ class Project(SQLBase):
     description: Mapped[str] = mapped_column(Text)
     picture_url: Mapped[str] = mapped_column(String(250), default="")
     architecture: Mapped[dict] = mapped_column(JSON, nullable=True)
-    files_url = Mapped[str] = mapped_column(String(300), )
+    files_url: Mapped[str] = mapped_column(String(300), )
 
     @staticmethod
     async def create_project(create_data: ProjectCreateData, author_id: int) -> "Project":

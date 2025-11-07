@@ -1,0 +1,18 @@
+// core - frontend
+syntax = "proto3";
+
+package core.api;
+
+import "shared/common.proto";
+
+service FrontendStreamService {
+  // Отправка пакета данных на фронт
+  rpc RunAlgorithm(AlgorithmRequest) returns (stream common.GraphPartResponse) {};
+}
+
+message AlgorithmRequest {
+  int64 user_id = 1;
+  int64 task_id = 2;
+}
+
+

@@ -6,7 +6,7 @@ from models.account_models import AccountEncodeData
 from models.project_models import ProjectData, ArchitectureModel, ProjectCreateData, ProjectPatchData, ProjectListData, \
     ProjectListDataLite, ProjectDataLite
 from utils.logger import create_logger
-
+from infrastructure.broker.producer import Producer, producer
 
 log = create_logger("ProjectService")
 
@@ -45,6 +45,8 @@ class ProjectService:
 
 
             architecture = ArchitectureModel(data=project.architecture)
+
+            await producer.publish(routing_key="parse.start", message={"task_id": project.id, "project_path": r"C:\Users\Red0c\Desktop\test"})
 
             return ProjectData(id=project.id,
                                name=project.name,

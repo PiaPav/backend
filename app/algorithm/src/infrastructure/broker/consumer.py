@@ -4,7 +4,7 @@ from typing import Optional
 
 from aio_pika import RobustQueue
 
-from manager import ConnectionBrokerManager
+from infrastructure.broker.manager import ConnectionBrokerManager
 from utils.logger import create_logger
 
 log = create_logger("BrokerConsumer")
@@ -26,12 +26,7 @@ class Consumer:
 
         self.queue = queue
 
-        log.info("Ожидание сообщений")
-
-        try:
-            await asyncio.Event().wait()
-        except asyncio.CancelledError:
-            log.info("Consumer остановлен.")
+        log.info("Consumer готов")
 
     async def messages(self):
         """
