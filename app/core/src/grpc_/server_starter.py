@@ -1,24 +1,30 @@
 import asyncio
-from grpc_control.generated.shared import common_pb2
 
-import grpc
-from grpc_control.generated.api import algorithm_pb2_grpc
+from grpc_.core_server import CoreServer
+from grpc_.core_server import CoreServer
+from utils.logger import create_logger
 
+log = create_logger("StarterGRPC")
 
-class AlgorithmConnectionService(algorithm_pb2_grpc.AlgorithmConnectionServiceServicer):
-    async def ConnectToCore(self, request_iterator, context):
-        async for msg in request_iterator:
-            print("Получен кусок графа:", msg)
-        return common_pb2.Empty()
+server: CoreServer | None = None
 
-async def serve():
-    server = grpc.aio.server()
-    algorithm_pb2_grpc.add_AlgorithmConnectionServiceServicer_to_server(
-        AlgorithmConnectionService(), server
-    )
-    server.add_insecure_port("0.0.0.0:50051")
+async def start_grpc():
+    global server
+    log.info("gRPC сервер стартует...")
+
+    # ❗ Создаём сервер ВНУТРИ ТОГО ЖЕ loop, где FastAPI живёт
+    server = CoreServer(host="0.0.0.0", port=50051)
     await server.start()
-    print("✅ gRPC сервер запущен на 50051")
-    await server.wait_for_termination()
 
-asyncio.run(serve())
+async def stop_grpc():
+    global server
+    if server:
+        log.info("gRPC сервер остановлен")
+        await server.stop()
+
+
+# if __name__ == "__main__":
+#     try:
+#         asyncio.run(start_grpc())
+#     except KeyboardInterrupt:
+#         print("⛔ Сервер остановлен вручную")

@@ -53,6 +53,12 @@ class ParseService:
             log.info(f"Отправлено сообщение {msg}")
             response_id += 1
             await self.client.send(task_id, msg)
+        # Отправка окончания
+        msg = common_pb2.GraphPartResponse(task_id=task_id, response_id=response_id, status=common_pb2.ParseStatus.DONE,
+                                               graph_architecture=common_pb2.GraphPartArchitecture(
+                                               parent="", children=""))
+        log.info(f"Отправлено сообщение {msg}")
+        await self.client.send(task_id, msg)
         log.info(f"Конец парсинга задачи {task_id}")
 
 async def run_parse_microservice(task_id, project_path):

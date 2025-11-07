@@ -4,11 +4,14 @@ import grpc
 import grpc_control.generated.shared.common_pb2 as common_pb2
 import grpc_control.generated.api.core_pb2_grpc as core_pb2_grpc
 import grpc_control.generated.api.algorithm_pb2_grpc as algorithm_pb2_grpc
+from utils.logger import create_logger
+import asyncio
+
+log = create_logger("CoreGRPC")
 
 # =============================
 # ==== ВНУТРЕННИЕ СУЩНОСТИ ====
 # =============================
-
 class TaskSession:
     """Контекст одной задачи (task_id)."""
     def __init__(self, task_id: int):
@@ -16,7 +19,7 @@ class TaskSession:
         self.message_queue = asyncio.Queue()
         self.frontend_connected = False
         self.algorithm_connected = False
-        self.status = "WAITING"
+        self.finished = False   # ✅ основной признак завершения
 
     async def add_message(self, message: common_pb2.GraphPartResponse):
         """Добавить сообщение от Algorithm."""
@@ -24,12 +27,11 @@ class TaskSession:
 
     async def get_next_message(self):
         """Получить следующее сообщение для фронтенда."""
-        message = await self.message_queue.get()
-        return message
+        return await self.message_queue.get()
 
-    async def close(self):
-        """Закрыть сессию."""
-        self.status = "DONE"
+    async def mark_done(self):
+        """Пометить сессию завершённой."""
+        self.finished = True
 
 
 class TaskManager:
@@ -46,33 +48,33 @@ class TaskManager:
         if task_id in self.tasks:
             del self.tasks[task_id]
 
+
 # =====================================
 # ==== gRPC СЕРВИСЫ CORE-SERVER =======
 # =====================================
-# Эту шнягу вызовут с фронта
 class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
     """Сервис для фронтенда: RunAlgorithm (server-streaming)."""
     def __init__(self, task_manager: TaskManager):
         self.task_manager = task_manager
 
     async def RunAlgorithm(self, request, context):
-        """
-        1. Создать или найти TaskSession
-        2. В брокере уже висит задача и алгоритм начал работу
-        3. Ждать и отдавать поток данных фронтенду
-        """
         task_session = self.task_manager.get_or_create_session(request.task_id)
         task_session.frontend_connected = True
 
+        log.info(f"[FRONT] RunAlgorithm: ожидание сообщений task_id={request.task_id}")
+
         try:
-            while task_session.status != "DONE":
-                # Ждём новые сообщения от Algorithm
+            while True:
+                # Если алгоритм сказал DONE — прекращаем стрим
+                if task_session.finished and task_session.message_queue.empty():
+                    log.info(f"[FRONT] Задача {request.task_id} завершена, закрываем поток")
+                    break
+
                 message = await task_session.get_next_message()
-                # Отправляем фронту через gRPC stream
                 yield message
+        except Exception as e:
+            log.error(f"[FRONT] Ошибка RunAlgorithm: {e}")
         finally:
-            # Очистка ресурсов
-            await task_session.close()
             self.task_manager.remove_session(request.task_id)
 
 
@@ -82,59 +84,43 @@ class AlgorithmConnectionService(algorithm_pb2_grpc.AlgorithmConnectionServiceSe
         self.task_manager = task_manager
 
     async def ConnectToCore(self, request_iterator, context):
-        """
-        1. Algorithm подключается
-        2. Core принимает поток GraphPartResponse
-        3. Добавляет их в очередь TaskSession
-        """
-
         task_session: TaskSession | None = None
 
-        try:
-            async for message in request_iterator:
-                # Создаём / находим сессию по task_id
-                if task_session is None:
-                    task_session = self.task_manager.get_or_create_session(message.task_id)
-                    task_session.algorithm_connected = True
+        async for message in request_iterator:
+            if task_session is None:
+                task_session = self.task_manager.get_or_create_session(message.task_id)
+                task_session.algorithm_connected = True
 
-                # Кладём сообщение в очередь
+            log.info(f"Алгоритм msg task={message.task_id}, status={message.status}")
+
+            # ✅ Если алгоритм прислал DONE — отмечаем завершение
+            if message.status == common_pb2.ParseStatus.DONE:
+                await task_session.add_message(message)
+                await task_session.mark_done()
+                log.info(f"Алгоритм получен DONE для task={task_session.task_id}")
+            else:
                 await task_session.add_message(message)
 
-        except Exception as e:
-            print("ConnectToCore EXCEPTION:", e)
-            # Можно дополнительно вызвать:
-            # context.abort(grpc.StatusCode.INTERNAL, str(e))
+        # ✅ НЕ ЗАКРЫВАЕМ СЕССИЮ!
+        # Сессия будет закрыта фронтом после DONE
 
-        finally:
-            # Если алгоритм прислал хоть одно сообщение — закрываем сессию
-            if task_session is not None:
-                await task_session.close()
-
-        # ✅ ОБЯЗАТЕЛЬНО вернуть common_pb2.Empty()
-        # (НЕ google.protobuf.Empty, иначе будет TypeError SerializeToString)
         return common_pb2.Empty()
-
 
 
 # ===========================
 # ==== CoreServer (запуск) ==
 # ===========================
-
 class CoreServer:
-    """Главный сервер Core, объединяющий оба сервиса."""
     def __init__(self, host='[::]', port=50051):
         self.task_manager = TaskManager()
         self.host = host
         self.port = port
 
-        # gRPC сервисы
         self.frontend_service = FrontendStreamService(self.task_manager)
         self.algorithm_service = AlgorithmConnectionService(self.task_manager)
 
-        # gRPC сервер
         self.server = grpc.aio.server()
 
-        # Регистрация сервисов на сервере
         core_pb2_grpc.add_FrontendStreamServiceServicer_to_server(
             self.frontend_service, self.server
         )
@@ -142,22 +128,14 @@ class CoreServer:
             self.algorithm_service, self.server
         )
 
-        # Указываем порт
         self.server.add_insecure_port(f'{self.host}:{self.port}')
 
     async def start(self):
-        """Запуск gRPC сервера и ожидание входящих соединений."""
-        print(f"CoreServer: запуск на {self.host}:{self.port}")
+        log.info(f"CoreServer: запуск на {self.host}:{self.port}")
         await self.server.start()
-        # Ожидание завершения сервера
-        await self.server.wait_for_termination()
 
     async def stop(self):
-        """Остановка сервера и закрытие всех TaskSession."""
-        print("CoreServer: остановка")
-        for task_id, session in list(self.task_manager.tasks.items()):
-            await session.close()
-            self.task_manager.remove_session(task_id)
+        log.info("CoreServer: остановка")
         await self.server.stop(0)
 
 

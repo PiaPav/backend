@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from database.datamanager import DataManager
+from grpc_.server_starter import start_grpc, stop_grpc
 from infrastructure.broker.manager import ConnectionBrokerManager
 from infrastructure.broker.producer import Producer, broker_manager
 from endpoints.account_endpoints import router as AccountRouter
@@ -21,10 +22,12 @@ async def lifespan(app: FastAPI):
     await DataManager.init_models()
     # TODO добавить вызов connect для Rabbit
     await broker_manager.connect()
+    await start_grpc()
     yield
     # После запуска
     await DataManager.close()
     await broker_manager.close()
+    await stop_grpc()
 
 
 app = FastAPI(title="PiaPav", lifespan=lifespan)
