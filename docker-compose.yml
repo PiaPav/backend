@@ -20,8 +20,8 @@ services:
       retries: 5
 
   rabbitmq:
-    image: rabbitmq:3-management
-    container_name: rabbitmq
+    image: ${RABBIT_IMAGE}
+    container_name: rabbitmq_data
     ports:
       - "5672:${RabbitMQ_API_PORT}"
       - "15672:${RabbitMQ_CONSOLE_PORT}"
@@ -35,13 +35,15 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:latest
+    image: ${S3_MINIO_IMAGE}
     container_name: minio
     command: server /data --console-address ":9001"
     restart: unless-stopped
     ports:
       - "9000:${S3_API_PORT}"
       - "9001:${S3_CONSOLE_PORT}"
+    networks:
+      - backend
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
@@ -77,3 +79,5 @@ networks:
 
 volumes:
   pgdata:
+  rabbitmq_data:
+  minio-data:

@@ -32,3 +32,7 @@ app.include_router(AuthRouter)
 app.include_router(CoreRouter)
 app.include_router(AccountRouter)
 app.include_router(ProjectRouter)
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}

@@ -40,6 +40,7 @@ class ConfigBroker:
 
 @dataclass
 class ConfigS3:
+    host: str
     port: int
     port_console: int
     ACCESS_ID: str
@@ -85,6 +86,7 @@ def load_config() -> Config:
             exchange=os.environ.get("RABBIT_EXCHANGE","default_exchange")
         ),
         s3 = ConfigS3(
+            host = os.environ.get("MINIO_HOST", "minio"),
             port = os.environ.get("S3_API_PORT", 9000),
             port_console = os.environ.get("S3_CONSOLE_PORT", 9001),
             ACCESS_ID = os.environ.get("ACCESS_ID", "admin"),

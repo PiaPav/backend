@@ -14,7 +14,7 @@ log = create_logger("ObjectStorageManagerInfra")
 
 
 class ObjectStorageManager(AbstractStorage):
-    def __init__(self, endpoint_url: str = f"http://localhost:{CONFIG.s3.port}",
+    def __init__(self, endpoint_url: str = f"http://{CONFIG.s3.host}:{CONFIG.s3.port}",
                  access_key_id: str = CONFIG.s3.ACCESS_ID,
                  secret_access_key: str = CONFIG.s3.SECRET_KEY,
                  bucket: str = CONFIG.s3.BUCKET):

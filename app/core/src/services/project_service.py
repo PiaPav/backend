@@ -45,13 +45,11 @@ class ProjectService:
 
             project = await Project.create_project(create_data=create_data, author_id=user_data.id)
 
-
-
             architecture = ArchitectureModel(data=project.architecture)
 
-            await object_manager.upload(file)#отдебажить
+            await object_manager.upload(fileobj=file, size = 1, path = user_data.name, arg = user_data.id) # заменить аргументы
 
-            await broker_manager.publish(routing_key="parse.start", message={"task_id": project.id, "project_path": r"C:\Users\Red0c\Desktop\test"})
+            await broker_manager.publish(routing_key="tasks", message={"task_id": project.id, "project_path": r"C:\Users\Red0c\Desktop\test"})
 
             return ProjectData(id=project.id,
                                name=project.name,
