@@ -102,7 +102,7 @@ jobs:
           # Core service image
           echo "CORE_SERVICE_IMAGE=${{ secrets.CORE_SERVICE_IMAGE }}" >> .env
           echo "RABBIT_IMAGE=${{ secrets.RABBIT_IMAGE }}" >> .env
-
+          
 
 
       - name: Prepare deploy directory on VPS
@@ -166,8 +166,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            set -e
-            set -o pipefail
             cd ~/deploy
-            docker compose --env-file .env up -d
-            docker compose ps
+            /usr/bin/docker compose --env-file .env up -d
+            /usr/bin/docker compose ps
+
