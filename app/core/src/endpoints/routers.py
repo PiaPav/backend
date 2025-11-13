@@ -4,22 +4,11 @@ from fastapi import FastAPI
 
 from database.datamanager import DataManager
 from grpc_.server_starter import start_grpc, stop_grpc
-from infrastructure.broker.manager import ConnectionBrokerManager
-from infrastructure.object_storage.object_storage_manager import ObjectStorageManager
-from services.manage.broker_manager import BrokerManager
-from services.manage.object_manager import ObjectManager
-
+from services.manage.broker_manager import broker_repo_task
 from endpoints.account_endpoints import router as AccountRouter
 from endpoints.auth_endpoints import router as AuthRouter
 from endpoints.core_endpoints import router as CoreRouter
 from endpoints.project_endpoints import router as ProjectRouter
-
-
-broker_repo_task = ConnectionBrokerManager(queue_name="tasks", key="tasks")
-broker_manager = BrokerManager(broker_repo_task)
-
-s3_repo = ObjectStorageManager()
-object_manager = ObjectManager(s3_repo)
 
 
 @asynccontextmanager

@@ -6,7 +6,9 @@ from models.account_models import AccountEncodeData
 from models.project_models import ProjectData, ArchitectureModel, ProjectCreateData, ProjectPatchData, ProjectListData, \
     ProjectListDataLite, ProjectDataLite
 from utils.logger import create_logger
-from endpoints.routers import broker_manager, object_manager
+
+from services.manage.broker_manager import broker_manager
+from services.manage.object_manager import object_manager
 
 log = create_logger("ProjectService")
 
