@@ -65,6 +65,7 @@ services:
       - .env
     ports:
       - "${CORE_PORT}:${CORE_PORT}"
+      - "50051:50051"
     networks:
       - backend
     restart: always
