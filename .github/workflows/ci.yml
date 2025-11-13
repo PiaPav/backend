@@ -30,13 +30,14 @@ jobs:
           username: MoonliteSoda    # выпустивший ниже токен НЕ ТРОГАТЬ
           password: ${{ secrets.TOKEN }} #это мой токен с правами
 
-      - name: Build and Push Core Image
+      - name: Build Docker Image
         uses: docker/build-push-action@v5
         with:
-          context: .                #корень репо, чтобы видеть proto и algorithm
+          context: .
           file: ./app/core/Dockerfile
           push: true
           tags: ghcr.io/piapav/core_service:latest
+
 
 
 
