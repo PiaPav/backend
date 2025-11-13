@@ -58,27 +58,51 @@ jobs:
 
       - name: Create .env file
         run: |
-          echo "POSTGRES_IMAGE=postgres:16" > .env
-          echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> .env
-          echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
-          echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
-          echo "CORE_SERVICE_IMAGE=ghcr.io/piapav/core_service:latest" >> .env
-          echo "ACCESS_SECRET_KEY=${{ secrets.ACCESS_SECRET_KEY }}" >> .env
+          # Auth
+          echo "ACCESS_SECRET_KEY=${{ secrets.ACCESS_SECRET_KEY }}" > .env
           echo "REFRESH_SECRET_KEY=${{ secrets.REFRESH_SECRET_KEY }}" >> .env
           echo "ALGORITHM=${{ secrets.ALGORITHM }}" >> .env
           echo "ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}" >> .env
           echo "REFRESH_TOKEN_EXPIRE_DAYS=${{ secrets.REFRESH_TOKEN_EXPIRE_DAYS }}" >> .env
+
+          # Core service
           echo "CORE_HOST=${{ secrets.CORE_HOST }}" >> .env
           echo "CORE_PORT=${{ secrets.CORE_PORT }}" >> .env
-          echo "POSTGRES_ECHO=${{ secrets.DB_ECHO}}" >> .env
-          echo "S3_API_PORT=${{ secrets.S3_API_PORT}}" >> .env
-          echo "S3_CONSOLE_PORT=${{ secrets.S3_CONSOLE_PORT}}" >> .env
-          echo "MINIO_ROOT_USER=${{ secrets.MINIO_ROOT_USER}}" >> .env
-          echo "MINIO_ROOT_PASSWORD=${{ secrets.MINIO_ROOT_PASSWORD}}" >> .env
-          echo "RabbitMQ_API_PORT=${{ secrets.RabbitMQ_API_PORT}}" >> .env
-          echo "RabbitMQ_CONSOLE_PORT=${{ secrets.RabbitMQ_CONSOLE_PORT}}" >> .env
-          echo "RabbitMQ_USER=${{ secrets.RabbitMQ_USER}}" >> .env
-          echo RabbitMQ_PASSWORD=${{ secrets.RabbitMQ_PASSWORD}}" >> .env
+
+          # PostgreSQL
+          echo "POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}" >> .env
+          echo "POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}" >> .env
+          echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
+          echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> .env
+          echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
+          echo "POSTGRES_ECHO=${{ secrets.DB_ECHO }}" >> .env
+          echo "POSTGRES_IMAGE=${{ secrets.POSTGRES_IMAGE }}" >> .env
+
+          # S3 storage
+          echo "MINIO_HOST=${{ secrets.MINIO_HOST }}" >> .env
+          echo "MINIO_ROOT_USER=${{ secrets.MINIO_ROOT_USER }}" >> .env
+          echo "MINIO_ROOT_PASSWORD=${{ secrets.MINIO_ROOT_PASSWORD }}" >> .env
+          echo "S3_API_PORT=${{ secrets.S3_API_PORT }}" >> .env
+          echo "S3_CONSOLE_PORT=${{ secrets.S3_CONSOLE_PORT }}" >> .env
+          echo "BUCKET=${{ secrets.BUCKET }}" >> .env
+          echo "ACCESS_ID=${{ secrets.ACCESS_ID }}" >> .env
+          echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
+          echo "S3_MINIO_IMAGE=${{ secrets.S3_MINIO_IMAGE }}" >> .env
+
+          # RabbitMQ
+          echo "RabbitMQ_API_PORT=${{ secrets.RabbitMQ_API_PORT }}" >> .env
+          echo "RabbitMQ_CONSOLE_PORT=${{ secrets.RabbitMQ_CONSOLE_PORT }}" >> .env
+          echo "RabbitMQ_USER=${{ secrets.RabbitMQ_USER }}" >> .env
+          echo "RabbitMQ_PASSWORD=${{ secrets.RabbitMQ_PASSWORD }}" >> .env
+          echo "RABBIT_HOST=${{ secrets.RABBIT_HOST }}" >> .env
+          echo "RABBIT_QUEUE_TASKS=${{ secrets.RABBIT_QUEUE_TASKS }}" >> .env
+          echo "RABBIT_QUEUE_RESULTS=${{ secrets.RABBIT_QUEUE_RESULTS }}" >> .env
+          echo "RABBIT_EXCHANGE=${{ secrets.RABBIT_EXCHANGE }}" >> .env
+
+          # Core service image
+          echo "CORE_SERVICE_IMAGE=${{ secrets.CORE_SERVICE_IMAGE }}" >> .env
+          echo "RABBIT_IMAGE=${{ secrets.RABBIT_IMAGE }}" >> .env
+
 
 
       - name: Prepare deploy directory on VPS
@@ -130,7 +154,10 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             docker pull ghcr.io/piapav/core_service:latest
-            docker pull postgres:16
+            docker pull ${{secrets.POSTGRES_IMAGE}}
+            docker pull ${{secrets.RABBIT_IMAGE}}
+            docker pull ${{secrets.S3_MINIO_IMAGE}}
+
 
       - name: Run docker-compose on VPS
         uses: appleboy/ssh-action@v0.1.10

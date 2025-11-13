@@ -48,7 +48,7 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
-      - ./minio-data:/data
+      - minio-data:/data
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://localhost:${S3_API_PORT}/minio/health/live || exit 1" ]
       interval: 10s
