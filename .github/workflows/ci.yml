@@ -115,7 +115,7 @@ jobs:
             set -e
             mkdir -p ~/deploy
             cd ~/deploy
-            rm -f docker-compose.yml .env
+            rm -f docker compose.yml .env
 
       - name: Copy files to server
         uses: appleboy/scp-action@v0.1.7
@@ -134,7 +134,7 @@ jobs:
             key: ${{ secrets.SERVER_SSH_KEY }}
             script: |
               cd ~/deploy
-              docker-compose down --remove-orphans
+              docker compose down --remove-orphans
               docker image rm -f ghcr.io/piapav/core-service:latest || true
 
       - name: Login to GHCR on VPS
