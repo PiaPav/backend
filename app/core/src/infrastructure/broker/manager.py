@@ -1,17 +1,18 @@
-#manager.py
 import aio_pika
-from aio_pika import Exchange, RobustConnection, Channel
+from aio_pika import Exchange, Channel
+#поменять на абс
 from typing import Optional
 
-from aio_pika.abc import AbstractQueue
+from aio_pika.abc import AbstractQueue, AbstractRobustConnection
 
 from utils.config import CONFIG
 from utils.logger import create_logger
+from interface import AbstractConnectionBroker
 
 log = create_logger("BrokerManager")
 
 
-class ConnectionBrokerManager:
+class ConnectionBrokerManager(AbstractConnectionBroker):
     def __init__(self,
                  queue_name: str,
                  key: str,
@@ -28,7 +29,7 @@ class ConnectionBrokerManager:
         self.queue_name: str = queue_name
 
         self.exchange: Optional[Exchange] = None
-        self.connection: Optional[RobustConnection] = None
+        self.connection: Optional[AbstractRobustConnection] = None
         self.channel: Optional[Channel] = None
         self.queue: Optional[AbstractQueue] = None
         self.key = key

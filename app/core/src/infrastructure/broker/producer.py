@@ -1,18 +1,16 @@
-#producer.py
 import aio_pika
 import json
 from aio_pika import Message
 
 
 from utils.logger import create_logger
-from infrastructure.broker.manager import ConnectionBrokerManager
-
+from interface import AbstractConnectionBroker
 log = create_logger("BrokerProducer")
 
 
 class Producer:
-    def __init__(self,connection:ConnectionBrokerManager):
-        self.connection:ConnectionBrokerManager = connection
+    def __init__(self,connection:AbstractConnectionBroker):
+        self.connection:AbstractConnectionBroker = connection
 
     async def publish(self, routing_key: str, message: dict, persistent: bool = True) -> None:
         try:
@@ -25,10 +23,3 @@ class Producer:
             log.info(f"Отправлено {routing_key}: {message}")
         except Exception as e:
             log.error(f"Ошибка при отправке сообщения {e}")
-
-
-broker_manager = ConnectionBrokerManager(
-        queue_name="parse_tasks",
-        key="parse.start"
-    )
-producer = Producer(broker_manager)

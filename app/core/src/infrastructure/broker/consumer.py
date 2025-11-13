@@ -4,14 +4,16 @@ from typing import Optional
 
 from aio_pika import RobustQueue
 
-from manager import ConnectionBrokerManager
 from utils.logger import create_logger
+from interface import AbstractConnectionBroker
+
 
 log = create_logger("BrokerConsumer")
 
+
 class Consumer:
-    def __init__(self, connection:ConnectionBrokerManager):
-        self.connection: ConnectionBrokerManager = connection
+    def __init__(self, connection:AbstractConnectionBroker):
+        self.connection: AbstractConnectionBroker = connection
         self.queue: Optional[RobustQueue] = None
 
     async def start(self, queue_name):
