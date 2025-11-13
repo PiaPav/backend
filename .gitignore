@@ -1,7 +1,5 @@
-/app/algorithm/service_algoritm.egg-info/
 /services/core/service_auth.egg-info/
 /services/core/uv.lock
-/services/algorithm/uv.lock
 /.idea/vcs.xml
 /.idea/PyV.iml
 /.idea/inspectionProfiles/profiles_settings.xml
