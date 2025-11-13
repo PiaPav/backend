@@ -7,7 +7,7 @@ from aio_pika.abc import AbstractQueue, AbstractRobustConnection
 
 from utils.config import CONFIG
 from utils.logger import create_logger
-from interface import AbstractConnectionBroker
+from infrastructure.broker.interface import AbstractConnectionBroker
 
 log = create_logger("BrokerManager")
 

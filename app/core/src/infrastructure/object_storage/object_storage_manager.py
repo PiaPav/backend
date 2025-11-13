@@ -5,7 +5,7 @@ from botocore.exceptions import ClientError
 from fastapi.concurrency import run_in_threadpool
 from fastapi import UploadFile
 
-from interface import AbstractStorage
+from infrastructure.object_storage.interface import AbstractStorage
 from utils.config import CONFIG
 from utils.logger import create_logger
 
@@ -14,8 +14,8 @@ log = create_logger("ObjectStorageManagerInfra")
 
 
 class ObjectStorageManager(AbstractStorage):
-    def __init__(self, endpoint_url: str = f"http://localhost:{CONFIG.s3.host}",
-                 access_key_id: str = CONFIG.s3.ID,
+    def __init__(self, endpoint_url: str = f"http://localhost:{CONFIG.s3.port}",
+                 access_key_id: str = CONFIG.s3.ACCESS_ID,
                  secret_access_key: str = CONFIG.s3.SECRET_KEY,
                  bucket: str = CONFIG.s3.BUCKET):
 
@@ -92,7 +92,3 @@ class ObjectStorageManager(AbstractStorage):
 
         except ClientError as e:
             log.error(f"Ошибка при stream_upload загрузке {e}")
-
-
-
-s3manager = ObjectStorageManager()

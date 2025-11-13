@@ -6,7 +6,7 @@ from models.account_models import AccountEncodeData
 from models.project_models import ProjectData, ArchitectureModel, ProjectCreateData, ProjectPatchData, ProjectListData, \
     ProjectListDataLite, ProjectDataLite
 from utils.logger import create_logger
-from infrastructure.broker.producer import Producer, producer
+from endpoints.routers import broker_manager, object_manager
 
 log = create_logger("ProjectService")
 
@@ -44,9 +44,12 @@ class ProjectService:
             project = await Project.create_project(create_data=create_data, author_id=user_data.id)
 
 
+
             architecture = ArchitectureModel(data=project.architecture)
 
-            await producer.publish(routing_key="parse.start", message={"task_id": project.id, "project_path": r"C:\Users\Red0c\Desktop\test"})
+            await object_manager.upload(file)#отдебажить
+
+            await broker_manager.publish(routing_key="parse.start", message={"task_id": project.id, "project_path": r"C:\Users\Red0c\Desktop\test"})
 
             return ProjectData(id=project.id,
                                name=project.name,
@@ -65,8 +68,6 @@ class ProjectService:
         try:
             project = await Project.patch_project_by_id(project_id=project_id, patch_data=patch_data,
                                                         account_id=user_data.id)
-
-
 
             architecture = ArchitectureModel(data=project.architecture)
 
