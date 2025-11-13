@@ -102,7 +102,7 @@ jobs:
           # Core service image
           echo "CORE_SERVICE_IMAGE=${{ secrets.CORE_SERVICE_IMAGE }}" >> .env
           echo "RABBIT_IMAGE=${{ secrets.RABBIT_IMAGE }}" >> .env
-          
+
 
 
       - name: Prepare deploy directory on VPS
@@ -115,7 +115,7 @@ jobs:
             set -e
             mkdir -p ~/deploy
             cd ~/deploy
-            rm -f docker compose.yml .env
+            rm -f docker-compose.yml .env
 
       - name: Copy files to server
         uses: appleboy/scp-action@v0.1.7
@@ -155,7 +155,7 @@ jobs:
           script: |
             docker pull ghcr.io/piapav/core_service:latest
             docker pull ${{secrets.POSTGRES_IMAGE}}
-            docker pull ${{secrets.RABBIT_IMAGE}}
+            docker pull ${{secrets.S3_MINIO_IMAGE}}
             docker pull ${{secrets.S3_MINIO_IMAGE}}
 
 
@@ -167,6 +167,5 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd ~/deploy
-            /usr/bin/docker compose --env-file .env up -d
-            /usr/bin/docker compose ps
-
+            docker compose --env-file .env up -d
+            docker compose ps
