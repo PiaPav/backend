@@ -9,17 +9,18 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip install --no-cache-dir uv grpcio-tools
 
-COPY app/core/pyproject.toml ./
-COPY app/core/src/ /src/core/
+COPY app/core/pyproject.toml ./core_pyproject.toml
+COPY app/core/src/ ./core/
+
 
 COPY app/algorithm/pyproject.toml ./algorithm_pyproject.toml
-COPY app/algorithm/src/ /src/algorithm/
+COPY app/algorithm/src/ ./algorithm/
 
-COPY proto/ /src/proto/
+COPY proto/ ./proto/
 
 RUN uv lock
 RUN uv sync --locked --no-dev
-RUN bash /src/proto/generate_grpc.sh
+RUN bash ./proto/generate_grpc.sh
 
 EXPOSE 8000
 
