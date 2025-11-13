@@ -169,5 +169,5 @@ jobs:
             set -e
             set -o pipefail
             cd ~/deploy
-            docker-compose --env-file .env up -d
-            docker-compose ps
+            docker compose --env-file .env up -d
+            docker compose ps
