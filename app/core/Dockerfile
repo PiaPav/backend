@@ -20,4 +20,4 @@ RUN bash ./proto/generate_grpc.sh
 
 EXPOSE 8000
 
-ENTRYPOINT ["uv", "run", "python", "main.py"]
+ENTRYPOINT ["uv", "run", "python", "core/main.py"]
