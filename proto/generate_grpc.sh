@@ -4,8 +4,8 @@
 PROTO_FILES=$(find ./proto -name "*.proto" -type f)
 
 # Создаем директории для генерации если их нет
-CORE_DIR="./app/core/src/grpc_control/generated"
-ALGORITHM_DIR="./app/algorithm/src/grpc_control/generated"
+CORE_DIR="./src/core/grpc_control/generated"
+ALGORITHM_DIR="./algorithm/src/grpc_control/generated" #TODO пути под докер
 
 echo "Creating directories..."
 mkdir -p "$CORE_DIR"
