@@ -14,5 +14,5 @@ class AbstractStorage(ABC):
         pass
 
     @abstractmethod
-    async def stream_upload(self, key: str, stream: AsyncIterator[bytes]) -> None:
+    async def upload_file_with_path(self, key: str, filepath: str)->None:
         pass

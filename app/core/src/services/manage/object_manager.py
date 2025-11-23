@@ -1,13 +1,15 @@
-import os
 import uuid
-from datetime import datetime
-from typing import AsyncIterator, Optional
+import tempfile
+import zipfile
+import tarfile
+from pathlib import Path
 
 from fastapi import UploadFile
 
 from infrastructure.object_storage.interface import AbstractStorage
 from infrastructure.object_storage.object_storage_manager import ObjectStorageManager
 from utils.logger import create_logger
+
 
 log = create_logger("ObjectManagerService")
 
@@ -16,37 +18,19 @@ class ObjectManager:
         self.repo = repo
 
     @staticmethod
-    def generate_key(path:str, arg:Optional[str] = None, filename: str = None):
-        date_path = datetime.utcnow().strftime("%Y-%m-%d")
-        if arg:
-            key = f"{path}/{arg}/{date_path}/{uuid.uuid4()}"
-        else:
-            key = f"{path}/{date_path}/{uuid.uuid4()}"
-        if filename:
-            extension = os.path.splitext(filename)[1]
-            if extension:
-                key += extension
+    def generate_key(user:str, filename: str, tag:str = None):
+        key = f"{user}/{filename}/{uuid.uuid4()}/{tag}"
         return key
 
-    async def upload(self, fileobj: AsyncIterator[bytes] | UploadFile, size: int = 0 , **metadata) -> str:
 
-        filename = None
-        if "filename" in metadata:
-            filename = metadata["filename"]
-        elif isinstance(fileobj, UploadFile):
-            filename = fileobj.filename
+    async def upload(self, fileobj:UploadFile, **metadata) -> str:
 
-        if "arg" in metadata.keys():
-            arg = metadata["arg"]
-        else:
-            arg = None
+        filename = metadata.get("filename", "zero")
+        user = metadata.get("path","-1")
 
-        key = self.generate_key(path=metadata["path"], arg=arg, filename=filename)
+        key = self.generate_key(user=user, filename=filename)
         try:
-            if size > 50 * 1024 * 1024:
-                await self.repo.stream_upload(key, fileobj)
-            else:
-                await self.repo.upload_fileobj(key, fileobj)
+            await self.repo.upload_fileobj(key, fileobj)
 
             return key
 
@@ -54,11 +38,85 @@ class ObjectManager:
             log.error(f"Ошибка {e} при вызовы инфраструктурного слоя в сервисный (ObjectStorage)")
             raise RuntimeError("Ошибка загрузки файла в хранилище") from e
 
+
     async def delete(self, key:str):
         await self.repo.delete_file(key)
+
+
+    async def upload_repozitory(
+        self,
+        fileobj: UploadFile,
+        filename:str,
+        user:str
+    ):
+
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            temp_archive_path = Path(tmp_file.name)
+
+            if isinstance(fileobj, UploadFile):
+                while chunk := await fileobj.read(1024 * 1024):
+                    tmp_file.write(chunk)
+            else:
+                async for chunk in fileobj:
+                    tmp_file.write(chunk)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            extract_dir = Path(tmpdir)
+
+            if zipfile.is_zipfile(temp_archive_path):
+                with zipfile.ZipFile(temp_archive_path, "r") as z:
+                    z.extractall(extract_dir)
+
+            elif tarfile.is_tarfile(temp_archive_path):
+                with tarfile.open(temp_archive_path, "r:*") as t:
+                    t.extractall(extract_dir)
+
+            else:
+                temp_archive_path.unlink(missing_ok=True)
+                raise ValueError("Файл не является ZIP или TAR архивом")
+
+            uploaded = []
+
+            base_path = self.generate_key(user,filename)
+
+            for file_path in extract_dir.rglob("*"):
+
+                if file_path.is_file():
+                    rel_path = file_path.relative_to(extract_dir)
+
+                    s3_key = f"{base_path}/unpacked/{rel_path.as_posix()}"
+
+                    await self.repo.upload_file_with_path(
+                        key=s3_key,
+                        filepath=str(file_path)
+                    )
+                    uploaded.append(s3_key)
+
+        temp_archive_path.unlink(missing_ok=True)
+
+        return {
+            "uploaded": uploaded,
+            "total": len(uploaded)
+        }
+
 
 s3_repo = ObjectStorageManager()
 object_manager = ObjectManager(s3_repo)
 
 
+"""import io
+from fastapi import UploadFile
+import asyncio
+
+zip_bytes = open("/home/linola/Документы/algorithm.zip", "rb").read()
+buffer = io.BytesIO(zip_bytes)
+
+fake_upload = UploadFile(
+    filename="test.zip",
+    file=buffer
+)
+async def main():
+    await object_manager.upload_repozitory(fileobj=fake_upload, path="path", arg="arg")
+
+asyncio.run(main())"""
 

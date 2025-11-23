@@ -41,7 +41,7 @@ class ProjectService:
     async def create_project(user_data: AccountEncodeData, create_data: ProjectCreateData,
                              file: UploadFile) -> ProjectData:
         try:
-            path = await object_manager.upload(fileobj=file, size = 1, path = user_data.id, filename=file.filename) # заменить аргументы
+            path = await object_manager.upload_repozitory(file,file.filename,user_data.id)
 
             project = await Project.create_project(create_data=create_data, author_id=user_data.id, files_url=path)
 
