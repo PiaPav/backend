@@ -53,11 +53,7 @@ class ObjectManager:
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             temp_archive_path = Path(tmp_file.name)
 
-            if isinstance(fileobj, UploadFile):
-                while chunk := await fileobj.read(1024 * 1024):
-                    tmp_file.write(chunk)
-            else:
-                async for chunk in fileobj:
+            while chunk := await fileobj.read(1024 * 1024):
                     tmp_file.write(chunk)
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -102,7 +98,6 @@ class ObjectManager:
 
 s3_repo = ObjectStorageManager()
 object_manager = ObjectManager(s3_repo)
-
 
 """import io
 from fastapi import UploadFile
