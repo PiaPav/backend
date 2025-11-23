@@ -68,7 +68,7 @@ async def run_parse_microservice(task_id, project_path):
 # Тесты
 async def run():
     ps = ParseService()
-    await ps.parse_project(987, r"C:\Users\Red0c\Desktop\test")
+    await ps.parse_project(987, r"")
 
 if __name__ == "__main__":
     asyncio.run(run())

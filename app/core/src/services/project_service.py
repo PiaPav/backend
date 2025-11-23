@@ -40,7 +40,6 @@ class ProjectService:
     @staticmethod
     async def create_project(user_data: AccountEncodeData, create_data: ProjectCreateData,
                              file: UploadFile) -> ProjectData:
-        # TODO Сделать сохранение архива. Локально или в с3
         try:
 
             project = await Project.create_project(create_data=create_data, author_id=user_data.id)

@@ -44,7 +44,6 @@ class ConnectionBrokerManager:
         )
         log.info("Подключено к брокеру")
 
-        # dev only str  not dev only mb
         self.queue = await self._create_queue(self.queue_name)
         await self._bind_exchange_as_queue(self.queue, routing_key=self.key)
 

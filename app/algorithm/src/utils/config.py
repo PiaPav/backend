@@ -22,16 +22,26 @@ class ConfigBroker:
     exchange: str
 
 @dataclass
+class ConfigS3:
+    host: str
+    port: int
+    port_console: int
+    ACCESS_ID: str
+    SECRET_KEY: str
+    BUCKET: str
+
+@dataclass
 class Config:
     server: ConfigServer
     broker: ConfigBroker
+    s3: ConfigS3
 
 
 def load_config() -> Config:
     return Config(
         server=ConfigServer(
-            host=os.environ.get("CORE_HOST", "0.0.0.0"),
-            port=int(os.environ.get("CORE_PORT", 8000)),
+            host=os.environ.get("HOST", "0.0.0.0"),
+            port=int(os.environ.get("PORT", 8001)),
         ),
         broker = ConfigBroker(
             host=os.environ.get("RABBIT_HOST","localhost"),
@@ -41,7 +51,14 @@ def load_config() -> Config:
             password=os.environ.get("RabbitMQ_PASSWORD", "guest"),
             exchange=os.environ.get("RABBIT_EXCHANGE","default_exchange")
         ),
-
+        s3=ConfigS3(
+            host=os.environ.get("MINIO_HOST", "minio"),
+            port=os.environ.get("S3_API_PORT", 9000),
+            port_console=os.environ.get("S3_CONSOLE_PORT", 9001),
+            ACCESS_ID=os.environ.get("ACCESS_ID", "admin"),
+            SECRET_KEY=os.environ.get("SECRET_KEY", "123456789"),
+            BUCKET=os.environ.get("BUCKET", "default")
+        )
     )
 
 

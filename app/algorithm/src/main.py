@@ -20,7 +20,6 @@ async def main():
     consumer = Consumer(conn)
 
     await conn.connect()
-    await consumer.start("parse_tasks")
     log.info(f"Готов к получению сообщений")
 
     async for msg in consumer.messages():
