@@ -14,12 +14,13 @@ log = create_logger("MainService")
 
 async def main():
     conn = ConnectionBrokerManager(
-        queue_name="parse_tasks",
-        key="parse.start"
+        queue_name="tasks",
+        key="tasks"
     )
     consumer = Consumer(conn)
 
     await conn.connect()
+    await consumer.start("tasks")
     log.info(f"Готов к получению сообщений")
 
     async for msg in consumer.messages():

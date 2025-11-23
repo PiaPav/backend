@@ -6,6 +6,10 @@ from utils.config import CONFIG
 from pathlib import Path
 import asyncio
 
+from utils.logger import create_logger
+
+log = create_logger("ExtractArchive")
+
 
 async def extract_upload(
     bucket_name: str,
@@ -37,7 +41,8 @@ async def extract_upload(
             t.extractall(extract_dir)
 
     else:
-        raise ValueError("Файл не является архивом")
+        log.error(f"Файл  {local_archive_path} не является архивом")
+        raise ValueError(f"Файл  {local_archive_path} не является архивом")
 
     async with session.client(
                 "s3",
@@ -56,7 +61,9 @@ async def extract_upload(
 
                 await s3.upload_file(str(file_path), bucket_name, s3_key)
 
-    return f"Uploaded extracted files to prefix: {object_key}_unzipped/"
+    log.info(f"Uploaded extracted files to prefix: {object_key}_unzipped/")
+
+    return f"{object_key}_unzipped/"
 
 
 async def main():
@@ -66,4 +73,4 @@ async def main():
     )
     print(result)
 
-asyncio.run(main())
+# asyncio.run(main())

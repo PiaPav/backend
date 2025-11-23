@@ -18,15 +18,15 @@ class Consumer:
         if not self.connection.channel:
             await self.connection.connect()
 
-        self.queue = self.connection.queue
+
+        queue = await self.connection.channel.declare_queue(queue_name, durable=True)
+        log.info(f"Подписан на очередь: {queue_name}")
+
         await self.connection.channel.set_qos(prefetch_count=1) # одна задачу в один момент времени
 
-        log.info("Consumer готов")
+        self.queue = queue
 
-        try:
-            await asyncio.Event().wait()
-        except asyncio.CancelledError:
-            log.info("Consumer остановлен.")
+        log.info("Consumer готов")
 
     async def messages(self):
         """

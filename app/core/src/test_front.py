@@ -1,5 +1,6 @@
 import asyncio
 import grpc
+import sys
 
 from grpc_control.generated.api import core_pb2
 from grpc_control.generated.api import core_pb2_grpc
@@ -33,4 +34,10 @@ async def run_frontend_test(task_id: int, host: str = "localhost", port: int = 5
 
 
 if __name__ == "__main__":
-    asyncio.run(run_frontend_test(task_id=35))
+    # Берем task_id из аргументов командной строки, если передан
+    if len(sys.argv) > 1:
+        task_id = int(sys.argv[1])
+    else:
+        task_id = 70  # значение по умолчанию
+
+    asyncio.run(run_frontend_test(task_id=task_id))

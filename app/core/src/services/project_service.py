@@ -46,9 +46,9 @@ class ProjectService:
 
             architecture = ArchitectureModel(data=project.architecture)
 
-            await object_manager.upload(fileobj=file, size = 1, path = user_data.name, arg = user_data.id) # заменить аргументы
+            path = await object_manager.upload(fileobj=file, size = 1, path = user_data.name, arg = user_data.id, filename=file.filename) # заменить аргументы
 
-            await broker_manager.publish(routing_key="tasks", message={"task_id": project.id, "project_path": r"C:\Users\Red0c\Desktop\test"})
+            await broker_manager.publish(routing_key="tasks", message={"task_id": project.id, "project_path": path})
 
             return ProjectData(id=project.id,
                                name=project.name,

@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime
 from typing import AsyncIterator
@@ -15,12 +16,24 @@ class ObjectManager:
         self.repo = repo
 
     @staticmethod
-    def generate_key(path:str, arg:str):
-        date_path = datetime.utcnow().strftime("%Y/%m/%d")
-        return f"{path}/{arg}/{date_path}/{uuid.uuid4()}"
+    def generate_key(path:str, arg:str, filename: str = None):
+        date_path = datetime.utcnow().strftime("%Y-%m-%d")
+        key = f"{path}/{arg}/{date_path}/{uuid.uuid4()}"
+        if filename:
+            extension = os.path.splitext(filename)[1]
+            if extension:
+                key += extension
+        return key
 
-    async def upload(self, fileobj: AsyncIterator[bytes] | UploadFile, size: int = 0 , **metadata):
-        key = self.generate_key(path=metadata["path"], arg=metadata["arg"])
+    async def upload(self, fileobj: AsyncIterator[bytes] | UploadFile, size: int = 0 , **metadata) -> str:
+
+        filename = None
+        if "filename" in metadata:
+            filename = metadata["filename"]
+        elif isinstance(fileobj, UploadFile):
+            filename = fileobj.filename
+
+        key = self.generate_key(path=metadata["path"], arg=metadata["arg"], filename=filename)
         try:
             if size > 50 * 1024 * 1024:
                 await self.repo.stream_upload(key, fileobj)
