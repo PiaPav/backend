@@ -5,7 +5,9 @@ from pydantic import BaseModel
 
 # TODO Надо продумать в каком формате передавать архитектуру
 class ArchitectureModel(BaseModel):
-    data: Optional[dict]
+    requirements: Optional[list[str]] = None
+    endpoints: Optional[list[dict]] = None
+    data: Optional[dict] = None
 
 
 class ProjectDataLite(BaseModel):
@@ -30,8 +32,9 @@ class ProjectCreateData(BaseModel):
 
 
 class ProjectPatchData(BaseModel):
-    name: Optional[str]
-    description: Optional[str]
+    name: Optional[str] = None
+    description: Optional[str] = None
+    architecture: Optional[ArchitectureModel] = None
 
 
 class ProjectListData(BaseModel):

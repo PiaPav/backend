@@ -26,11 +26,12 @@ class Project(SQLBase):
     files_url: Mapped[str] = mapped_column(String(300),nullable=True)
 
     @staticmethod
-    async def create_project(create_data: ProjectCreateData, author_id: int) -> "Project":
+    async def create_project(create_data: ProjectCreateData, author_id: int, files_url: Optional[str] = None) -> "Project":
         async with DataManager.session() as session:
             project = Project(author_id=author_id,
                               name=create_data.name,
-                              description=create_data.description)
+                              description=create_data.description,
+                              files_url=files_url)
             session.add(project)
             return project
 

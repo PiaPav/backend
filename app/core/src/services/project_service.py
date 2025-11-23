@@ -19,7 +19,7 @@ class ProjectService:
         try:
             project = await Project.get_project_by_id(project_id=project_id, account_id=user_data.id)
 
-            architecture = ArchitectureModel(data=project.architecture)
+            architecture = ArchitectureModel(**project.architecture) if project.architecture else ArchitectureModel(requirements=None, endpoints=None, data=None)
 
             return ProjectData(id=project.id,
                                name=project.name,
@@ -41,14 +41,13 @@ class ProjectService:
     async def create_project(user_data: AccountEncodeData, create_data: ProjectCreateData,
                              file: UploadFile) -> ProjectData:
         try:
+            path = await object_manager.upload(fileobj=file, size = 1, path = user_data.id, filename=file.filename) # заменить аргументы
 
-            project = await Project.create_project(create_data=create_data, author_id=user_data.id)
-
-            architecture = ArchitectureModel(data=project.architecture)
-
-            path = await object_manager.upload(fileobj=file, size = 1, path = user_data.name, arg = user_data.id, filename=file.filename) # заменить аргументы
+            project = await Project.create_project(create_data=create_data, author_id=user_data.id, files_url=path)
 
             await broker_manager.publish(routing_key="tasks", message={"task_id": project.id, "project_path": path})
+
+            architecture = ArchitectureModel(**project.architecture) if project.architecture else ArchitectureModel(requirements=None, endpoints=None, data=None)
 
             return ProjectData(id=project.id,
                                name=project.name,
@@ -68,7 +67,7 @@ class ProjectService:
             project = await Project.patch_project_by_id(project_id=project_id, patch_data=patch_data,
                                                         account_id=user_data.id)
 
-            architecture = ArchitectureModel(data=project.architecture)
+            architecture = ArchitectureModel(**project.architecture)
 
             return ProjectData(id=project.id,
                                name=project.name,
