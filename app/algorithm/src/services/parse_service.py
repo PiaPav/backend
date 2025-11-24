@@ -8,7 +8,7 @@ from services.parser import EnhancedFunctionParser
 from utils.config import CONFIG
 from utils.logger import create_logger
 
-from services.parsedir import extract_upload
+# from services.parsedir import extract_upload
 
 log = create_logger("ParseService")
 
@@ -67,8 +67,8 @@ class ParseService:
 
 async def run_parse_microservice(task_id, project_path_s3):
     service = ParseService()
-    path = await extract_upload(bucket_name=CONFIG.s3.BUCKET, object_key=project_path_s3)
-    await service.parse_project(task_id, path)
+    # path = await extract_upload(bucket_name=CONFIG.s3.BUCKET, object_key=project_path_s3)
+    await service.parse_project(task_id, project_path_s3)
 
 # Тесты
 async def run():

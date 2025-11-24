@@ -48,7 +48,7 @@ class ObjectManager:
         fileobj: UploadFile,
         filename:str,
         user:str
-    ):
+    ) -> str:
 
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             temp_archive_path = Path(tmp_file.name)
@@ -90,10 +90,7 @@ class ObjectManager:
 
         temp_archive_path.unlink(missing_ok=True)
 
-        return {
-            "uploaded": uploaded,
-            "total": len(uploaded)
-        }
+        return f"{base_path}/unpacked/"
 
 
 s3_repo = ObjectStorageManager()
