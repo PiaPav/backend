@@ -1,8 +1,8 @@
 services:
   postgres:
+    image: ${POSTGRES_IMAGE}
     env_file:
       - .env
-    image: ${POSTGRES_IMAGE}
     container_name: postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -50,7 +50,7 @@ services:
     volumes:
       - minio-data:/data
     healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:${S3_API_PORT}/minio/health/live || exit 1" ]
+      test: ["CMD-SHELL", "curl -f http://localhost:${S3_API_PORT}/minio/health/live || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -65,7 +65,7 @@ services:
       - .env
     ports:
       - "${CORE_PORT}:${CORE_PORT}"
-      - "50051:50051"
+      - "50051:50051"   # если core поднимает gRPC сам
     networks:
       - backend
     restart: always
@@ -79,17 +79,22 @@ services:
     image: ${ALGORITHM_SERVICE_IMAGE}
     container_name: algorithm_service
     depends_on:
-        core-service:
-          condition: service_healthy
-        rabbitmq:
-          condition: service_healthy
-        minio:
-          condition: service_healthy
+      core-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+      minio:
+        condition: service_started
     env_file:
-        - .env
+      - .env
     networks:
-        - backend
+      - backend
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/core-service/50051'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
 networks:
   backend:
