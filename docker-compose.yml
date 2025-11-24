@@ -75,6 +75,22 @@ services:
       timeout: 5s
       retries: 5
 
+  algorithm-service:
+    image: ${ALGORITHM_SERVICE_IMAGE}
+    container_name: algorithm_service
+    depends_on:
+        core-service:
+          condition: service_healthy
+        rabbitmq:
+          condition: service_healthy
+        minio:
+          condition: service_healthy
+    env_file:
+        - .env
+    networks:
+        - backend
+    restart: always
+
 networks:
   backend:
 

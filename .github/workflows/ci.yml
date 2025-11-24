@@ -45,8 +45,6 @@ jobs:
           tags: ghcr.io/piapav/algorithm_service:latest
 
 
-
-
   deploy:
     #enviroment важно не трогать
     environment: prod
@@ -82,7 +80,6 @@ jobs:
           echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> .env
           echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
           echo "POSTGRES_ECHO=${{ secrets.DB_ECHO }}" >> .env
-          echo "POSTGRES_IMAGE=${{ secrets.POSTGRES_IMAGE }}" >> .env
 
           # S3 storage
           echo "MINIO_HOST=${{ secrets.MINIO_HOST }}" >> .env
@@ -93,7 +90,6 @@ jobs:
           echo "BUCKET=${{ secrets.BUCKET }}" >> .env
           echo "ACCESS_ID=${{ secrets.ACCESS_ID }}" >> .env
           echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
-          echo "S3_MINIO_IMAGE=${{ secrets.S3_MINIO_IMAGE }}" >> .env
 
           # RabbitMQ
           echo "RabbitMQ_API_PORT=${{ secrets.RabbitMQ_API_PORT }}" >> .env
@@ -106,8 +102,16 @@ jobs:
           echo "RABBIT_EXCHANGE=${{ secrets.RABBIT_EXCHANGE }}" >> .env
 
           # Core service image
+          
           echo "CORE_SERVICE_IMAGE=${{ secrets.CORE_SERVICE_IMAGE }}" >> .env
           echo "RABBIT_IMAGE=${{ secrets.RABBIT_IMAGE }}" >> .env
+          echo "POSTGRES_IMAGE=${{ secrets.POSTGRES_IMAGE }}" >> .env
+          echo "S3_MINIO_IMAGE=${{ secrets.S3_MINIO_IMAGE }}" >> .env
+          echo "ALGORITHM_SERVICE_IMAGE=${{ secrets.ALGORITHM_SERVICE_IMAGE }}" >> .env
+          
+          #GRPC 
+          echo "GRPC_HOST=${{ secrets.GRPC_HOST }}" >> .env
+          echo "GRPC_PORT=${{ secrets.GRPC_PORT }}" >> .env          
 
 
 
@@ -141,7 +145,9 @@ jobs:
             script: |
               cd ~/deploy
               docker compose down --remove-orphans
-              docker image rm -f ghcr.io/piapav/core-service:latest || true
+              docker image rm -f ghcr.io/piapav/core_service:latest || true
+              docker image rm -f ghcr.io/piapav/algorithm_service:latest || true
+
 
       - name: Login to GHCR on VPS
         uses: appleboy/ssh-action@v0.1.10
@@ -160,6 +166,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             docker pull ghcr.io/piapav/core_service:latest
+            docker pull ghcr.io/piapav/algorithm_service:latest
             docker pull ${{secrets.POSTGRES_IMAGE}}
             docker pull ${{secrets.S3_MINIO_IMAGE}}
             docker pull ${{secrets.S3_MINIO_IMAGE}}
