@@ -48,12 +48,18 @@ class ConfigS3:
     BUCKET: str
 
 @dataclass
+class ConfigGRPC:
+    host: str
+    port: int
+
+@dataclass
 class Config:
     auth: ConfigAuth
     server: ConfigServer
     db: ConfigDB
     broker: ConfigBroker
     s3: ConfigS3
+    grpc: ConfigGRPC
 
 
 def load_config() -> Config:
@@ -92,7 +98,11 @@ def load_config() -> Config:
             ACCESS_ID = os.environ.get("ACCESS_ID", "admin"),
             SECRET_KEY = os.environ.get("SECRET_KEY", "123456789"),
             BUCKET = os.environ.get("BUCKET", "default")
-    )
+        ),
+        grpc = ConfigGRPC(
+            host=os.environ.get("GRPC_HOST", "localhost"),
+            port=os.environ.get("GRPC_PORT", 50051)
+        )
         )
 
 

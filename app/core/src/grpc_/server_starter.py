@@ -2,6 +2,7 @@ import asyncio
 
 from grpc_.core_server import CoreServer
 from grpc_.core_server import CoreServer
+from utils.config import CONFIG
 from utils.logger import create_logger
 
 log = create_logger("StarterGRPC")
@@ -13,7 +14,7 @@ async def start_grpc():
     log.info("gRPC сервер стартует...")
 
     # ❗ Создаём сервер ВНУТРИ ТОГО ЖЕ loop, где FastAPI живёт
-    server = CoreServer(host="0.0.0.0", port=50051)
+    server = CoreServer(host=CONFIG.grpc.host, port=CONFIG.grpc.port)
     await server.start()
 
 async def stop_grpc():

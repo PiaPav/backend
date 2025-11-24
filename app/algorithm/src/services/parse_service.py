@@ -14,7 +14,7 @@ log = create_logger("ParseService")
 
 class ParseService:
     def __init__(self):
-        self.client = AlgorithmClient()
+        self.client = AlgorithmClient(core_host=CONFIG.grpc.host, core_port=CONFIG.grpc.port)
 
     async def parse_project(self, task_id: int, project_path_s3: str):
         """Парсинг проекта"""
