@@ -18,4 +18,4 @@ RUN uv lock
 RUN uv sync --locked --no-dev
 RUN bash ./proto/generate_grpc.sh
 
-ENTRYPOINT ["uv", "run", "python", "core/main.py"]
+ENTRYPOINT ["uv", "run", "python", "algorithm/main.py"]
