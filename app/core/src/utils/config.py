@@ -100,7 +100,7 @@ def load_config() -> Config:
             BUCKET = os.environ.get("BUCKET", "default")
         ),
         grpc = ConfigGRPC(
-            host=os.environ.get("GRPC_HOST", "algorithm_service"),
+            host=os.environ.get("GRPC_HOST", "0.0.0.0"),
             port=os.environ.get("GRPC_PORT", 50051)
         )
         )
