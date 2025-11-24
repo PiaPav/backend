@@ -19,5 +19,6 @@ RUN uv sync --locked --no-dev
 RUN bash ./proto/generate_grpc.sh
 
 EXPOSE 8000
+EXPOSE 50051
 
 ENTRYPOINT ["uv", "run", "python", "core/main.py"]

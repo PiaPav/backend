@@ -6,7 +6,7 @@ from grpc_control.generated.api import core_pb2
 from grpc_control.generated.api import core_pb2_grpc
 
 
-async def run_frontend_test(task_id: int, host: str = "localhost", port: int = 50051):
+async def run_frontend_test(task_id: int, host: str = "78.153.139.47", port: int = 50051):
     channel = grpc.aio.insecure_channel(f"{host}:{port}")
     stub = core_pb2_grpc.FrontendStreamServiceStub(channel)
 
@@ -38,6 +38,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         task_id = int(sys.argv[1])
     else:
-        task_id = 70  # значение по умолчанию
+        task_id = 2  # значение по умолчанию
 
     asyncio.run(run_frontend_test(task_id=task_id))
