@@ -7,6 +7,7 @@ from email.utils import formataddr
 
 from jinja2 import Template
 
+from models.account_models import VerifyEmailType
 from utils.config import CONFIG
 from utils.logger import create_logger
 
@@ -16,7 +17,7 @@ log = create_logger("EmailService")
 class EmailService:
 
     @staticmethod
-    def _sync_send_email(email: str, username: str, code: int, expire_minutes: int) -> bool:
+    def _sync_send_email(email: str, username: str, code: int, expire_minutes: int, verify_type: VerifyEmailType) -> bool:
         """Метод для отправки письма - синхронный"""
         # TODO метод говно, надо сделать что-то более универсальное, но пока сойдет
         try:
@@ -25,7 +26,8 @@ class EmailService:
                 "site_name": "PIAPAV",
                 "username": username,
                 "code": code,
-                "expires_in": expire_minutes
+                "expires_in": expire_minutes,
+                "verify_type": "привязки" if verify_type == VerifyEmailType.link else "отвязки"
             }
 
             # Шаблон html для всего письма
@@ -41,7 +43,10 @@ class EmailService:
 
             # Сборка письма
             msg = MIMEMultipart("alternative")
-            msg["Subject"] = f"Код подтверждения для привязки почты на piapav.space"
+            if verify_type == VerifyEmailType.link:
+                msg["Subject"] = f"Код подтверждения для привязки почты на piapav.space"
+            elif verify_type == VerifyEmailType.unlink:
+                msg["Subject"] = f"Код подтверждения для отвязки почты на piapav.space"
             sender_name = "PIAPAV.space"
             msg["From"] = formataddr((sender_name, CONFIG.email.login))
             msg["To"] = email
@@ -71,9 +76,9 @@ class EmailService:
             return False
 
     @staticmethod
-    async def send_email(email: str, username: str, code: int, expire_minutes: int) -> bool:
+    async def send_email(email: str, username: str, code: int, expire_minutes: int, verify_type: VerifyEmailType) -> bool:
         """Асинхронная отправка письма в отдельном потоке"""
-        return await asyncio.to_thread(EmailService._sync_send_email, email, username, code, expire_minutes)
+        return await asyncio.to_thread(EmailService._sync_send_email, email, username, code, expire_minutes, verify_type)
 
 # async def run():
 #     await EmailService.send_email("m.shiling@yandex.ru", "Максим")

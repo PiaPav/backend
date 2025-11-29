@@ -85,3 +85,21 @@ class Account(SQLBase):
             account.email = email
             await session.flush()
             return account
+
+    @staticmethod
+    async def delete_email_from_account(account_id: int) -> "Account":
+        async with DataManager.session() as session:
+            account = await Account.get_account_by_id(account_id, session)
+
+            account.email = None
+            await session.flush()
+            return account
+
+    @staticmethod
+    async def is_email_exists(email: str) -> bool:
+        async with DataManager.session() as session:
+            result = await session.execute(
+                select(Account.id).where(Account.email == email)
+            )
+            return result.scalar_one_or_none() is not None
+

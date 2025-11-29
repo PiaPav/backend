@@ -1,7 +1,7 @@
 from fastapi import APIRouter, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from models.account_models import AccountFullData, AccountPatchData
+from models.account_models import AccountFullData, AccountPatchData, VerifyEmailType
 from services.account_service import AccountService
 from services.auth_service import AuthService
 from utils.logger import create_logger
@@ -32,8 +32,10 @@ async def patch_account(patch_data: AccountPatchData, token: HTTPAuthorizationCr
     log.info(f"Изменение данных аккаунта - конец")
     return result
 
-@router.post("/link_email", status_code=status.HTTP_200_OK, response_model=bool)
-async def link_email(email: str, token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(), service: AccountService = Depends()) -> bool:
+
+@router.post("/email", status_code=status.HTTP_200_OK, response_model=bool)
+async def link_email(email: str, token: HTTPAuthorizationCredentials = Depends(security),
+                     auth_service: AuthService = Depends(), service: AccountService = Depends()) -> bool:
     log.info("Привязка email к аккаунту - начало")
     user = await auth_service.verify_token(token=token.credentials)
     result = await service.link_email(account_id=user.id, email=email)
@@ -42,9 +44,21 @@ async def link_email(email: str, token: HTTPAuthorizationCredentials = Depends(s
 
 
 @router.post("/verification_email", status_code=status.HTTP_200_OK, response_model=bool)
-async def verification_email(email: str, verification_code: int, token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(), service: AccountService = Depends()) -> bool:
-    log.info(f"Подтверждение привязки email к аккаунта - начало")
+async def verification_email(email: str, verify_type: VerifyEmailType, verification_code: int,
+                             token: HTTPAuthorizationCredentials = Depends(security),
+                             auth_service: AuthService = Depends(), service: AccountService = Depends()) -> bool:
+    log.info(f"Подтверждение {verify_type.value} email к аккаунту - начало")
     user = await auth_service.verify_token(token=token.credentials)
-    result = await service.verify_email(account_id=user.id, email=email, user_verification_code=verification_code)
-    log.info(f"Подтверждение привязки email к аккаунта - конец")
+    result = await service.verify_email(account_id=user.id, email=email, user_verification_code=verification_code, verify_type=verify_type)
+    log.info(f"Подтверждение {verify_type.value} email к аккаунту - конец")
+    return result
+
+
+@router.delete("/email", status_code=status.HTTP_200_OK, response_model=bool)
+async def delete_email(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(),
+                       service: AccountService = Depends()) -> bool:
+    log.info(f"Удаление почты у аккаунта - начало")
+    user = await auth_service.verify_token(token=token.credentials)
+    result = await service.delete_email(account_id=user.id)
+    log.info(f"Удаление почты у аккаунта - конец")
     return result

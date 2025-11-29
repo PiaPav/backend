@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel
@@ -37,3 +38,8 @@ class AccountEncodeData:
 class AccountPatchData(BaseModel):
     name: Optional[str]
     surname: Optional[str]
+
+
+class VerifyEmailType(Enum):
+    link = "LINK"
+    unlink = "UNLINK"
