@@ -42,5 +42,9 @@ async def link_email(email: str, token: HTTPAuthorizationCredentials = Depends(s
 
 
 @router.post("/verification_email", status_code=status.HTTP_200_OK, response_model=bool)
-async def verification_email(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(), service: AccountService = Depends()) -> bool:
-    pass
+async def verification_email(email: str, verification_code: int, token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(), service: AccountService = Depends()) -> bool:
+    log.info(f"Подтверждение привязки email к аккаунта - начало")
+    user = await auth_service.verify_token(token=token.credentials)
+    result = await service.verify_email(account_id=user.id, email=email, user_verification_code=verification_code)
+    log.info(f"Подтверждение привязки email к аккаунта - конец")
+    return result

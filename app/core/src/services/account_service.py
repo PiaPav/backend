@@ -70,4 +70,28 @@ class AccountService:
             # Пока заглушка, надо сделать проверки ошибок класса отправки писем, орм и бд
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
 
+    @staticmethod
+    async def verify_email(account_id: int, email: str, user_verification_code: int) -> bool:
+        try:
+            true_verification_code = await Redis.get_verification_code(key=f"verification_code:{email}")
+            log.info(f"True: {true_verification_code}, user: {user_verification_code}")
+
+            if true_verification_code == user_verification_code:
+                await Account.add_email_to_account(account_id=account_id, email=email)
+                await Redis.delete_verification_code(key=f"verification_code:{email}")
+                return True
+
+            log.error(f"Неверный код подтверждения для {email}")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Неверный код подтверждения")
+
+        except DataBaseEntityNotExists as e:
+            log.error(f"Аккаунт не найден. Детали: {e.message}")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Аккаунт не найден")
+
+        except Exception as e:
+            log.error(f"{type(e)}, {str(e)}")
+            # Пока заглушка, надо сделать проверки ошибок класса отправки писем, орм и бд
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
+
+
             

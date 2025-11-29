@@ -1,3 +1,4 @@
+import asyncio
 import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -15,8 +16,8 @@ log = create_logger("EmailService")
 class EmailService:
 
     @staticmethod
-    async def send_email(email: str, username: str, code: int, expire_minutes: int) -> bool:
-        """Метод для отправки письма"""
+    def _sync_send_email(email: str, username: str, code: int, expire_minutes: int) -> bool:
+        """Метод для отправки письма - синхронный"""
         # TODO метод говно, надо сделать что-то более универсальное, но пока сойдет
         try:
             # Шаблон контекстных данных для отправки письма
@@ -68,6 +69,11 @@ class EmailService:
         except Exception as e:
             log.error(f"Ошибка отправки письма: {e}")
             return False
+
+    @staticmethod
+    async def send_email(email: str, username: str, code: int, expire_minutes: int) -> bool:
+        """Асинхронная отправка письма в отдельном потоке"""
+        return await asyncio.to_thread(EmailService._sync_send_email, email, username, code, expire_minutes)
 
 # async def run():
 #     await EmailService.send_email("m.shiling@yandex.ru", "Максим")
