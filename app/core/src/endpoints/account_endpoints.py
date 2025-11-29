@@ -31,3 +31,16 @@ async def patch_account(patch_data: AccountPatchData, token: HTTPAuthorizationCr
     result = await service.patch_account_by_id(user.id, patch_data)
     log.info(f"Изменение данных аккаунта - конец")
     return result
+
+@router.post("/link_email", status_code=status.HTTP_200_OK, response_model=bool)
+async def link_email(email: str, token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(), service: AccountService = Depends()) -> bool:
+    log.info("Привязка email к аккаунту - начало")
+    user = await auth_service.verify_token(token=token.credentials)
+    result = await service.link_email(account_id=user.id, email=email)
+    log.info("Привязка email к аккаунту - конец")
+    return result
+
+
+@router.post("/verification_email", status_code=status.HTTP_200_OK, response_model=bool)
+async def verification_email(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(), service: AccountService = Depends()) -> bool:
+    pass

@@ -15,10 +15,12 @@ class ConfigAuth:
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     REFRESH_TOKEN_EXPIRE_DAYS: int
 
+
 @dataclass
 class ConfigServer:
     host: str
     port: int
+
 
 @dataclass
 class ConfigDB:
@@ -29,6 +31,7 @@ class ConfigDB:
     password: str
     echo: bool
 
+
 @dataclass
 class ConfigBroker:
     host: str
@@ -37,6 +40,7 @@ class ConfigBroker:
     user: str
     password: str
     exchange: str
+
 
 @dataclass
 class ConfigS3:
@@ -47,10 +51,25 @@ class ConfigS3:
     SECRET_KEY: str
     BUCKET: str
 
+
 @dataclass
 class ConfigGRPC:
     host: str
     port: int
+
+
+@dataclass
+class ConfigEmail:
+    login: str
+    password: str
+
+
+@dataclass
+class ConfigRedis:
+    host: str
+    port: int
+    db: int
+
 
 @dataclass
 class Config:
@@ -60,6 +79,8 @@ class Config:
     broker: ConfigBroker
     s3: ConfigS3
     grpc: ConfigGRPC
+    email: ConfigEmail
+    redis: ConfigRedis
 
 
 def load_config() -> Config:
@@ -81,29 +102,38 @@ def load_config() -> Config:
             name=os.environ["POSTGRES_DB"],
             user=os.environ["POSTGRES_USER"],
             password=os.environ["POSTGRES_PASSWORD"],
-            echo=os.environ.get("POSTGRES_ECHO", "false").lower() in ["true", "1", "yes",1]
+            echo=os.environ.get("POSTGRES_ECHO", "false").lower() in ["true", "1", "yes", 1]
         ),
-        broker = ConfigBroker(
-            host=os.environ.get("RABBIT_HOST","localhost"),
-            queue_task=os.environ.get("RABBIT_QUEUE_TASKS","tasks"),
+        broker=ConfigBroker(
+            host=os.environ.get("RABBIT_HOST", "localhost"),
+            queue_task=os.environ.get("RABBIT_QUEUE_TASKS", "tasks"),
             queue_result=os.environ.get("RABBIT_QUEUE_RESULTS", "results"),
             user=os.environ.get("RabbitMQ_USER", "guest"),
             password=os.environ.get("RabbitMQ_PASSWORD", "guest"),
-            exchange=os.environ.get("RABBIT_EXCHANGE","default_exchange")
+            exchange=os.environ.get("RABBIT_EXCHANGE", "default_exchange")
         ),
-        s3 = ConfigS3(
-            host = os.environ.get("MINIO_HOST", "minio"),
-            port = os.environ.get("S3_API_PORT", 9000),
-            port_console = os.environ.get("S3_CONSOLE_PORT", 9001),
-            ACCESS_ID = os.environ.get("ACCESS_ID", "admin"),
-            SECRET_KEY = os.environ.get("SECRET_KEY", "123456789"),
-            BUCKET = os.environ.get("BUCKET", "default")
+        s3=ConfigS3(
+            host=os.environ.get("MINIO_HOST", "minio"),
+            port=os.environ.get("S3_API_PORT", 9000),
+            port_console=os.environ.get("S3_CONSOLE_PORT", 9001),
+            ACCESS_ID=os.environ.get("ACCESS_ID", "admin"),
+            SECRET_KEY=os.environ.get("SECRET_KEY", "123456789"),
+            BUCKET=os.environ.get("BUCKET", "default")
         ),
-        grpc = ConfigGRPC(
+        grpc=ConfigGRPC(
             host=os.environ.get("GRPC_HOST", "0.0.0.0"),
             port=os.environ.get("GRPC_PORT", 50051)
-        )
-        )
+        ),
+        email=ConfigEmail(
+            login=os.environ.get("EMAIL_LOGIN"),
+            password=os.environ.get("EMAIL_PASSWORD")
+        ),
+        redis=ConfigRedis(
+            host=os.environ.get("REDIS_HOST", "127.0.0.1"),
+            port=os.environ.get("REDIS_PORT", 6379),
+            db=os.environ.get("REDIS_DB", 1)
+           )
+    )
 
 
 CONFIG = load_config()
