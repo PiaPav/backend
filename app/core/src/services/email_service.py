@@ -17,41 +17,66 @@ log = create_logger("EmailService")
 class EmailService:
 
     @staticmethod
-    def _sync_send_email(email: str, username: str, code: int, expire_minutes: int, verify_type: VerifyEmailType) -> bool:
+    def _create_verification_code_template(username: str, code: int, expire_minutes: int,
+                                           verify_type: VerifyEmailType) -> str | bool:
+        """Метод для создания html разметки"""
+        # Шаблон контекстных данных для отправки письма
+        VERIFY_ACTIONS = {
+            VerifyEmailType.link: "Ваш код подтверждения для привязки электронной почты к аккаунту:",
+            VerifyEmailType.unlink: "Ваш код подтверждения для отвязки электронной почты от аккаунта:"
+        }
+
+        context = {
+            "site_name": "PIAPAV",
+            "username": username,
+            "code": code,
+            "expires_in": expire_minutes,
+            "verify_action": VERIFY_ACTIONS[verify_type]
+        }
+
+        # Шаблон html для всего письма
+        template_path = "services/templates/verification_code.html"
+
+        if not os.path.exists(template_path):
+            log.error(f"Файл шаблона {template_path} не найден")
+            return False
+
+        with open(template_path, "r", encoding="utf-8") as f:
+            template = Template(f.read())
+            html_content = template.render(context)
+
+        return html_content
+
+    @staticmethod
+    def _create_verification_code_message(email: str, username: str, code: int, expire_minutes: int,
+                                          verify_type: VerifyEmailType) -> MIMEMultipart:
+        """Метод для создания письма"""
+        # Сборка html
+        html_content = EmailService._create_verification_code_template(username, code, expire_minutes, verify_type)
+
+        VERIFY_TEXT = {
+            VerifyEmailType.link: "Код подтверждения для привязки почты на piapav.space",
+            VerifyEmailType.unlink: "Код подтверждения для отвязки почты на piapav.space"
+        }
+
+        # Сборка письма
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = VERIFY_TEXT[verify_type]
+        sender_name = "PIAPAV.space"
+        msg["From"] = formataddr((sender_name, CONFIG.email.login))
+        msg["To"] = email
+
+        msg.attach(MIMEText(html_content, "html"))
+
+        return msg
+
+    @staticmethod
+    def _sync_send_email(email: str, username: str, code: int, expire_minutes: int,
+                         verify_type: VerifyEmailType) -> bool:
         """Метод для отправки письма - синхронный"""
         # TODO метод говно, надо сделать что-то более универсальное, но пока сойдет
         try:
-            # Шаблон контекстных данных для отправки письма
-            context = {
-                "site_name": "PIAPAV",
-                "username": username,
-                "code": code,
-                "expires_in": expire_minutes,
-                "verify_type": "привязки" if verify_type == VerifyEmailType.link else "отвязки"
-            }
-
-            # Шаблон html для всего письма
-            template_path = "services/templates/verification_code.html"
-
-            if not os.path.exists(template_path):
-                log.error(f"Файл шаблона {template_path} не найден")
-                return False
-
-            with open(template_path, "r", encoding="utf-8") as f:
-                template = Template(f.read())
-                html_content = template.render(context)
-
-            # Сборка письма
-            msg = MIMEMultipart("alternative")
-            if verify_type == VerifyEmailType.link:
-                msg["Subject"] = f"Код подтверждения для привязки почты на piapav.space"
-            elif verify_type == VerifyEmailType.unlink:
-                msg["Subject"] = f"Код подтверждения для отвязки почты на piapav.space"
-            sender_name = "PIAPAV.space"
-            msg["From"] = formataddr((sender_name, CONFIG.email.login))
-            msg["To"] = email
-
-            msg.attach(MIMEText(html_content, "html"))
+            message = EmailService._create_verification_code_message(email, username, code, expire_minutes, verify_type)
 
             # Отправка
             log.info(f"Подключаемся к smtp.yandex.ru для отправки на {email}")
@@ -61,7 +86,7 @@ class EmailService:
                 server.sendmail(
                     CONFIG.email.login,
                     email,
-                    msg.as_string()
+                    message.as_string()
                 )
 
             log.info(f"Письмо успешно отправлено на {email}")
@@ -76,9 +101,11 @@ class EmailService:
             return False
 
     @staticmethod
-    async def send_email(email: str, username: str, code: int, expire_minutes: int, verify_type: VerifyEmailType) -> bool:
+    async def send_email(email: str, username: str, code: int, expire_minutes: int,
+                         verify_type: VerifyEmailType) -> bool:
         """Асинхронная отправка письма в отдельном потоке"""
-        return await asyncio.to_thread(EmailService._sync_send_email, email, username, code, expire_minutes, verify_type)
+        return await asyncio.to_thread(EmailService._sync_send_email, email, username, code, expire_minutes,
+                                       verify_type)
 
 # async def run():
 #     await EmailService.send_email("m.shiling@yandex.ru", "Максим")

@@ -38,6 +38,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         task_id = int(sys.argv[1])
     else:
-        task_id = 7 # значение по умолчанию
+        task_id = 9 # значение по умолчанию
 
     asyncio.run(run_frontend_test(task_id=task_id))
