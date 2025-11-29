@@ -99,6 +99,21 @@ services:
       retries: 5
       start_period: 20s
 
+  envoy:
+    image: envoyproxy/envoy:v1.28-latest
+    container_name: envoy_grpc_proxy
+    ports:
+      - "8080:8080"  # gRPC-Web endpoint для браузера
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml:ro
+    networks:
+      - backend
+    depends_on:
+      core-service:
+        condition: service_healthy
+    restart: always
+    command: [ "-c", "/etc/envoy/envoy.yaml", "-l", "info" ]
+
 networks:
   backend:
 
