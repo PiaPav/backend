@@ -128,6 +128,7 @@ services:
       - ./envoy.yaml:/etc/envoy/envoy.yaml:ro
     networks:
       - backend
+      - internet
     depends_on:
       core-service:
         condition: service_healthy
