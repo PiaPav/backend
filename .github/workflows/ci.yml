@@ -26,7 +26,7 @@ jobs:
         with:
           registry: ghcr.io
           username: MoonliteSoda    # выпустивший ниже токен НЕ ТРОГАТЬ
-          password: ${{ secrets.TOKEN }} #это мой токен с правами
+          password: ${{ secrets.TOKEN }} #это личный? токен с правами
 
       - name: Build Docker Image Core
         uses: docker/build-push-action@v5
@@ -101,13 +101,24 @@ jobs:
           echo "RABBIT_QUEUE_RESULTS=${{ secrets.RABBIT_QUEUE_RESULTS }}" >> .env
           echo "RABBIT_EXCHANGE=${{ secrets.RABBIT_EXCHANGE }}" >> .env
 
-          # Core service image
+          # Redis
+          echo "REDIS_HOST=${{ secrets.REDIS_HOST }}" >> .env
+          echo "REDIS_PORT=${{ secrets.REDIS_PORT }}" >> .env
+          echo "REDIS_DB=${{ secrets.REDIS_DB }}" >> .env
+
+          # Email
+          echo "EMAIL_LOGIN=${{ secrets.EMAIL_LOGIN }}" >> .env
+          echo "EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}" >> .env
+          
+          # Service image
           
           echo "CORE_SERVICE_IMAGE=${{ secrets.CORE_SERVICE_IMAGE }}" >> .env
           echo "RABBIT_IMAGE=${{ secrets.RABBIT_IMAGE }}" >> .env
           echo "POSTGRES_IMAGE=${{ secrets.POSTGRES_IMAGE }}" >> .env
           echo "S3_MINIO_IMAGE=${{ secrets.S3_MINIO_IMAGE }}" >> .env
           echo "ALGORITHM_SERVICE_IMAGE=${{ secrets.ALGORITHM_SERVICE_IMAGE }}" >> .env
+          echo "REDIS_SERVICE_IMAGE=${{ secrets.REDIS_SERVICE_IMAGE }}" >> .env
+          
           
 #          #GRPC
 #          echo "GRPC_HOST=${{ secrets.GRPC_HOST }}" >> .env
@@ -180,5 +191,5 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd ~/deploy
-            docker compose --env-file .env up -d
+            docker compose --env-file .env up -d --scale algorithm-service=3
             docker compose ps
