@@ -36,4 +36,8 @@ class RedisConnector(redis.asyncio.Redis):
             print(f"Ошибка подключения к Redis: {e}")
 
 
+log.info(f"host={CONFIG.redis.host}, type={type(CONFIG.redis.host)}")
+log.info(f"port={CONFIG.redis.port}, type={type(CONFIG.redis.port)}")
+log.info(f"db={CONFIG.redis.db}, type={type(CONFIG.redis.db)}")
+
 Redis = RedisConnector(host=CONFIG.redis.host, port=CONFIG.redis.port, db=CONFIG.redis.db, decode_responses=True)
