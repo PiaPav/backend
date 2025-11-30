@@ -101,10 +101,10 @@ jobs:
           echo "RABBIT_QUEUE_RESULTS=${{ secrets.RABBIT_QUEUE_RESULTS }}" >> .env
           echo "RABBIT_EXCHANGE=${{ secrets.RABBIT_EXCHANGE }}" >> .env
 
-          # Redis
-          echo "REDIS_HOST=${{ secrets.REDIS_HOST }}" >> .env
-          echo "REDIS_PORT=${{ secrets.REDIS_PORT }}" >> .env
-          echo "REDIS_DB=${{ secrets.REDIS_DB }}" >> .env
+#          # Redis
+#          echo "REDIS_HOST=${{ secrets.REDIS_HOST }}" >> .env
+#          echo "REDIS_PORT=${{ secrets.REDIS_PORT }}" >> .env
+#          echo "REDIS_DB=${{ secrets.REDIS_DB }}" >> .env
 
           # Email
           echo "EMAIL_LOGIN=${{ secrets.EMAIL_LOGIN }}" >> .env
