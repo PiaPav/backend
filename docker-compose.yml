@@ -70,7 +70,6 @@ services:
       - "50051:50051"   # если core поднимает gRPC сам
     networks:
       - backend
-      - internet # подключаем к сети с доступом в интернет
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:${CORE_PORT}/health || exit 1"]
@@ -128,7 +127,6 @@ services:
       - ./envoy.yaml:/etc/envoy/envoy.yaml:ro
     networks:
       - backend
-      - internet
     depends_on:
       core-service:
         condition: service_healthy
@@ -137,7 +135,6 @@ services:
 
 networks:
   backend:
-  internet:
     driver: bridge #кинули
 
 volumes:
