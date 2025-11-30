@@ -2,7 +2,7 @@ from fastapi import HTTPException, status
 
 from database.accounts import Account
 from database.base import DataBaseEntityNotExists
-from infrastructure.email.email_service import EmailService, EmailServiceException
+from infrastructure.email.email_service_smtp import EmailService, EmailServiceException
 from exceptions.service_exception_models import ErrorDetails, NotFoundError, ErrorType, ClientError, InternalServerError, UnauthorizedError, ServiceException
 from infrastructure.redis.redis_control import Redis
 from infrastructure.security.security import Security

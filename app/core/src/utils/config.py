@@ -60,9 +60,16 @@ class ConfigGRPC:
 
 @dataclass
 class ConfigEmail:
+    """SMTP ONLY!"""
     login: str
     password: str
 
+@dataclass
+class ConfigPostbox:
+    region: str
+    endpoint_url: str
+    aws_access_key_id: str
+    aws_secret_access_key: str
 
 @dataclass
 class ConfigRedis:
@@ -81,6 +88,7 @@ class Config:
     grpc: ConfigGRPC
     email: ConfigEmail
     redis: ConfigRedis
+    postbox: ConfigPostbox
 
 
 def load_config() -> Config:
@@ -132,7 +140,14 @@ def load_config() -> Config:
             host=os.environ.get("REDIS_HOST", "redis"),
             port=int(os.environ.get("REDIS_PORT", 6379)),
             db=int(os.environ.get("REDIS_DB", 0))
-        )
+        ),
+        postbox=ConfigPostbox(
+            region = os.environ.get("POSTBOX_REGION", "ru-central1"),
+            endpoint_url=os.environ.get("POSTBOX_URL","https://postbox.api.cloud.yandex.net"),
+            aws_access_key_id=os.environ["POSTBOX_KEY_ID"],
+            aws_secret_access_key=os.environ["POSTBOX_ACCESS_KEY"]
+
+                    )
     )
 
 
