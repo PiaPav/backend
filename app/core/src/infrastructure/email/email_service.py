@@ -35,8 +35,8 @@ class EmailService:
             "ses",
             region_name=CONFIG.postbox.region,
             endpoint_url=CONFIG.postbox.endpoint_url,
-            aws_access_key_id=CONFIG.postbox.access_key_id,
-            aws_secret_access_key=CONFIG.postbox.secret_key,
+            aws_access_key_id=CONFIG.postbox.aws_access_key_id,
+            aws_secret_access_key=CONFIG.postbox.aws_secret_access_key,
             config=BotoConfig(signature_version="v4")
         )
 
