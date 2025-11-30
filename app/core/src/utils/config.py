@@ -129,7 +129,7 @@ def load_config() -> Config:
             password=os.environ.get("EMAIL_PASSWORD")
         ),
         redis=ConfigRedis(
-            host=os.environ.get("REDIS_HOST", "127.0.0.1"),
+            host=os.environ.get("REDIS_HOST", "redis"),
             port=os.environ.get("REDIS_PORT", 6379),
             db=os.environ.get("REDIS_DB", 0)
         )
