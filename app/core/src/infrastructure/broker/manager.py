@@ -1,13 +1,13 @@
-import aio_pika
-from aio_pika import Exchange, Channel
-#поменять на абс
+# поменять на абс
 from typing import Optional
 
+import aio_pika
+from aio_pika import Exchange, Channel
 from aio_pika.abc import AbstractQueue, AbstractRobustConnection
 
+from infrastructure.broker.interface import AbstractConnectionBroker
 from utils.config import CONFIG
 from utils.logger import create_logger
-from infrastructure.broker.interface import AbstractConnectionBroker
 
 log = create_logger("BrokerManager")
 
@@ -62,4 +62,3 @@ class ConnectionBrokerManager(AbstractConnectionBroker):
     async def _bind_exchange_as_queue(self, queue: AbstractQueue, routing_key: str) -> None:
         await queue.bind(self.exchange, routing_key=routing_key)
         log.info(f"Очередь {queue} привязана к {self.exchange}")
-

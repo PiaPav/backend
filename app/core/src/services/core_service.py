@@ -27,9 +27,6 @@ class CoreService:
 
             return hpd
 
-        except HTTPException:
-            raise
-
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")
             # Пока заглушка, надо сделать проверки ошибок орм и бд

@@ -35,7 +35,7 @@ class Account(SQLBase):
 
     @staticmethod
     async def get_account_by_id(account_id: int, session: Optional[AsyncSession] = None) -> "Account":
-        async with  DataManager.session(session) as session:
+        async with DataManager.session(session) as session:
             result = await session.get(Account, account_id)
 
             if result is None:
@@ -102,4 +102,3 @@ class Account(SQLBase):
                 select(Account.id).where(Account.email == email)
             )
             return result.scalar_one_or_none() is not None
-

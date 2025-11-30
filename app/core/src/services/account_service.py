@@ -2,10 +2,13 @@ from fastapi import HTTPException, status
 
 from database.accounts import Account
 from database.base import DataBaseEntityNotExists
+from infrastructure.email.email_service import EmailService, EmailServiceException
+from infrastructure.exceptions.service_exception_models import ErrorDetails, HTTPAccountNotFound, \
+    HTTPEmailSendCrash, HTTPEmailAlreadyTaken, HTTPEmailInvalidVerificationCode, \
+    HTTPEmailLinkError
 from infrastructure.redis.redis_control import Redis
 from infrastructure.security.security import Security
 from models.account_models import AccountFullData, AccountPatchData, VerifyEmailType
-from services.email_service import EmailService
 from utils.logger import create_logger
 
 log = create_logger("AccountService")
@@ -24,12 +27,15 @@ class AccountService:
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Аккаунт не найден")
+            raise HTTPAccountNotFound(type=e.name, message="Аккаунт не найден",
+                                      details={"raw_exception": e.message}) from e
 
         except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
+            log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")
             # Пока заглушка, надо сделать проверки ошибок орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
+            error_details = ErrorDetails(type=str(type(e)), message="Непредвиденная ошибка",
+                                         details={"raw_exception": str(e)})
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_details.model_dump())
 
     @staticmethod
     async def patch_account_by_id(account_id: int, patch_data: AccountPatchData) -> AccountFullData:
@@ -42,13 +48,16 @@ class AccountService:
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Аккаунт не найден")
+            raise HTTPAccountNotFound(type=e.name, message="Аккаунт не найден",
+                                      details={"raw_exception": e.message}) from e
 
         except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
+            log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")
             # Пока заглушка, надо сделать проверки ошибок орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
-    
+            error_details = ErrorDetails(type=str(type(e)), message="Непредвиденная ошибка",
+                                         details={"raw_exception": str(e)})
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_details.model_dump())
+
     @staticmethod
     async def link_email(account_id: int, email: str) -> bool:
         try:
@@ -56,34 +65,48 @@ class AccountService:
 
             if account_db.email is not None:
                 log.error(f"У аккаунта уже привязана почта")
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="У аккаунта уже привязана почта")
+                raise HTTPEmailLinkError(type=HTTPEmailLinkError.__name__, message="У аккаунта уже привязана почта")
 
             email_exists = await Account.is_email_exists(email=email)
 
             if email_exists:
                 log.error(f"Почта {email} занята другим аккаунтом")
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Почта занята")
+                raise HTTPEmailAlreadyTaken(type=HTTPEmailAlreadyTaken.__name__, message="Почта занята")
 
             verification_code = await Security.generate_code(length=4)
-            await Redis.set_verification_code(key=f"verification_code:LINK:{email}", code=verification_code, expire_seconds=EXPIRE_VERIFICATION_CODE_MINUTES*60)
+            await Redis.set_verification_code(key=f"verification_code:LINK:{email}", code=verification_code,
+                                              expire_seconds=EXPIRE_VERIFICATION_CODE_MINUTES * 60)
 
-            result = await EmailService.send_email(email=email, username=account_db.name, code=verification_code, expire_minutes=EXPIRE_VERIFICATION_CODE_MINUTES, verify_type=VerifyEmailType.link)
+            result = await EmailService.send_email(email=email, username=account_db.name, code=verification_code,
+                                                   expire_minutes=EXPIRE_VERIFICATION_CODE_MINUTES,
+                                                   verify_type=VerifyEmailType.link)
 
             return result
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Аккаунт не найден")
+            raise HTTPAccountNotFound(type=e.name, message="Аккаунт не найден",
+                                      details={"raw_exception": e.message}) from e
+
+        except EmailServiceException as e:
+            log.error(f"Ошибка при отправке письма. Детали: {e.message}")
+            # TODO Нужен ли откат сохраненного в Redis кода верификации?
+            raise HTTPEmailSendCrash(type=e.name, message="Ошибка при отправке письма",
+                                     details={"raw_exception": e.message}) from e
 
         except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
+            log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")
             # Пока заглушка, надо сделать проверки ошибок класса отправки писем, орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
+            error_details = ErrorDetails(type=str(type(e)), message="Непредвиденная ошибка",
+                                         details={"raw_exception": str(e)})
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_details.model_dump())
 
     @staticmethod
-    async def verify_email(account_id: int, email: str, user_verification_code: int, verify_type: VerifyEmailType) -> bool:
+    async def verify_email(account_id: int, email: str, user_verification_code: int,
+                           verify_type: VerifyEmailType) -> bool:
         try:
-            true_verification_code = await Redis.get_verification_code(key=f"verification_code:{verify_type.value}:{email}")
+            true_verification_code = await Redis.get_verification_code(
+                key=f"verification_code:{verify_type.value}:{email}")
 
             if true_verification_code == user_verification_code:
                 if verify_type is VerifyEmailType.link:
@@ -94,16 +117,20 @@ class AccountService:
                 return True
 
             log.error(f"Неверный код подтверждения для {email}")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Неверный код подтверждения")
+            raise HTTPEmailInvalidVerificationCode(type=HTTPEmailInvalidVerificationCode.__name__,
+                                                   message=f"Неверный код подтверждения")
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Аккаунт не найден")
+            raise HTTPAccountNotFound(type=e.name, message="Аккаунт не найден",
+                                      details={"raw_exception": e.message}) from e
 
         except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
+            log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")
             # Пока заглушка, надо сделать проверки ошибок класса отправки писем, орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
+            error_details = ErrorDetails(type=str(type(e)), message="Непредвиденная ошибка",
+                                         details={"raw_exception": str(e)})
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_details.model_dump())
 
     @staticmethod
     async def delete_email(account_id: int) -> bool:
@@ -112,24 +139,33 @@ class AccountService:
 
             if account_db.email is None:
                 log.error(f"У аккаунта не привязана почта")
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="У аккаунта не привязана почта")
+                raise HTTPEmailLinkError(type=HTTPEmailLinkError.__name__, message="У аккаунта не привязана почта")
 
             verification_code = await Security.generate_code(length=4)
-            await Redis.set_verification_code(key=f"verification_code:UNLINK:{account_db.email}", code=verification_code, expire_seconds=EXPIRE_VERIFICATION_CODE_MINUTES * 60)
+            await Redis.set_verification_code(key=f"verification_code:UNLINK:{account_db.email}",
+                                              code=verification_code,
+                                              expire_seconds=EXPIRE_VERIFICATION_CODE_MINUTES * 60)
 
-            result = await EmailService.send_email(email=account_db.email, username=account_db.name, code=verification_code, expire_minutes=EXPIRE_VERIFICATION_CODE_MINUTES, verify_type=VerifyEmailType.unlink)
+            result = await EmailService.send_email(email=account_db.email, username=account_db.name,
+                                                   code=verification_code,
+                                                   expire_minutes=EXPIRE_VERIFICATION_CODE_MINUTES,
+                                                   verify_type=VerifyEmailType.unlink)
 
             return result
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Аккаунт не найден")
+            raise HTTPAccountNotFound(type=e.name, message="Аккаунт не найден",
+                                      details={"raw_exception": e.message}) from e
+
+        except EmailServiceException as e:
+            log.error(f"Ошибка при отправке письма. Детали: {e.message}")
+            raise HTTPEmailSendCrash(type=e.name, message="Ошибка при отправке письма",
+                                     details={"raw_exception": e.message}) from e
 
         except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
+            log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")
             # Пока заглушка, надо сделать проверки ошибок класса отправки писем, орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
-
-
-
-            
+            error_details = ErrorDetails(type=str(type(e)), message="Непредвиденная ошибка",
+                                         details={"raw_exception": str(e)})
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_details.model_dump())

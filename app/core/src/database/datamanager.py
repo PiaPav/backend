@@ -2,12 +2,13 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 from typing import TypeVar
 
-from database.base import Base
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
     async_sessionmaker,
     AsyncSession,
 )
+
+from database.base import Base
 from utils.config import CONFIG
 from utils.logger import create_logger
 

@@ -1,11 +1,9 @@
-from infrastructure.broker.producer import Producer
 from infrastructure.broker.interface import AbstractConnectionBroker
+from infrastructure.broker.manager import ConnectionBrokerManager
+from infrastructure.broker.producer import Producer
 from utils.logger import create_logger
 
-from infrastructure.broker.manager import ConnectionBrokerManager
-
-
-log  = create_logger("BrokerManagerService")
+log = create_logger("BrokerManagerService")
 
 
 class BrokerManager:
@@ -21,6 +19,7 @@ class BrokerManager:
         except Exception as e:
             log.error(f"Ошибка при вызове инфраструктуры в сервисном слое {routing_key}: {e}")
             raise
+
 
 broker_repo_task = ConnectionBrokerManager(queue_name="tasks", key="tasks")
 broker_manager = BrokerManager(broker_repo_task)

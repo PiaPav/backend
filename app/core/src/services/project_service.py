@@ -2,13 +2,13 @@ from fastapi import HTTPException, status, UploadFile
 
 from database.base import DataBaseEntityNotExists
 from database.projects import Project
+from infrastructure.exceptions.service_exception_models import HTTPProjectNoRightsOrDontExists404
 from models.account_models import AccountEncodeData
-from models.project_models import ProjectData, ArchitectureModel, ProjectCreateData, ProjectPatchData, ProjectListData, \
+from models.project_models import ProjectData, ArchitectureModel, ProjectCreateData, ProjectPatchData, \
     ProjectListDataLite, ProjectDataLite
-from utils.logger import create_logger
-
 from services.manage.broker_manager import broker_manager
 from services.manage.object_manager import object_manager
+from utils.logger import create_logger
 
 log = create_logger("ProjectService")
 
@@ -19,7 +19,8 @@ class ProjectService:
         try:
             project = await Project.get_project_by_id(project_id=project_id, account_id=user_data.id)
 
-            architecture = ArchitectureModel(**project.architecture) if project.architecture else ArchitectureModel(requirements=None, endpoints=None, data=None)
+            architecture = ArchitectureModel(**project.architecture) if project.architecture else ArchitectureModel(
+                requirements=None, endpoints=None, data=None)
 
             return ProjectData(id=project.id,
                                name=project.name,
@@ -29,8 +30,8 @@ class ProjectService:
 
         except DataBaseEntityNotExists as e:
             log.error(f"У пользователя нет прав к проекту | Проект не существует. Детали: {e.message}")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                detail=f"У пользователя нет прав к проекту | Проект не существует")
+            raise HTTPProjectNoRightsOrDontExists404(type=HTTPProjectNoRightsOrDontExists404.__name__,
+                                                     message="У пользователя нет прав к проекту | Проект не существует")
 
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")
@@ -41,13 +42,14 @@ class ProjectService:
     async def create_project(user_data: AccountEncodeData, create_data: ProjectCreateData,
                              file: UploadFile) -> ProjectData:
         try:
-            path = await object_manager.upload_repozitory(file,file.filename,user_data.id)
+            path = await object_manager.upload_repozitory(file, file.filename, user_data.id)
 
             project = await Project.create_project(create_data=create_data, author_id=user_data.id, files_url=path)
 
             await broker_manager.publish(routing_key="tasks", message={"task_id": project.id, "project_path": path})
 
-            architecture = ArchitectureModel(**project.architecture) if project.architecture else ArchitectureModel(requirements=None, endpoints=None, data=None)
+            architecture = ArchitectureModel(**project.architecture) if project.architecture else ArchitectureModel(
+                requirements=None, endpoints=None, data=None)
 
             return ProjectData(id=project.id,
                                name=project.name,
@@ -77,8 +79,8 @@ class ProjectService:
 
         except DataBaseEntityNotExists as e:
             log.error(f"У пользователя нет прав к проекту | Проект не существует. Детали: {e.message}")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                detail=f"У пользователя нет прав к проекту | Проект не существует")
+            raise HTTPProjectNoRightsOrDontExists404(type=HTTPProjectNoRightsOrDontExists404.__name__,
+                                                     message="У пользователя нет прав к проекту | Проект не существует")
 
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")
@@ -94,8 +96,8 @@ class ProjectService:
 
         except DataBaseEntityNotExists as e:
             log.error(f"У пользователя нет прав к проекту | Проект не существует. Детали: {e.message}")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                detail=f"У пользователя нет прав к проекту | Проект не существует")
+            raise HTTPProjectNoRightsOrDontExists404(type=HTTPProjectNoRightsOrDontExists404.__name__,
+                                                     message="У пользователя нет прав к проекту | Проект не существует")
 
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")
@@ -109,9 +111,6 @@ class ProjectService:
             total, projects_db = await Project.get_project_list_by_account_id(account_id=user_data.id)
             projects_list = [ProjectDataLite.model_validate(project, from_attributes=True) for project in projects_db]
             return ProjectListDataLite(total=total, data=projects_list)
-
-        except HTTPException:
-            raise
 
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")

@@ -47,7 +47,8 @@ async def patch_project(project_id: int, patch_data: ProjectPatchData,
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project(project_id: int, token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(), service: ProjectService = Depends()):
+async def delete_project(project_id: int, token: HTTPAuthorizationCredentials = Depends(security),
+                         auth_service: AuthService = Depends(), service: ProjectService = Depends()):
     log.info(f"Удаление проекта {project_id} - начало")
     user = await auth_service.verify_token(token.credentials)
     await service.delete_project(user_data=user, project_id=project_id)
@@ -56,7 +57,9 @@ async def delete_project(project_id: int, token: HTTPAuthorizationCredentials = 
 
 
 @router.get("", response_model=ProjectListDataLite)
-async def get_projects_list(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(), service: ProjectService = Depends()) -> ProjectListDataLite:
+async def get_projects_list(token: HTTPAuthorizationCredentials = Depends(security),
+                            auth_service: AuthService = Depends(),
+                            service: ProjectService = Depends()) -> ProjectListDataLite:
     log.info(f"Получение списка проектов - начало")
     user = await auth_service.verify_token(token.credentials)
     result = await service.get_projects_by_account_id(user_data=user)

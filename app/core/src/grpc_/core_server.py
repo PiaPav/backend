@@ -1,25 +1,28 @@
 # core_server.py
 from typing import Dict
+
 import grpc
-import grpc_control.generated.shared.common_pb2 as common_pb2
-import grpc_control.generated.api.core_pb2_grpc as core_pb2_grpc
+
 import grpc_control.generated.api.algorithm_pb2_grpc as algorithm_pb2_grpc
+import grpc_control.generated.api.core_pb2_grpc as core_pb2_grpc
+import grpc_control.generated.shared.common_pb2 as common_pb2
 from utils.logger import create_logger
-import asyncio
 
 log = create_logger("CoreGRPC")
+
 
 # =============================
 # ==== ВНУТРЕННИЕ СУЩНОСТИ ====
 # =============================
 class TaskSession:
     """Контекст одной задачи (task_id)."""
+
     def __init__(self, task_id: int):
         self.task_id = task_id
         self.message_queue = asyncio.Queue()
         self.frontend_connected = False
         self.algorithm_connected = False
-        self.finished = False   # ✅ основной признак завершения
+        self.finished = False  # ✅ основной признак завершения
 
     async def add_message(self, message: common_pb2.GraphPartResponse):
         """Добавить сообщение от Algorithm."""
@@ -36,6 +39,7 @@ class TaskSession:
 
 class TaskManager:
     """Управляет всеми активными задачами."""
+
     def __init__(self):
         self.tasks: Dict[int, TaskSession] = {}
 
@@ -54,6 +58,7 @@ class TaskManager:
 # =====================================
 class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
     """Сервис для фронтенда: RunAlgorithm (server-streaming)."""
+
     def __init__(self, task_manager: TaskManager):
         self.task_manager = task_manager
 
@@ -80,6 +85,7 @@ class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
 
 class AlgorithmConnectionService(algorithm_pb2_grpc.AlgorithmConnectionServiceServicer):
     """Сервис для алгоритма: ConnectToCore (client-streaming)."""
+
     def __init__(self, task_manager: TaskManager):
         self.task_manager = task_manager
 

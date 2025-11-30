@@ -4,15 +4,14 @@ from typing import Optional
 
 from aio_pika import RobustQueue
 
-from utils.logger import create_logger
 from interface import AbstractConnectionBroker
-
+from utils.logger import create_logger
 
 log = create_logger("BrokerConsumer")
 
 
 class Consumer:
-    def __init__(self, connection:AbstractConnectionBroker):
+    def __init__(self, connection: AbstractConnectionBroker):
         self.connection: AbstractConnectionBroker = connection
         self.queue: Optional[RobustQueue] = None
 
@@ -20,7 +19,7 @@ class Consumer:
         if not self.connection.channel:
             await self.connection.connect()
 
-        await self.connection.channel.set_qos(prefetch_count=1) # одна задачу в один момент времени
+        await self.connection.channel.set_qos(prefetch_count=1)  # одна задачу в один момент времени
         log.info("Ожидание сообщений")
 
         try:
@@ -32,7 +31,7 @@ class Consumer:
         """
         Асинхронный генератор, отдающий сообщения наружу.
         """
-        if not self.connection.channel: #невозможно?
+        if not self.connection.channel:  # невозможно?
             raise RuntimeError("Брокер не подключен. Сначала вызови connect()")
 
         async with self.queue.iterator() as queue_iter:

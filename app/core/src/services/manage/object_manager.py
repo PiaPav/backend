@@ -1,7 +1,7 @@
-import uuid
-import tempfile
-import zipfile
 import tarfile
+import tempfile
+import uuid
+import zipfile
 from pathlib import Path
 
 from fastapi import UploadFile
@@ -10,23 +10,22 @@ from infrastructure.object_storage.interface import AbstractStorage
 from infrastructure.object_storage.object_storage_manager import ObjectStorageManager
 from utils.logger import create_logger
 
-
 log = create_logger("ObjectManagerService")
+
 
 class ObjectManager:
     def __init__(self, repo: AbstractStorage):
         self.repo = repo
 
     @staticmethod
-    def generate_key(user:str, filename: str, tag:str = None):
+    def generate_key(user: str, filename: str, tag: str = None):
         key = f"{user}/{filename}/{uuid.uuid4()}/{tag}"
         return key
 
-
-    async def upload(self, fileobj:UploadFile, **metadata) -> str:
+    async def upload(self, fileobj: UploadFile, **metadata) -> str:
 
         filename = metadata.get("filename", "zero")
-        user = metadata.get("path","-1")
+        user = metadata.get("path", "-1")
 
         key = self.generate_key(user=user, filename=filename)
         try:
@@ -38,23 +37,21 @@ class ObjectManager:
             log.error(f"Ошибка {e} при вызовы инфраструктурного слоя в сервисный (ObjectStorage)")
             raise RuntimeError("Ошибка загрузки файла в хранилище") from e
 
-
-    async def delete(self, key:str):
+    async def delete(self, key: str):
         await self.repo.delete_file(key)
 
-
     async def upload_repozitory(
-        self,
-        fileobj: UploadFile,
-        filename:str,
-        user:str
+            self,
+            fileobj: UploadFile,
+            filename: str,
+            user: str
     ) -> str:
 
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
             temp_archive_path = Path(tmp_file.name)
 
             while chunk := await fileobj.read(1024 * 1024):
-                    tmp_file.write(chunk)
+                tmp_file.write(chunk)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             extract_dir = Path(tmpdir)
@@ -73,7 +70,7 @@ class ObjectManager:
 
             uploaded = []
 
-            base_path = self.generate_key(user,filename)
+            base_path = self.generate_key(user, filename)
 
             for file_path in extract_dir.rglob("*"):
 
@@ -111,4 +108,3 @@ async def main():
     await object_manager.upload_repozitory(fileobj=fake_upload, path="path", arg="arg")
 
 asyncio.run(main())"""
-

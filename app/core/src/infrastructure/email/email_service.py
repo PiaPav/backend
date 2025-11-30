@@ -14,6 +14,16 @@ from utils.logger import create_logger
 log = create_logger("EmailService")
 
 
+class EmailServiceException(Exception):
+    def __init__(self, message: str):
+        self.message = "EmailServiceException: " + message
+        super().__init__(self.message)
+
+    @property
+    def name(self) -> str:
+        return self.__class__.__name__
+
+
 class EmailService:
 
     @staticmethod
@@ -35,11 +45,11 @@ class EmailService:
         }
 
         # Шаблон html для всего письма
-        template_path = "services/templates/verification_code.html"
+        template_path = "infrastructure/email/templates/verification_code.html"
 
         if not os.path.exists(template_path):
             log.error(f"Файл шаблона {template_path} не найден")
-            return False
+            raise FileNotFoundError(f"Файл шаблона {template_path} не найден")
 
         with open(template_path, "r", encoding="utf-8") as f:
             template = Template(f.read())
@@ -92,13 +102,16 @@ class EmailService:
             log.info(f"Письмо успешно отправлено на {email}")
             return True
 
-        except smtplib.SMTPAuthenticationError:
-            log.error("Ошибка входа в Яндекс Почту.")
-            return False
+        except smtplib.SMTPAuthenticationError as e:
+            log.error(f"Ошибка входа в Яндекс Почту: {e}")
+            raise EmailServiceException("Ошибка входа в Яндекс Почту.")
+
+        except FileNotFoundError as e:
+            raise EmailServiceException(str(e))
 
         except Exception as e:
             log.error(f"Ошибка отправки письма: {e}")
-            return False
+            raise EmailServiceException(str(e))
 
     @staticmethod
     async def send_email(email: str, username: str, code: int, expire_minutes: int,

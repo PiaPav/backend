@@ -49,7 +49,8 @@ async def verification_email(email: str, verify_type: VerifyEmailType, verificat
                              auth_service: AuthService = Depends(), service: AccountService = Depends()) -> bool:
     log.info(f"Подтверждение {verify_type.value} email к аккаунту - начало")
     user = await auth_service.verify_token(token=token.credentials)
-    result = await service.verify_email(account_id=user.id, email=email, user_verification_code=verification_code, verify_type=verify_type)
+    result = await service.verify_email(account_id=user.id, email=email, user_verification_code=verification_code,
+                                        verify_type=verify_type)
     log.info(f"Подтверждение {verify_type.value} email к аккаунту - конец")
     return result
 
