@@ -6,8 +6,8 @@ from jwt import PyJWT, DecodeError
 
 from database.accounts import Account
 from database.base import DataBaseEntityNotExists
-from infrastructure.exceptions.service_exception_models import HTTPLoginAlreadyExists, HTTPTokenInvalid401, \
-    HTTPAuthInvalid401
+from infrastructure.exceptions.service_exception_models import ConflictError, ErrorType, UnauthorizedError, \
+    ServiceException
 from models.account_models import AccountData, AccountCreateData, AccountEncodeData
 from models.auth_models import LoginData, AuthResponseData, RefreshData, RegistrationData
 from utils.config import CONFIG
@@ -26,11 +26,14 @@ class AuthService:
             account_exist = await Account.is_login_exists(data.login)
             if account_exist:
                 log.error(f"Логин {data.login} занят")
-                raise HTTPLoginAlreadyExists(type=HTTPLoginAlreadyExists.__name__, message=f"Логин {data.login} занят")
+                raise ConflictError(type=ErrorType.LOGIN_ALREADY_EXISTS, message=f"Логин {data.login} занят")
             account = await Account.create_account(create_data=AccountCreateData(name=data.name,
                                                                                  surname=data.surname,
                                                                                  login=data.login,
                                                                                  hashed_password=hashed_password))
+
+        except ServiceException as e:
+            raise e
 
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")
@@ -46,8 +49,10 @@ class AuthService:
             return result
         except DecodeError:
             log.error(f"Неверный токен")
-            raise HTTPTokenInvalid401(type=HTTPTokenInvalid401.__name__, message="Неверный токен")
+            raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен")
 
+        except ServiceException as e:
+            raise e
 
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")
@@ -59,7 +64,7 @@ class AuthService:
         user_data = await AuthService.decode_token(token, secret_key=key)
         if user_data.endDate < datetime.now():
             log.error("Токен access просрочен")
-            raise HTTPTokenInvalid401(type=HTTPTokenInvalid401.__name__, message="Токен access просрочен")
+            raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Токен access просрочен")
         return user_data
 
     @staticmethod
@@ -77,8 +82,10 @@ class AuthService:
 
         except DataBaseEntityNotExists as e:
             log.error(f"Неверный логин. Детали: {e.message}")
-            raise HTTPAuthInvalid401(type=HTTPAuthInvalid401.__name__, message="Неверный логин")
+            raise UnauthorizedError(type=ErrorType.INVALID_LOGIN, message="Неверный логин")
 
+        except ServiceException as e:
+            raise e
 
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")
@@ -100,7 +107,7 @@ class AuthService:
             db_fields = (db_account.id, db_account.name, db_account.surname)
 
             if token_fields != db_fields:
-                raise HTTPTokenInvalid401(type=HTTPTokenInvalid401.__name__, message="Неверный токен")
+                raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен")
 
             data_to_token = AccountData(id=user_data.id, name=user_data.name, surname=user_data.surname)
             access = await AuthService.encode_to_token(data_to_token, CONFIG.auth.ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -110,8 +117,10 @@ class AuthService:
         except (DecodeError,
                 DataBaseEntityNotExists):  # ошибка декодирования | отсутствие аккаунта в бд (прислали поддельный токен)
             log.error(f"Неверный токен")
-            raise HTTPTokenInvalid401(type=HTTPTokenInvalid401.__name__, message="Неверный токен")
+            raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен")
 
+        except ServiceException as e:
+            raise e
 
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")
@@ -150,5 +159,5 @@ class AuthService:
         result = bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8"))
         if not result:
             log.error(f"Неверный пароль")
-            raise HTTPAuthInvalid401(type=HTTPAuthInvalid401.__name__, message="Неверный пароль")
+            raise UnauthorizedError(type=ErrorType.INVALID_PASSWORD, message="Неверный пароль")
         return True

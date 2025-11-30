@@ -11,6 +11,7 @@ class AccountFullData(BaseModel):
     name: str
     surname: str
     login: str
+    email: str | None
 
 
 class AccountData(BaseModel):

@@ -14,7 +14,7 @@ def init_handlers(app: FastAPI):
     async def service_exception_handler(request: Request, exc: ServiceException):
         return JSONResponse(
             status_code=exc.status_code,
-            content=exc.error.model_dump(),
+            content=exc.error.model_dump(mode="json"),
         )
 
     log.info("Инициализация обработчиков исключений закончена")

@@ -3,9 +3,7 @@ from fastapi import HTTPException, status
 from database.accounts import Account
 from database.base import DataBaseEntityNotExists
 from infrastructure.email.email_service import EmailService, EmailServiceException
-from infrastructure.exceptions.service_exception_models import ErrorDetails, HTTPAccountNotFound, \
-    HTTPEmailSendCrash, HTTPEmailAlreadyTaken, HTTPEmailInvalidVerificationCode, \
-    HTTPEmailLinkError
+from infrastructure.exceptions.service_exception_models import ErrorDetails, NotFoundError, ErrorType, ClientError, InternalServerError, UnauthorizedError, ServiceException
 from infrastructure.redis.redis_control import Redis
 from infrastructure.security.security import Security
 from models.account_models import AccountFullData, AccountPatchData, VerifyEmailType
@@ -27,8 +25,11 @@ class AccountService:
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise HTTPAccountNotFound(type=e.name, message="Аккаунт не найден",
-                                      details={"raw_exception": e.message}) from e
+            raise NotFoundError(type=ErrorType.ACCOUNT_NOT_FOUND, message="Аккаунт не найден",
+                                details={"raw_exception": e.message}) from e
+
+        except ServiceException as e:
+            raise e
 
         except Exception as e:
             log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")
@@ -48,8 +49,11 @@ class AccountService:
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise HTTPAccountNotFound(type=e.name, message="Аккаунт не найден",
-                                      details={"raw_exception": e.message}) from e
+            raise NotFoundError(type=ErrorType.ACCOUNT_NOT_FOUND, message="Аккаунт не найден",
+                                details={"raw_exception": e.message}) from e
+
+        except ServiceException as e:
+            raise e
 
         except Exception as e:
             log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")
@@ -65,13 +69,13 @@ class AccountService:
 
             if account_db.email is not None:
                 log.error(f"У аккаунта уже привязана почта")
-                raise HTTPEmailLinkError(type=HTTPEmailLinkError.__name__, message="У аккаунта уже привязана почта")
+                raise ClientError(type=ErrorType.EMAIL_ALREADY_LINKED, message="У аккаунта уже привязана почта")
 
             email_exists = await Account.is_email_exists(email=email)
 
             if email_exists:
                 log.error(f"Почта {email} занята другим аккаунтом")
-                raise HTTPEmailAlreadyTaken(type=HTTPEmailAlreadyTaken.__name__, message="Почта занята")
+                raise ClientError(type=ErrorType.EMAIL_ALREADY_TAKEN, message="Почта занята")
 
             verification_code = await Security.generate_code(length=4)
             await Redis.set_verification_code(key=f"verification_code:LINK:{email}", code=verification_code,
@@ -85,14 +89,17 @@ class AccountService:
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise HTTPAccountNotFound(type=e.name, message="Аккаунт не найден",
-                                      details={"raw_exception": e.message}) from e
+            raise NotFoundError(type=ErrorType.ACCOUNT_NOT_FOUND, message="Аккаунт не найден",
+                                details={"raw_exception": e.message}) from e
 
         except EmailServiceException as e:
             log.error(f"Ошибка при отправке письма. Детали: {e.message}")
             # TODO Нужен ли откат сохраненного в Redis кода верификации?
-            raise HTTPEmailSendCrash(type=e.name, message="Ошибка при отправке письма",
-                                     details={"raw_exception": e.message}) from e
+            raise InternalServerError(type=ErrorType.EMAIL_SEND_CRASH, message="Ошибка при отправке письма",
+                                      details={"raw_exception": e.message}) from e
+
+        except ServiceException as e:
+            raise e
 
         except Exception as e:
             log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")
@@ -117,13 +124,15 @@ class AccountService:
                 return True
 
             log.error(f"Неверный код подтверждения для {email}")
-            raise HTTPEmailInvalidVerificationCode(type=HTTPEmailInvalidVerificationCode.__name__,
-                                                   message=f"Неверный код подтверждения")
+            raise UnauthorizedError(type=ErrorType.EMAIL_INVALID_CODE, message=f"Неверный код подтверждения")
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise HTTPAccountNotFound(type=e.name, message="Аккаунт не найден",
-                                      details={"raw_exception": e.message}) from e
+            raise NotFoundError(type=ErrorType.ACCOUNT_NOT_FOUND, message="Аккаунт не найден",
+                                details={"raw_exception": e.message}) from e
+
+        except ServiceException as e:
+            raise e
 
         except Exception as e:
             log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")
@@ -139,7 +148,7 @@ class AccountService:
 
             if account_db.email is None:
                 log.error(f"У аккаунта не привязана почта")
-                raise HTTPEmailLinkError(type=HTTPEmailLinkError.__name__, message="У аккаунта не привязана почта")
+                raise ClientError(type=ErrorType.EMAIL_DONT_LINKED, message="У аккаунта не привязана почта")
 
             verification_code = await Security.generate_code(length=4)
             await Redis.set_verification_code(key=f"verification_code:UNLINK:{account_db.email}",
@@ -155,13 +164,16 @@ class AccountService:
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise HTTPAccountNotFound(type=e.name, message="Аккаунт не найден",
-                                      details={"raw_exception": e.message}) from e
+            raise NotFoundError(type=ErrorType.ACCOUNT_NOT_FOUND, message="Аккаунт не найден",
+                                details={"raw_exception": e.message}) from e
 
         except EmailServiceException as e:
             log.error(f"Ошибка при отправке письма. Детали: {e.message}")
-            raise HTTPEmailSendCrash(type=e.name, message="Ошибка при отправке письма",
-                                     details={"raw_exception": e.message}) from e
+            raise InternalServerError(type=ErrorType.EMAIL_SEND_CRASH, message="Ошибка при отправке письма",
+                                      details={"raw_exception": e.message}) from e
+
+        except ServiceException as e:
+            raise e
 
         except Exception as e:
             log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")

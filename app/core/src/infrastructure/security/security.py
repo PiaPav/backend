@@ -8,14 +8,19 @@ log = create_logger("Security")
 
 class Security:
     @staticmethod
-    async def generate_code(length: int = 4) -> int:
-        """Метод для генерации кода"""
+    def _sync_generate_code(length: int = 4) -> int:
+        """Синхронный метод для генерации кода"""
         try:
             left = 10 ** (length - 1)
             right = 10 ** length - 1
-            code = await asyncio.to_thread(random.randint, left, right)
+            code = random.randint(left, right)
             return code
 
         except Exception as e:
             log.error(f"Ошибка генерации кода: {e}")
             raise Exception(e)
+
+    @staticmethod
+    async def generate_code(length: int = 4) -> int:
+        """Асинхронный метод генерации кода"""
+        return await asyncio.to_thread(Security._sync_generate_code, length)
