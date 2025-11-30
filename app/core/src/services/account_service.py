@@ -71,16 +71,20 @@ class AccountService:
                 log.error(f"У аккаунта уже привязана почта")
                 raise ClientError(type=ErrorType.EMAIL_ALREADY_LINKED, message="У аккаунта уже привязана почта")
 
+            log.info("Вызов Account.is_email_exist")
             email_exists = await Account.is_email_exists(email=email)
 
             if email_exists:
                 log.error(f"Почта {email} занята другим аккаунтом")
                 raise ClientError(type=ErrorType.EMAIL_ALREADY_TAKEN, message="Почта занята")
 
+            log.info("Вызов Security.generate_code")
             verification_code = await Security.generate_code(length=4)
+            log.info("Вызов Redis.set_verification_code")
             await Redis.set_verification_code(key=f"verification_code:LINK:{email}", code=verification_code,
                                               expire_seconds=EXPIRE_VERIFICATION_CODE_MINUTES * 60)
 
+            log.info("Вызов EmailService.send_email")
             result = await EmailService.send_email(email=email, username=account_db.name, code=verification_code,
                                                    expire_minutes=EXPIRE_VERIFICATION_CODE_MINUTES,
                                                    verify_type=VerifyEmailType.link)
