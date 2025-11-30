@@ -11,6 +11,7 @@ from endpoints.account_endpoints import router as AccountRouter
 from endpoints.auth_endpoints import router as AuthRouter
 from endpoints.core_endpoints import router as CoreRouter
 from endpoints.project_endpoints import router as ProjectRouter
+from infrastructure.redis.redis_control import Redis
 
 
 @asynccontextmanager
@@ -52,3 +53,12 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/health/redis")
+async def health_redis():
+    try:
+        pong = await Redis.check_redis()
+        return {"status": "ok"} if pong else {"status": "fail"}
+    except Exception as e:
+        return {"status": "fail", "error": str(e)}

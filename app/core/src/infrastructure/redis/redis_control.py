@@ -25,5 +25,15 @@ class RedisConnector(redis.asyncio.Redis):
         log.info(f"В Redis удален код верификации для {key}")
         return True
 
+    async def check_redis(self):
+        try:
+            pong = await self.ping()
+            if pong:
+                log.info("Redis подключен")
+            else:
+                log.info("Redis не отвечает")
+        except Exception as e:
+            print(f"Ошибка подключения к Redis: {e}")
+
 
 Redis = RedisConnector(host=CONFIG.redis.host, port=CONFIG.redis.port, db=CONFIG.redis.db, decode_responses=True)
