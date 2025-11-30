@@ -2,7 +2,7 @@ from fastapi import HTTPException, status
 
 from database.accounts import Account
 from database.base import DataBaseEntityNotExists
-from infrastructure.email.email_service_smtp import EmailService, EmailServiceException
+from infrastructure.email.email_service import email_service, EmailServiceException
 from exceptions.service_exception_models import ErrorDetails, NotFoundError, ErrorType, ClientError, InternalServerError, UnauthorizedError, ServiceException
 from infrastructure.redis.redis_control import Redis
 from infrastructure.security.security import Security
@@ -83,7 +83,7 @@ class AccountService:
                                               expire_seconds=(EXPIRE_VERIFICATION_CODE_MINUTES * 60))
 
             log.info("Вызов EmailService.send_email")
-            result = await EmailService.send_email(email=email, username=account_db.name, code=verification_code,
+            result = await email_service.send_email(email=email, username=account_db.name, code=verification_code,
                                                    expire_minutes=EXPIRE_VERIFICATION_CODE_MINUTES,
                                                    verify_type=VerifyEmailType.link)
 
@@ -157,7 +157,7 @@ class AccountService:
                                               code=verification_code,
                                               expire_seconds=EXPIRE_VERIFICATION_CODE_MINUTES * 60)
 
-            result = await EmailService.send_email(email=account_db.email, username=account_db.name,
+            result = await email_service.send_email(email=account_db.email, username=account_db.name,
                                                    code=verification_code,
                                                    expire_minutes=EXPIRE_VERIFICATION_CODE_MINUTES,
                                                    verify_type=VerifyEmailType.unlink)
