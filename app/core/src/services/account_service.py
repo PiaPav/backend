@@ -80,7 +80,7 @@ class AccountService:
             verification_code = await Security.generate_code(length=4)
             log.info("Вызов Redis.set_verification_code")
             await Redis.set_verification_code(key=f"verification_code:LINK:{email}", code=verification_code,
-                                              expire_seconds=EXPIRE_VERIFICATION_CODE_MINUTES * 60)
+                                              expire_seconds=(EXPIRE_VERIFICATION_CODE_MINUTES * 60))
 
             log.info("Вызов EmailService.send_email")
             result = await EmailService.send_email(email=email, username=account_db.name, code=verification_code,

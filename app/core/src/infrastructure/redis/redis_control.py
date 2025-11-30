@@ -11,6 +11,7 @@ log = create_logger("RedisConnector")
 class RedisConnector(redis.asyncio.Redis):
 
     async def set_verification_code(self, key: str, code: int, expire_seconds: int = 60 * 5) -> bool:
+        log.info(f"Вызов set_ver_code {key, code, expire_seconds}")
         await self.set(name=key, value=code, ex=expire_seconds)
         log.info(f"В Redis добавлен код верификации для {key}")
         return True
