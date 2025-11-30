@@ -1,6 +1,8 @@
 from fastapi import APIRouter, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+from exceptions.service_exception_middleware import get_error_responses
+from exceptions.service_exception_models import ErrorType
 from models.account_models import AccountFullData, AccountPatchData, VerifyEmailType
 from services.account_service import AccountService
 from services.auth_service import AuthService
@@ -13,7 +15,10 @@ router = APIRouter(prefix="/v1/account", tags=["Accounts"])
 security = HTTPBearer()
 
 
-@router.get("", status_code=status.HTTP_200_OK, response_model=AccountFullData)
+@router.get("", status_code=status.HTTP_200_OK,
+            responses=get_error_responses(ErrorType.INVALID_TOKEN,
+                                          ErrorType.ACCOUNT_NOT_FOUND),
+            response_model=AccountFullData)
 async def get_account(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(),
                       service: AccountService = Depends()) -> AccountFullData:
     log.info(f"Получение данных аккаунта - начало")
@@ -23,7 +28,10 @@ async def get_account(token: HTTPAuthorizationCredentials = Depends(security), a
     return result
 
 
-@router.patch("", status_code=status.HTTP_200_OK, response_model=AccountFullData)
+@router.patch("", status_code=status.HTTP_200_OK,
+              responses=get_error_responses(ErrorType.INVALID_TOKEN,
+                                            ErrorType.ACCOUNT_NOT_FOUND),
+              response_model=AccountFullData)
 async def patch_account(patch_data: AccountPatchData, token: HTTPAuthorizationCredentials = Depends(security),
                         auth_service: AuthService = Depends(), service: AccountService = Depends()) -> AccountFullData:
     log.info(f"Изменение данных аккаунта - начало")
@@ -33,7 +41,13 @@ async def patch_account(patch_data: AccountPatchData, token: HTTPAuthorizationCr
     return result
 
 
-@router.post("/email", status_code=status.HTTP_200_OK, response_model=bool)
+@router.post("/email", status_code=status.HTTP_200_OK,
+             responses=get_error_responses(ErrorType.INVALID_TOKEN,
+                                           ErrorType.ACCOUNT_NOT_FOUND,
+                                           ErrorType.EMAIL_SEND_CRASH,
+                                           ErrorType.EMAIL_ALREADY_LINKED,
+                                           ErrorType.EMAIL_ALREADY_TAKEN),
+             response_model=bool)
 async def link_email(email: str, token: HTTPAuthorizationCredentials = Depends(security),
                      auth_service: AuthService = Depends(), service: AccountService = Depends()) -> bool:
     log.info("Привязка email к аккаунту - начало")
@@ -43,7 +57,11 @@ async def link_email(email: str, token: HTTPAuthorizationCredentials = Depends(s
     return result
 
 
-@router.post("/verification_email", status_code=status.HTTP_200_OK, response_model=bool)
+@router.post("/verification_email", status_code=status.HTTP_200_OK,
+             responses=get_error_responses(ErrorType.INVALID_TOKEN,
+                                           ErrorType.ACCOUNT_NOT_FOUND,
+                                           ErrorType.EMAIL_INVALID_CODE),
+             response_model=bool)
 async def verification_email(email: str, verify_type: VerifyEmailType, verification_code: int,
                              token: HTTPAuthorizationCredentials = Depends(security),
                              auth_service: AuthService = Depends(), service: AccountService = Depends()) -> bool:
@@ -55,7 +73,12 @@ async def verification_email(email: str, verify_type: VerifyEmailType, verificat
     return result
 
 
-@router.delete("/email", status_code=status.HTTP_200_OK, response_model=bool)
+@router.delete("/email", status_code=status.HTTP_200_OK,
+               responses=get_error_responses(ErrorType.INVALID_TOKEN,
+                                             ErrorType.ACCOUNT_NOT_FOUND,
+                                             ErrorType.EMAIL_SEND_CRASH,
+                                             ErrorType.EMAIL_DONT_LINKED),
+               response_model=bool)
 async def delete_email(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(),
                        service: AccountService = Depends()) -> bool:
     log.info(f"Удаление почты у аккаунта - начало")

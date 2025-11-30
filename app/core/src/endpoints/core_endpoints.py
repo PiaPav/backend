@@ -1,6 +1,8 @@
 from fastapi import APIRouter, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+from exceptions.service_exception_middleware import get_error_responses
+from exceptions.service_exception_models import ErrorType
 from models.core_models import HomePageData
 from services.auth_service import AuthService
 from services.core_service import CoreService
@@ -13,7 +15,10 @@ router = APIRouter(prefix="/v1", tags=["Core"])
 security = HTTPBearer()
 
 
-@router.get("/home", status_code=status.HTTP_200_OK, response_model=HomePageData)
+@router.get("/home", status_code=status.HTTP_200_OK,
+            responses=get_error_responses(ErrorType.INVALID_TOKEN,
+                                          ErrorType.ACCOUNT_NOT_FOUND),
+            response_model=HomePageData)
 async def homepage(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(),
                    service: CoreService = Depends()) -> HomePageData:
     log.info(f"Получение главной страницы - начало")

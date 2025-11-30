@@ -2,7 +2,7 @@ from fastapi import HTTPException, status, UploadFile
 
 from database.base import DataBaseEntityNotExists
 from database.projects import Project
-from infrastructure.exceptions.service_exception_models import NotFoundError, \
+from exceptions.service_exception_models import NotFoundError, \
     ErrorType, ServiceException
 from models.account_models import AccountEncodeData
 from models.project_models import ProjectData, ArchitectureModel, ProjectCreateData, ProjectPatchData, \

@@ -8,6 +8,10 @@ class ArchitectureModel(BaseModel):
     requirements: Optional[list[str]] = None
     endpoints: Optional[list[dict]] = None
     data: Optional[dict] = None
+    """0, 1, 2, 3, 4
+    {0: [{3, 2}, (150, 200)], 
+     1: {2}, 
+     2: {0, 1, 5}}"""
 
 
 class ProjectDataLite(BaseModel):

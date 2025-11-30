@@ -8,7 +8,7 @@ from endpoints.auth_endpoints import router as AuthRouter
 from endpoints.core_endpoints import router as CoreRouter
 from endpoints.project_endpoints import router as ProjectRouter
 from grpc_.server_starter import start_grpc, stop_grpc
-from infrastructure.exceptions.exception_handlers import init_handlers
+from exceptions.service_exception_middleware import init_handlers
 from services.manage.broker_manager import broker_repo_task
 
 

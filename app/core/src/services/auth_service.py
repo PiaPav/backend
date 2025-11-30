@@ -6,7 +6,7 @@ from jwt import PyJWT, DecodeError
 
 from database.accounts import Account
 from database.base import DataBaseEntityNotExists
-from infrastructure.exceptions.service_exception_models import ConflictError, ErrorType, UnauthorizedError, \
+from exceptions.service_exception_models import ConflictError, ErrorType, UnauthorizedError, \
     ServiceException
 from models.account_models import AccountData, AccountCreateData, AccountEncodeData
 from models.auth_models import LoginData, AuthResponseData, RefreshData, RegistrationData
@@ -32,6 +32,8 @@ class AuthService:
                                                                                  login=data.login,
                                                                                  hashed_password=hashed_password))
 
+            return AccountData.model_validate(account, from_attributes=True)
+
         except ServiceException as e:
             raise e
 
@@ -39,8 +41,6 @@ class AuthService:
             log.error(f"{type(e)}, {str(e)}")
             # Пока заглушка, надо сделать проверки ошибок орм и бд
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
-
-        return AccountData.model_validate(account, from_attributes=True)
 
     @staticmethod
     async def verify_token(token: str) -> AccountEncodeData:
