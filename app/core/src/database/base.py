@@ -12,11 +12,15 @@ class SQLBase(Base):
 
 class DataBaseException(Exception):
     def __init__(self, message: str):
-        self.message = "DataBaseException: " + message
+        self.message = f"{self.name}: {message}"
         super().__init__(self.message)
+
+    @property
+    def name(self) -> str:
+        return self.__class__.__name__
 
 
 class DataBaseEntityNotExists(DataBaseException):
     def __init__(self, message: str):
-        self.message = "DataBaseEntityNotExists: " + message
+        self.message = f"{self.name}: {message}"
         super().__init__(self.message)

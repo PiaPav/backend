@@ -5,7 +5,6 @@ from aio_pika import Exchange, Channel
 from aio_pika.abc import AbstractQueue, AbstractRobustConnection
 
 
-
 class AbstractConnectionBroker(ABC):
     exchange: Optional[Exchange] = None
     connection: Optional[AbstractRobustConnection] = None
@@ -19,4 +18,3 @@ class AbstractConnectionBroker(ABC):
     @abstractmethod
     async def close(self) -> None:
         pass
-

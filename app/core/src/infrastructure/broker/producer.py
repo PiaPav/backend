@@ -1,16 +1,17 @@
-import aio_pika
 import json
+
+import aio_pika
 from aio_pika import Message
 
-
-from utils.logger import create_logger
 from infrastructure.broker.interface import AbstractConnectionBroker
+from utils.logger import create_logger
+
 log = create_logger("BrokerProducer")
 
 
 class Producer:
-    def __init__(self,connection:AbstractConnectionBroker):
-        self.connection:AbstractConnectionBroker = connection
+    def __init__(self, connection: AbstractConnectionBroker):
+        self.connection: AbstractConnectionBroker = connection
 
     async def publish(self, routing_key: str, message: dict, persistent: bool = True) -> None:
         try:

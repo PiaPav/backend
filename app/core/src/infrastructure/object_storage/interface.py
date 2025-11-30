@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
+
 from fastapi import UploadFile
-from typing import AsyncIterator
 
 
 class AbstractStorage(ABC):
@@ -14,5 +14,5 @@ class AbstractStorage(ABC):
         pass
 
     @abstractmethod
-    async def upload_file_with_path(self, key: str, filepath: str)->None:
+    async def upload_file_with_path(self, key: str, filepath: str) -> None:
         pass

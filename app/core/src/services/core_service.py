@@ -1,6 +1,5 @@
-from fastapi import HTTPException, status
-
 from database.projects import Project
+from exceptions.service_exception_models import ServiceException
 from models.account_models import AccountEncodeData, AccountData
 from models.core_models import HomePageData
 from models.project_models import ProjectListDataLite, ProjectDataLite
@@ -27,10 +26,5 @@ class CoreService:
 
             return hpd
 
-        except HTTPException:
-            raise
-
-        except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
+        except ServiceException as e:
+            raise e

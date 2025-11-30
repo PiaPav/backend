@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, File, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from exceptions.service_exception_middleware import get_error_responses
+from exceptions.service_exception_models import ErrorType
 from models.project_models import ProjectData, ProjectCreateData, ProjectPatchData, ProjectListDataLite
 from services.auth_service import AuthService
 from services.project_service import ProjectService
@@ -13,7 +15,10 @@ log = create_logger("ProjectEndpoints")
 router = APIRouter(prefix="/v1/project", tags=["Project"])
 
 
-@router.get("/{project_id}", response_model=ProjectData)
+@router.get("/{project_id}", status_code=status.HTTP_200_OK,
+            responses=get_error_responses(ErrorType.INVALID_TOKEN,
+                                          ErrorType.PROJECT_NO_RIGHT_OR_NOT_FOUND),
+            response_model=ProjectData)
 async def get_project(project_id: int, token: HTTPAuthorizationCredentials = Depends(security),
                       auth_service: AuthService = Depends(), service: ProjectService = Depends()) -> ProjectData:
     log.info(f"Получение проекта {project_id} - начало")
@@ -23,7 +28,9 @@ async def get_project(project_id: int, token: HTTPAuthorizationCredentials = Dep
     return result
 
 
-@router.post("", response_model=ProjectData)
+@router.post("", status_code=status.HTTP_200_OK,
+             responses=get_error_responses(ErrorType.INVALID_TOKEN),
+             response_model=ProjectData)
 async def create_project(name: str, description: str, file: UploadFile = File(...),
                          token: HTTPAuthorizationCredentials = Depends(security),
                          auth_service: AuthService = Depends(), service: ProjectService = Depends()) -> ProjectData:
@@ -35,7 +42,10 @@ async def create_project(name: str, description: str, file: UploadFile = File(..
     return result
 
 
-@router.patch("/{project_id}", response_model=ProjectData)
+@router.patch("/{project_id}", status_code=status.HTTP_200_OK,
+              responses=get_error_responses(ErrorType.INVALID_TOKEN,
+                                            ErrorType.PROJECT_NO_RIGHT_OR_NOT_FOUND),
+              response_model=ProjectData)
 async def patch_project(project_id: int, patch_data: ProjectPatchData,
                         token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(),
                         service: ProjectService = Depends()) -> ProjectData:
@@ -46,8 +56,11 @@ async def patch_project(project_id: int, patch_data: ProjectPatchData,
     return result
 
 
-@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project(project_id: int, token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(), service: ProjectService = Depends()):
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT,
+               responses=get_error_responses(ErrorType.INVALID_TOKEN,
+                                             ErrorType.PROJECT_NO_RIGHT_OR_NOT_FOUND))
+async def delete_project(project_id: int, token: HTTPAuthorizationCredentials = Depends(security),
+                         auth_service: AuthService = Depends(), service: ProjectService = Depends()):
     log.info(f"Удаление проекта {project_id} - начало")
     user = await auth_service.verify_token(token.credentials)
     await service.delete_project(user_data=user, project_id=project_id)
@@ -55,8 +68,12 @@ async def delete_project(project_id: int, token: HTTPAuthorizationCredentials = 
     return
 
 
-@router.get("", response_model=ProjectListDataLite)
-async def get_projects_list(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(), service: ProjectService = Depends()) -> ProjectListDataLite:
+@router.get("", status_code=status.HTTP_200_OK,
+            responses=get_error_responses(ErrorType.INVALID_TOKEN),
+            response_model=ProjectListDataLite)
+async def get_projects_list(token: HTTPAuthorizationCredentials = Depends(security),
+                            auth_service: AuthService = Depends(),
+                            service: ProjectService = Depends()) -> ProjectListDataLite:
     log.info(f"Получение списка проектов - начало")
     user = await auth_service.verify_token(token.credentials)
     result = await service.get_projects_by_account_id(user_data=user)

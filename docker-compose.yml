@@ -99,6 +99,14 @@ services:
       retries: 5
       start_period: 20s
 
+  redis:
+    image: ${REDIS_SERVICE_IMAGE}
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
   envoy:
     image: envoyproxy/envoy:v1.28-latest
     container_name: envoy_grpc_proxy
@@ -121,3 +129,4 @@ volumes:
   pgdata:
   rabbitmq_data:
   minio-data:
+  redis-data:

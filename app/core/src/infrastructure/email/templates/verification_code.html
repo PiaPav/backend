@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+</head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+    <div style="background: #BDAAFD; color: white; padding: 20px; text-align: center;">
+        <h1>{{ site_name }}</h1>
+    </div>
+
+    <div style="padding: 30px; background: #f9f9f9;">
+        <p>Здравствуйте, <strong>{{ username }}</strong>!</p>
+
+        <p>{{ verify_action }}</p>
+
+        <div style="background: #BDAAFD; color: white; font-size: 32px;
+                    padding: 15px; text-align: center; letter-spacing: 8px;
+                    border-radius: 8px; margin: 20px 0;">
+            {{ code }}
+        </div>
+
+        <p>Код действителен <strong>{{ expires_in }} минут</strong>.</p>
+
+        <p style="color: #666; font-size: 14px;">
+            Если вы не запрашивали код, просто проигнорируйте это письмо.
+        </p>
+    </div>
+</body>
+</html>

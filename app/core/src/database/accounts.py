@@ -21,6 +21,7 @@ class Account(SQLBase):
     surname: Mapped[str] = mapped_column(String(250))
     login: Mapped[str] = mapped_column(String(200))
     hashed_password: Mapped[str] = mapped_column(String(200))
+    email: Mapped[str] = mapped_column(String(250), nullable=True, default=None)
 
     @staticmethod
     async def create_account(create_data: AccountCreateData) -> "Account":
@@ -34,7 +35,7 @@ class Account(SQLBase):
 
     @staticmethod
     async def get_account_by_id(account_id: int, session: Optional[AsyncSession] = None) -> "Account":
-        async with  DataManager.session(session) as session:
+        async with DataManager.session(session) as session:
             result = await session.get(Account, account_id)
 
             if result is None:
@@ -65,12 +66,39 @@ class Account(SQLBase):
 
     @staticmethod
     async def patch_account_by_id(account_id: int, patch_data: AccountPatchData) -> "Account":
+        fields_to_patch = ["name", "surname"]
         async with DataManager.session() as session:
             account = await Account.get_account_by_id(account_id, session)
 
             for field, value in patch_data.model_dump().items():
-                if value is not None:
+                if value is not None and field in fields_to_patch:
                     setattr(account, field, value)
 
             await session.flush()
             return account
+
+    @staticmethod
+    async def add_email_to_account(account_id: int, email: str) -> "Account":
+        async with DataManager.session() as session:
+            account = await Account.get_account_by_id(account_id, session)
+
+            account.email = email
+            await session.flush()
+            return account
+
+    @staticmethod
+    async def delete_email_from_account(account_id: int) -> "Account":
+        async with DataManager.session() as session:
+            account = await Account.get_account_by_id(account_id, session)
+
+            account.email = None
+            await session.flush()
+            return account
+
+    @staticmethod
+    async def is_email_exists(email: str) -> bool:
+        async with DataManager.session() as session:
+            result = await session.execute(
+                select(Account.id).where(Account.email == email)
+            )
+            return result.scalar_one_or_none() is not None

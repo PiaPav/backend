@@ -1,12 +1,13 @@
 from datetime import datetime, timedelta
 
 import bcrypt
-from database.accounts import Account
 from fastapi import HTTPException, status
 from jwt import PyJWT, DecodeError
 
 from database.accounts import Account
 from database.base import DataBaseEntityNotExists
+from exceptions.service_exception_models import ConflictError, ErrorType, UnauthorizedError, \
+    ServiceException
 from models.account_models import AccountData, AccountCreateData, AccountEncodeData
 from models.auth_models import LoginData, AuthResponseData, RefreshData, RegistrationData
 from utils.config import CONFIG
@@ -25,33 +26,33 @@ class AuthService:
             account_exist = await Account.is_login_exists(data.login)
             if account_exist:
                 log.error(f"Логин {data.login} занят")
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Логин {data.login} занят")
+                raise ConflictError(type=ErrorType.LOGIN_ALREADY_EXISTS, message=f"Логин {data.login} занят")
             account = await Account.create_account(create_data=AccountCreateData(name=data.name,
                                                                                  surname=data.surname,
                                                                                  login=data.login,
                                                                                  hashed_password=hashed_password))
 
-        except HTTPException:
-            raise
+            return AccountData.model_validate(account, from_attributes=True)
+
+        except ServiceException as e:
+            raise e
 
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")
             # Пока заглушка, надо сделать проверки ошибок орм и бд
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
-
-        return AccountData.model_validate(account, from_attributes=True)
 
     @staticmethod
     async def verify_token(token: str) -> AccountEncodeData:
         try:
-            result = await AuthService.check_access_token(token)
+            result = await AuthService.check_token(token, CONFIG.auth.ACCESS_SECRET_KEY)
             return result
         except DecodeError:
             log.error(f"Неверный токен")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный токен")
+            raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен")
 
-        except HTTPException:
-            raise
+        except ServiceException as e:
+            raise e
 
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")
@@ -59,10 +60,11 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
 
     @staticmethod
-    async def check_access_token(token: str) -> AccountEncodeData:
-        user_data = await AuthService.decode_token(token, secret_key=CONFIG.auth.ACCESS_SECRET_KEY)
+    async def check_token(token: str, key: str) -> AccountEncodeData:
+        user_data = await AuthService.decode_token(token, secret_key=key)
         if user_data.endDate < datetime.now():
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Токен access просрочен")
+            log.error("Токен access просрочен")
+            raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Токен access просрочен")
         return user_data
 
     @staticmethod
@@ -80,10 +82,10 @@ class AuthService:
 
         except DataBaseEntityNotExists as e:
             log.error(f"Неверный логин. Детали: {e.message}")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Неверный логин")
+            raise UnauthorizedError(type=ErrorType.INVALID_LOGIN, message="Неверный логин")
 
-        except HTTPException:
-            raise
+        except ServiceException as e:
+            raise e
 
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")
@@ -97,12 +99,7 @@ class AuthService:
     @staticmethod
     async def refresh(refresh_data: RefreshData) -> AuthResponseData:
         try:
-            pass
-            user_data = await AuthService.decode_token(refresh_data.refresh_token,
-                                                       secret_key=CONFIG.auth.REFRESH_SECRET_KEY)
-            if user_data.endDate < datetime.now():
-                log.error(f"Токен просрочен")
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Токен просрочен")
+            user_data = await AuthService.check_token(refresh_data.refresh_token, CONFIG.auth.REFRESH_SECRET_KEY)
 
             db_account = await Account.get_account_by_id(user_data.id)
 
@@ -110,7 +107,7 @@ class AuthService:
             db_fields = (db_account.id, db_account.name, db_account.surname)
 
             if token_fields != db_fields:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный токен")
+                raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен")
 
             data_to_token = AccountData(id=user_data.id, name=user_data.name, surname=user_data.surname)
             access = await AuthService.encode_to_token(data_to_token, CONFIG.auth.ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -120,10 +117,10 @@ class AuthService:
         except (DecodeError,
                 DataBaseEntityNotExists):  # ошибка декодирования | отсутствие аккаунта в бд (прислали поддельный токен)
             log.error(f"Неверный токен")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный токен")
+            raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен")
 
-        except HTTPException:
-            raise
+        except ServiceException as e:
+            raise e
 
         except Exception as e:
             log.error(f"{type(e)}, {str(e)}")
@@ -162,5 +159,5 @@ class AuthService:
         result = bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8"))
         if not result:
             log.error(f"Неверный пароль")
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Неверный пароль")
+            raise UnauthorizedError(type=ErrorType.INVALID_PASSWORD, message="Неверный пароль")
         return True

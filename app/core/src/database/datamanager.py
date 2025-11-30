@@ -2,13 +2,17 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 from typing import TypeVar
 
-from database.base import Base
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
     async_sessionmaker,
     AsyncSession,
 )
+
+from database.base import Base
 from utils.config import CONFIG
+from utils.logger import create_logger
+
+log = create_logger("DatabaseManager")
 
 db_url = f"postgresql+asyncpg://{CONFIG.db.user}:{CONFIG.db.password}@{CONFIG.db.host}:{CONFIG.db.port}/{CONFIG.db.name}"
 
@@ -26,6 +30,7 @@ class DatabaseManager:
         )
 
     async def init_models(self, drop: bool = False, model_name: str = None):
+        log.info(f"Start init models")
         async with self.engine.begin() as conn:
             if drop:
                 if model_name:
@@ -45,6 +50,7 @@ class DatabaseManager:
                     raise ValueError(f"Model '{model_name}' not found in metadata")
             else:
                 await conn.run_sync(Base.metadata.create_all)
+        log.info(f"End init models")
 
     @asynccontextmanager
     async def session(self, exist_session: Optional[AsyncSession] = None) -> AsyncGenerator[AsyncSession, None]:
