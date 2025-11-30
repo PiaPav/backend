@@ -77,7 +77,7 @@ services:
 
   algorithm-service:
     image: ${ALGORITHM_SERVICE_IMAGE}
-    container_name: algorithm_service
+#    container_name: algorithm_service
 #    ports:
 #      - "50051:50051"
     depends_on:
