@@ -23,7 +23,7 @@ class EmailServiceException(Exception):
 
 
 class EmailService:
-    def __init__(self, iam_token: str = CONFIG.postbox.iam_roken, sender_email: str = CONFIG.postbox.sender_email):
+    def __init__(self, iam_token: str = CONFIG.postbox.iam_token, sender_email: str = CONFIG.postbox.sender_email):
         self.iam_token = iam_token
         self.sender_email = sender_email
         self.url = "https://postbox.cloud.yandex.net/v2/email/outbound-emails"
