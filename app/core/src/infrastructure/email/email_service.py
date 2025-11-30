@@ -45,7 +45,7 @@ class EmailService:
         }
 
         # Шаблон html для всего письма
-        template_path = "infrastructure/email/templates/verification_code.html"
+        template_path = "/src/core/infrastructure/email/templates/verification_code.html"
 
         if not os.path.exists(template_path):
             log.error(f"Файл шаблона {template_path} не найден")
