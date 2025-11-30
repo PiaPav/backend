@@ -66,10 +66,8 @@ class ConfigEmail:
 
 @dataclass
 class ConfigPostbox:
-    region: str
-    endpoint_url: str
-    aws_access_key_id: str
-    aws_secret_access_key: str
+    iam_token: str
+    sender_email: str
 
 @dataclass
 class ConfigRedis:
@@ -142,12 +140,8 @@ def load_config() -> Config:
             db=int(os.environ.get("REDIS_DB", 0))
         ),
         postbox=ConfigPostbox(
-            region = os.environ.get("POSTBOX_REGION", "ru-central1"),
-            endpoint_url=os.environ.get("POSTBOX_URL","https://postbox.api.cloud.yandex.net"),
-            aws_access_key_id=os.environ["POSTBOX_KEY_ID"],
-            aws_secret_access_key=os.environ["POSTBOX_ACCESS_KEY"]
-
-                    )
+            sender_email=os.environ["SENDER_EMAIL"],
+            iam_token=os.environ["IAM_TOKEN"])
     )
 
 
