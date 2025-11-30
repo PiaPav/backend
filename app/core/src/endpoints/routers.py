@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 
 from database.datamanager import DataManager
 from grpc_.server_starter import start_grpc, stop_grpc
@@ -32,6 +34,20 @@ app.include_router(AuthRouter)
 app.include_router(CoreRouter)
 app.include_router(AccountRouter)
 app.include_router(ProjectRouter)
+
+origins = [
+    "*"
+    #https://piapav.space,
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.get("/health")
 async def health():
