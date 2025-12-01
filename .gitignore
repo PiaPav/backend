@@ -17,3 +17,4 @@
 /app/core/src/infrastructure/broker/test_producer.py
 /app/core/src/infrastructure/broker/consumer test only/
 /app/algorithm/.env
+/app/core/src/infrastructure/email/test.py

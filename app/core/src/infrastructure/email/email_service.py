@@ -1,10 +1,11 @@
 import asyncio
-from jinja2 import Template
 import os
 from typing import Union
 
-import httpx
+import requests
+from jinja2 import Template
 from aws_requests_auth.aws_auth import AWSRequestsAuth
+
 from models.account_models import VerifyEmailType
 from utils.config import CONFIG
 from utils.logger import create_logger
@@ -27,35 +28,28 @@ class EmailService:
         self,
         key_id: str = CONFIG.postbox.key_id,
         secret_key: str = CONFIG.postbox.secret_key,
-        sender_email: str = CONFIG.postbox.sender_email,
-        region: str = "ru-central1"
+        sender_email: str = CONFIG.postbox.sender_email
     ):
         self.key_id = key_id
         self.secret_key = secret_key
         self.sender_email = sender_email
-        self.region = region
-        self.service = "ses"
         self.url = "https://postbox.cloud.yandex.net/v2/email/outbound-emails"
 
-        # AWS SigV4 auth
+        # AWS SigV4 auth для Postbox
         self.auth = AWSRequestsAuth(
             aws_access_key=self.key_id,
             aws_secret_access_key=self.secret_key,
             aws_host="postbox.cloud.yandex.net",
-            aws_region=self.region,
-            aws_service=self.service
+            aws_region="ru-central1",
+            aws_service="ses"
         )
 
     @staticmethod
-    def _create_verification_code_template(
-        username: str,
-        code: int,
-        expire_minutes: int,
-        verify_type: VerifyEmailType,
-    ) -> str:
+    def _create_verification_code_template(username: str, code: int, expire_minutes: int,
+                                           verify_type: VerifyEmailType) -> Union[str, bool]:
         VERIFY_ACTIONS = {
             VerifyEmailType.link: "Ваш код подтверждения для привязки электронной почты к аккаунту:",
-            VerifyEmailType.unlink: "Ваш код подтверждения для отвязки электронной почты от аккаунта:",
+            VerifyEmailType.unlink: "Ваш код подтверждения для отвязки электронной почты от аккаунта:"
         }
 
         context = {
@@ -63,7 +57,7 @@ class EmailService:
             "username": username,
             "code": code,
             "expires_in": expire_minutes,
-            "verify_action": VERIFY_ACTIONS[verify_type],
+            "verify_action": VERIFY_ACTIONS[verify_type]
         }
 
         template_path = "/src/core/infrastructure/email/templates/verification_code.html"
@@ -77,43 +71,48 @@ class EmailService:
 
         return html_content
 
-    async def send_email(
-        self,
-        email: str,
-        username: str,
-        code: int,
-        expire_minutes: int,
-        verify_type: VerifyEmailType,
+    def _sync_send_email(
+        self, email: str, username: str, code: int,
+        expire_minutes: int, verify_type: VerifyEmailType
     ) -> bool:
-        html_content = self._create_verification_code_template(
-            username, code, expire_minutes, verify_type
-        )
-
-        payload = {
-            "FromEmailAddress": self.sender_email,
-            "Destination": {"ToAddresses": [email]},
-            "Content": {
-                "Simple": {
-                    "Subject": {"Data": "Код подтверждения"},
-                    "Body": {"Html": {"Data": html_content}},
-                }
-            },
-        }
-
-        log.info(f"Отправляем письмо через Postbox: {email}")
-
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.post(self.url, json=payload, auth=self.auth)
-                response.raise_for_status()
-            log.info(f"Письмо успешно отправлено на {email}, status {response.status_code}")
+            html_content = self._create_verification_code_template(
+                username, code, expire_minutes, verify_type
+            )
+
+            payload = {
+                "FromEmailAddress": self.sender_email,
+                "Destination": {"ToAddresses": [email]},
+                "Content": {
+                    "Simple": {
+                        "Subject": {"Data": "Код подтверждения"},
+                        "Body": {"Html": {"Data": html_content}}
+                    }
+                }
+            }
+
+            log.info(f"Отправляем письмо через Postbox: {email}")
+            resp = requests.post(
+                self.url,
+                json=payload,
+                auth=self.auth,
+                timeout=15
+            )
+            resp.raise_for_status()
+            log.info(f"Письмо успешно отправлено на {email}, status {resp.status_code}")
             return True
-        except httpx.HTTPStatusError as e:
-            log.error(f"Ошибка отправки письма: {e.response.text}")
-            raise EmailServiceException("Forbidden или неправильный запрос к Postbox")
+
         except Exception as e:
             log.error(f"Ошибка отправки письма через Postbox: {e}")
             raise EmailServiceException(str(e))
+
+    async def send_email(
+        self, email: str, username: str, code: int,
+        expire_minutes: int, verify_type: VerifyEmailType
+    ) -> bool:
+        return await asyncio.to_thread(
+            self._sync_send_email, email, username, code, expire_minutes, verify_type
+        )
 
 
 email_service = EmailService()
