@@ -5,7 +5,7 @@ from typing import Union
 
 from models.account_models import  VerifyEmailType
 
-import requests
+import httpx
 from requests.auth import HTTPBasicAuth
 from utils.config import CONFIG
 from utils.logger import create_logger
@@ -37,7 +37,7 @@ class EmailService:
 
     @staticmethod
     def _create_verification_code_template(username: str, code: int, expire_minutes: int,
-                                           verify_type: VerifyEmailType) -> Union[str, bool]:
+                                           verify_type: VerifyEmailType) -> str:
         VERIFY_ACTIONS = {
             VerifyEmailType.link: "Ваш код подтверждения для привязки электронной почты к аккаунту:",
             VerifyEmailType.unlink: "Ваш код подтверждения для отвязки электронной почты от аккаунта:"
@@ -62,44 +62,42 @@ class EmailService:
 
         return html_content
 
-    def _sync_send_email(self, email: str, username: str, code: int,
+    async def send_email(self, email: str, username: str, code: int,
                          expire_minutes: int, verify_type: VerifyEmailType) -> bool:
-        try:
-            html_content = self._create_verification_code_template(username, code, expire_minutes, verify_type)
+        """
+        Асинхронная отправка письма через Postbox с HTML контентом.
+        """
+        html_content = self._create_verification_code_template(username, code, expire_minutes, verify_type)
 
-            payload = {
-                "FromEmailAddress": self.sender_email,
-                "Destination": {
-                    "ToAddresses": [email]
-                },
-                "Content": {
-                    "Simple": {
-                        "Subject": {"Data": "Код подтверждения", "Charset": "UTF-8"},
-                        "Body": {"Html": {"Data": html_content, "Charset": "UTF-8"}}
-                    }
+        payload = {
+            "FromEmailAddress": self.sender_email,
+            "Destination": {
+                "ToAddresses": [email]
+            },
+            "Content": {
+                "Simple": {
+                    "Subject": {"Data": "Код подтверждения", "Charset": "UTF-8"},
+                    "Body": {"Html": {"Data": html_content, "Charset": "UTF-8"}}
                 }
             }
+        }
 
-            log.info(f"Отправляем письмо через Postbox: {email}")
-            resp = requests.post(
-                self.url,
-                auth=HTTPBasicAuth(self.key_id, self.secret_key),
-                json=payload,
-                timeout=15
-            )
-            resp.raise_for_status()
-            log.info(f"Письмо успешно отправлено на {email}, status {resp.status_code}")
-            return True
+        auth = (self.key_id, self.secret_key)
 
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                log.info(f"Отправляем письмо через Postbox: {email}")
+                response = await client.post(self.url, json=payload, auth=auth)
+                response.raise_for_status()
+                log.info(f"Письмо успешно отправлено на {email}, status {response.status_code}")
+                return True
+
+        except httpx.HTTPStatusError as e:
+            log.error(f"Ошибка отправки письма через Postbox: {e.response.text}")
+            raise EmailServiceException(e.response.text)
         except Exception as e:
             log.error(f"Ошибка отправки письма через Postbox: {e}")
             raise EmailServiceException(str(e))
-
-    async def send_email(self, email: str, username: str, code: int,
-                         expire_minutes: int, verify_type: VerifyEmailType) -> bool:
-        return await asyncio.to_thread(
-            self._sync_send_email, email, username, code, expire_minutes, verify_type
-        )
 
 
 
