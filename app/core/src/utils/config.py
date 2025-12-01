@@ -66,8 +66,9 @@ class ConfigEmail:
 
 @dataclass
 class ConfigPostbox:
-    iam_token: str
-    sender_email: str
+    key_id:str
+    secret_key: str
+    sender_email:str
 
 @dataclass
 class ConfigRedis:
@@ -140,9 +141,10 @@ def load_config() -> Config:
             db=int(os.environ.get("REDIS_DB", 0))
         ),
         postbox=ConfigPostbox(
-            sender_email=os.environ["SENDER_EMAIL"],
-            iam_token=os.environ["IAM_TOKEN"])
-    )
+            key_id = os.environ["ID_KEY"],
+            secret_key = os.environ["ACCESS_KEY"],
+            sender_email = os.environ["SENDER_EMAIL"]
+    ))
 
 
 CONFIG = load_config()

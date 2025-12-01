@@ -6,6 +6,7 @@ from typing import Union
 from models.account_models import  VerifyEmailType
 
 import requests
+from requests.auth import HTTPBasicAuth
 from utils.config import CONFIG
 from utils.logger import create_logger
 
@@ -23,8 +24,14 @@ class EmailServiceException(Exception):
 
 
 class EmailService:
-    def __init__(self, iam_token: str = CONFIG.postbox.iam_token, sender_email: str = CONFIG.postbox.sender_email):
-        self.iam_token = iam_token
+    def __init__(
+        self,
+        key_id: str = CONFIG.postbox.key_id,
+        secret_key: str = CONFIG.postbox.secret_key,
+        sender_email: str = CONFIG.postbox.sender_email
+    ):
+        self.key_id = key_id
+        self.secret_key = secret_key
         self.sender_email = sender_email
         self.url = "https://postbox.cloud.yandex.net/v2/email/outbound-emails"
 
@@ -67,21 +74,19 @@ class EmailService:
                 },
                 "Content": {
                     "Simple": {
-                        "Subject": { "Data": "Код подтверждения", "Charset": "UTF-8" },
-                        "Body": {
-                            "Html": { "Data": html_content, "Charset": "UTF-8" }
-                        }
+                        "Subject": {"Data": "Код подтверждения", "Charset": "UTF-8"},
+                        "Body": {"Html": {"Data": html_content, "Charset": "UTF-8"}}
                     }
                 }
             }
 
-            headers = {
-                "X-YaCloud-SubjectToken": self.iam_token,
-                "Content-Type": "application/json"
-            }
-
             log.info(f"Отправляем письмо через Postbox: {email}")
-            resp = requests.post(self.url, json=payload, headers=headers, timeout=15)
+            resp = requests.post(
+                self.url,
+                auth=HTTPBasicAuth(self.key_id, self.secret_key),
+                json=payload,
+                timeout=15
+            )
             resp.raise_for_status()
             log.info(f"Письмо успешно отправлено на {email}, status {resp.status_code}")
             return True
@@ -95,6 +100,7 @@ class EmailService:
         return await asyncio.to_thread(
             self._sync_send_email, email, username, code, expire_minutes, verify_type
         )
+
 
 
 email_service = EmailService()
