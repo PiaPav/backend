@@ -8,6 +8,7 @@ dependencies = [
     "aioboto3>=15.5.0",
     "aiohttp>=3.13.2",
     "asyncpg>=0.30.0",
+    "aws-requests-auth>=0.4.3",
     "bcrypt>=5.0.0",
     "boto3>=1.40.52",
     "botocore>=1.40.52",
