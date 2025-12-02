@@ -37,11 +37,6 @@ class ProjectService:
         except ServiceException as e:
             raise e
 
-        except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
-
     @staticmethod
     async def create_project(user_data: AccountEncodeData, create_data: ProjectCreateData,
                              file: UploadFile) -> ProjectData:
@@ -63,11 +58,6 @@ class ProjectService:
 
         except ServiceException as e:
             raise e
-
-        except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
 
     @staticmethod
     async def update_project(user_data: AccountEncodeData, project_id: int,
@@ -92,11 +82,6 @@ class ProjectService:
         except ServiceException as e:
             raise e
 
-        except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
-
     @staticmethod
     async def delete_project(user_data: AccountEncodeData, project_id: int) -> None:
         try:
@@ -112,11 +97,6 @@ class ProjectService:
         except ServiceException as e:
             raise e
 
-        except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
-
     @staticmethod
     async def get_projects_by_account_id(user_data: AccountEncodeData) -> ProjectListDataLite:
         # Используются лайт версии данных проекта
@@ -127,8 +107,3 @@ class ProjectService:
 
         except ServiceException as e:
             raise e
-
-        except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")

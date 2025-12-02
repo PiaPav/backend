@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 
 from database.datamanager import DataManager
+from exceptions.service_exception_middleware import init_handlers
 from grpc_.server_starter import start_grpc, stop_grpc
 from services.manage.broker_manager import broker_repo_task
 from endpoints.account_endpoints import router as AccountRouter
@@ -35,6 +36,8 @@ app.include_router(AuthRouter)
 app.include_router(CoreRouter)
 app.include_router(AccountRouter)
 app.include_router(ProjectRouter)
+
+init_handlers(app=app)
 
 origins = [
     "*"

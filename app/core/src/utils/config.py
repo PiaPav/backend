@@ -144,7 +144,8 @@ def load_config() -> Config:
             key_id = os.environ["ID_KEY"],
             secret_key = os.environ["ACCESS_KEY"],
             sender_email = os.environ["SENDER_EMAIL"]
-    ))
+        )
+    )
 
 
 CONFIG = load_config()

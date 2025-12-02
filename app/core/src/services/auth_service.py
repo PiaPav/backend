@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 
 import bcrypt
-from fastapi import HTTPException, status
 from jwt import PyJWT, DecodeError
 
 from database.accounts import Account
@@ -37,11 +36,6 @@ class AuthService:
         except ServiceException as e:
             raise e
 
-        except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
-
     @staticmethod
     async def verify_token(token: str) -> AccountEncodeData:
         try:
@@ -53,11 +47,6 @@ class AuthService:
 
         except ServiceException as e:
             raise e
-
-        except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
 
     @staticmethod
     async def check_token(token: str, key: str) -> AccountEncodeData:
@@ -80,21 +69,16 @@ class AuthService:
             refresh = await AuthService.encode_to_token(data_to_token, CONFIG.auth.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60,
                                                         secret_key=CONFIG.auth.REFRESH_SECRET_KEY)
 
+            return AuthResponseData(access_token=access,
+                                    refresh_token=refresh,
+                                    token_type="bearer")
+
         except DataBaseEntityNotExists as e:
             log.error(f"Неверный логин. Детали: {e.message}")
             raise UnauthorizedError(type=ErrorType.INVALID_LOGIN, message="Неверный логин")
 
         except ServiceException as e:
             raise e
-
-        except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
-
-        return AuthResponseData(access_token=access,
-                                refresh_token=refresh,
-                                token_type="bearer")
 
     @staticmethod
     async def refresh(refresh_data: RefreshData) -> AuthResponseData:
@@ -115,17 +99,13 @@ class AuthService:
             refresh = await AuthService.encode_to_token(data_to_token, CONFIG.auth.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60,
                                                         secret_key=CONFIG.auth.REFRESH_SECRET_KEY)
         except (DecodeError,
-                DataBaseEntityNotExists):  # ошибка декодирования | отсутствие аккаунта в бд (прислали поддельный токен)
+                DataBaseEntityNotExists) as e:  # ошибка декодирования | отсутствие аккаунта в бд (прислали поддельный токен)
             log.error(f"Неверный токен")
-            raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен")
+            raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен",
+                                    details={"raw_exception": e.message}) from e
 
         except ServiceException as e:
             raise e
-
-        except Exception as e:
-            log.error(f"{type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок орм и бд
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{type(e)}, {str(e)}")
 
         return AuthResponseData(access_token=access,
                                 refresh_token=refresh,

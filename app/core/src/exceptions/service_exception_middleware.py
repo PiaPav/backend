@@ -16,6 +16,7 @@ def init_handlers(app: FastAPI):
 
     @app.exception_handler(ServiceException)
     async def service_exception_handler(request: Request, exc: ServiceException):
+        log.error(f"Перехвачена ошибка {exc}")
         return JSONResponse(
             status_code=exc.status_code,
             content=exc.error.model_dump(mode="json"),

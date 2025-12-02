@@ -1,9 +1,8 @@
-from fastapi import HTTPException, status
-
 from database.accounts import Account
 from database.base import DataBaseEntityNotExists
+from exceptions.service_exception_models import ErrorType, ClientError, InternalServerError, UnauthorizedError, \
+    ServiceException
 from infrastructure.email.email_service import email_service, EmailServiceException
-from exceptions.service_exception_models import ErrorDetails, NotFoundError, ErrorType, ClientError, InternalServerError, UnauthorizedError, ServiceException
 from infrastructure.redis.redis_control import Redis
 from infrastructure.security.security import Security
 from models.account_models import AccountFullData, AccountPatchData, VerifyEmailType
@@ -25,18 +24,11 @@ class AccountService:
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise NotFoundError(type=ErrorType.ACCOUNT_NOT_FOUND, message="Аккаунт не найден",
-                                details={"raw_exception": e.message}) from e
+            raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен",
+                                    details={"raw_exception": e.message}) from e
 
         except ServiceException as e:
             raise e
-
-        except Exception as e:
-            log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок орм и бд
-            error_details = ErrorDetails(type=str(type(e)), message="Непредвиденная ошибка",
-                                         details={"raw_exception": str(e)})
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_details.model_dump())
 
     @staticmethod
     async def patch_account_by_id(account_id: int, patch_data: AccountPatchData) -> AccountFullData:
@@ -49,18 +41,11 @@ class AccountService:
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise NotFoundError(type=ErrorType.ACCOUNT_NOT_FOUND, message="Аккаунт не найден",
-                                details={"raw_exception": e.message}) from e
+            raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен",
+                                    details={"raw_exception": e.message}) from e
 
         except ServiceException as e:
             raise e
-
-        except Exception as e:
-            log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок орм и бд
-            error_details = ErrorDetails(type=str(type(e)), message="Непредвиденная ошибка",
-                                         details={"raw_exception": str(e)})
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_details.model_dump())
 
     @staticmethod
     async def link_email(account_id: int, email: str) -> bool:
@@ -84,15 +69,15 @@ class AccountService:
 
             log.info("Вызов EmailService.send_email")
             result = await email_service.send_email(email=email, username=account_db.name, code=verification_code,
-                                                   expire_minutes=EXPIRE_VERIFICATION_CODE_MINUTES,
-                                                   verify_type=VerifyEmailType.link)
+                                                    expire_minutes=EXPIRE_VERIFICATION_CODE_MINUTES,
+                                                    verify_type=VerifyEmailType.link)
 
             return result
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise NotFoundError(type=ErrorType.ACCOUNT_NOT_FOUND, message="Аккаунт не найден",
-                                details={"raw_exception": e.message}) from e
+            raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен",
+                                    details={"raw_exception": e.message}) from e
 
         except EmailServiceException as e:
             log.error(f"Ошибка при отправке письма. Детали: {e.message}")
@@ -102,13 +87,6 @@ class AccountService:
 
         except ServiceException as e:
             raise e
-
-        except Exception as e:
-            log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок класса отправки писем, орм и бд
-            error_details = ErrorDetails(type=str(type(e)), message="Непредвиденная ошибка",
-                                         details={"raw_exception": str(e)})
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_details.model_dump())
 
     @staticmethod
     async def verify_email(account_id: int, email: str, user_verification_code: int,
@@ -130,18 +108,11 @@ class AccountService:
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise NotFoundError(type=ErrorType.ACCOUNT_NOT_FOUND, message="Аккаунт не найден",
-                                details={"raw_exception": e.message}) from e
+            raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен",
+                                    details={"raw_exception": e.message}) from e
 
         except ServiceException as e:
             raise e
-
-        except Exception as e:
-            log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок класса отправки писем, орм и бд
-            error_details = ErrorDetails(type=str(type(e)), message="Непредвиденная ошибка",
-                                         details={"raw_exception": str(e)})
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_details.model_dump())
 
     @staticmethod
     async def delete_email(account_id: int) -> bool:
@@ -158,16 +129,16 @@ class AccountService:
                                               expire_seconds=EXPIRE_VERIFICATION_CODE_MINUTES * 60)
 
             result = await email_service.send_email(email=account_db.email, username=account_db.name,
-                                                   code=verification_code,
-                                                   expire_minutes=EXPIRE_VERIFICATION_CODE_MINUTES,
-                                                   verify_type=VerifyEmailType.unlink)
+                                                    code=verification_code,
+                                                    expire_minutes=EXPIRE_VERIFICATION_CODE_MINUTES,
+                                                    verify_type=VerifyEmailType.unlink)
 
             return result
 
         except DataBaseEntityNotExists as e:
             log.error(f"Аккаунт не найден. Детали: {e.message}")
-            raise NotFoundError(type=ErrorType.ACCOUNT_NOT_FOUND, message="Аккаунт не найден",
-                                details={"raw_exception": e.message}) from e
+            raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен",
+                                    details={"raw_exception": e.message}) from e
 
         except EmailServiceException as e:
             log.error(f"Ошибка при отправке письма. Детали: {e.message}")
@@ -175,11 +146,4 @@ class AccountService:
                                       details={"raw_exception": e.message}) from e
 
         except ServiceException as e:
-            raise e
-
-        except Exception as e:
-            log.error(f"Непредвиденная ошибка: {type(e)}, {str(e)}")
-            # Пока заглушка, надо сделать проверки ошибок класса отправки писем, орм и бд
-            error_details = ErrorDetails(type=str(type(e)), message="Непредвиденная ошибка",
-                                         details={"raw_exception": str(e)})
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=error_details.model_dump())
+            raise e from e
