@@ -106,9 +106,11 @@ jobs:
           echo "REDIS_PORT=${{ secrets.REDIS_PORT }}" >> .env
           echo "REDIS_DB=${{ secrets.REDIS_DB }}" >> .env
 
-          # Email
-          echo "EMAIL_LOGIN=${{ secrets.EMAIL_LOGIN }}" >> .env
-          echo "EMAIL_PASSWORD=${{ secrets.EMAIL_PASSWORD }}" >> .env
+          # YandexPostman
+          echo "ID_KEY=${{ secrets.ID_KEY }}" >> .env
+          echo "ACCESS_KEY=${{ secrets.ACCESS_KEY }}" >> .env
+          echo "SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}" >> .env
+
           
           # Service image
           
