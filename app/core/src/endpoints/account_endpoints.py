@@ -16,8 +16,7 @@ security = HTTPBearer()
 
 
 @router.get("", status_code=status.HTTP_200_OK,
-            responses=get_error_responses(ErrorType.INVALID_TOKEN,
-                                          ErrorType.ACCOUNT_NOT_FOUND),
+            responses=get_error_responses(ErrorType.INVALID_TOKEN),
             response_model=AccountFullData)
 async def get_account(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(),
                       service: AccountService = Depends()) -> AccountFullData:
@@ -29,8 +28,7 @@ async def get_account(token: HTTPAuthorizationCredentials = Depends(security), a
 
 
 @router.patch("", status_code=status.HTTP_200_OK,
-              responses=get_error_responses(ErrorType.INVALID_TOKEN,
-                                            ErrorType.ACCOUNT_NOT_FOUND),
+              responses=get_error_responses(ErrorType.INVALID_TOKEN),
               response_model=AccountFullData)
 async def patch_account(patch_data: AccountPatchData, token: HTTPAuthorizationCredentials = Depends(security),
                         auth_service: AuthService = Depends(), service: AccountService = Depends()) -> AccountFullData:
@@ -43,7 +41,6 @@ async def patch_account(patch_data: AccountPatchData, token: HTTPAuthorizationCr
 
 @router.post("/email", status_code=status.HTTP_200_OK,
              responses=get_error_responses(ErrorType.INVALID_TOKEN,
-                                           ErrorType.ACCOUNT_NOT_FOUND,
                                            ErrorType.EMAIL_SEND_CRASH,
                                            ErrorType.EMAIL_ALREADY_LINKED,
                                            ErrorType.EMAIL_ALREADY_TAKEN),
@@ -59,7 +56,6 @@ async def link_email(email: str, token: HTTPAuthorizationCredentials = Depends(s
 
 @router.post("/verification_email", status_code=status.HTTP_200_OK,
              responses=get_error_responses(ErrorType.INVALID_TOKEN,
-                                           ErrorType.ACCOUNT_NOT_FOUND,
                                            ErrorType.EMAIL_INVALID_CODE),
              response_model=bool)
 async def verification_email(email: str, verify_type: VerifyEmailType, verification_code: int,
@@ -75,7 +71,6 @@ async def verification_email(email: str, verify_type: VerifyEmailType, verificat
 
 @router.delete("/email", status_code=status.HTTP_200_OK,
                responses=get_error_responses(ErrorType.INVALID_TOKEN,
-                                             ErrorType.ACCOUNT_NOT_FOUND,
                                              ErrorType.EMAIL_SEND_CRASH,
                                              ErrorType.EMAIL_DONT_LINKED),
                response_model=bool)

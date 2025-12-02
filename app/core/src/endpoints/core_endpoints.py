@@ -16,8 +16,7 @@ security = HTTPBearer()
 
 
 @router.get("/home", status_code=status.HTTP_200_OK,
-            responses=get_error_responses(ErrorType.INVALID_TOKEN,
-                                          ErrorType.ACCOUNT_NOT_FOUND),
+            responses=get_error_responses(ErrorType.INVALID_TOKEN),
             response_model=HomePageData)
 async def homepage(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(),
                    service: CoreService = Depends()) -> HomePageData:
