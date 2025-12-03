@@ -1,5 +1,5 @@
-import asyncio
 from datetime import datetime, timedelta
+import asyncio
 
 import bcrypt
 from jwt import PyJWT, DecodeError
@@ -21,7 +21,7 @@ log = create_logger("AuthService")
 class AuthService:
     @staticmethod
     async def registration(data: RegistrationData) -> AccountData:
-        hashed_password = await asyncio.to_thread(AuthService.hash_password, password=data.password) # В отдельный поток
+        hashed_password = await AuthService.hash_password(data.password)
         try:
             account_exist = await Account.is_login_exists(data.login)
             if account_exist:
@@ -62,7 +62,7 @@ class AuthService:
         try:
             bd_account = await Account.get_account_by_login(
                 login_data.login)  # Может вызвать DataBaseEntityNotExists если нет логина
-            await asyncio.to_thread(AuthService.verify_password, login_data.password, bd_account.hashed_password) # в отдельный поток, чтобы не блокировать цикл
+            await AuthService.verify_password(login_data.password, bd_account.hashed_password)
 
             data_to_token = AccountData(id=bd_account.id, name=bd_account.name, surname=bd_account.surname)
             access = await AuthService.encode_to_token(data_to_token, CONFIG.auth.ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -103,7 +103,7 @@ class AuthService:
                 DataBaseEntityNotExists) as e:  # ошибка декодирования | отсутствие аккаунта в бд (прислали поддельный токен)
             log.error(f"Неверный токен")
             raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен",
-                                    details={"raw_exception": e.message if e is DataBaseEntityNotExists else str(e)}) from e
+                                    details={"raw_exception": e.message}) from e
 
         except ServiceException as e:
             raise e
@@ -115,30 +115,68 @@ class AuthService:
     @staticmethod
     async def encode_to_token(data: AccountData, expire: int, secret_key: str) -> str:
         """expire в минутах"""
-        start_date = datetime.now()
-        end_date = start_date + timedelta(minutes=expire)
-        data_dict = data.model_dump()
-        data_dict["startDate"] = start_date.isoformat()
-        data_dict["endDate"] = end_date.isoformat()
-        result = JWT.encode(payload=data_dict, key=secret_key, algorithm=CONFIG.auth.ALGORITHM)
-        return result
+
+        def _sync_encode():
+            start_date = datetime.now()
+            end_date = start_date + timedelta(minutes=expire)
+
+            data_dict = data.model_dump()
+            data_dict["startDate"] = start_date.isoformat()
+            data_dict["endDate"] = end_date.isoformat()
+
+            return JWT.encode(
+                payload=data_dict,
+                key=secret_key,
+                algorithm=CONFIG.auth.ALGORITHM
+            )
+
+        return await asyncio.to_thread(_sync_encode)
 
     @staticmethod
     async def decode_token(token: str, secret_key: str) -> AccountEncodeData:
-        result = JWT.decode(jwt=token, key=secret_key, algorithms=CONFIG.auth.ALGORITHM)
-        return AccountEncodeData(result["id"], result["name"], result["surname"],
-                                 datetime.fromisoformat(result["startDate"]), datetime.fromisoformat(result["endDate"]))
+
+        def _sync_decode():
+            result = JWT.decode(
+                jwt=token,
+                key=secret_key,
+                algorithms=CONFIG.auth.ALGORITHM
+            )
+            return AccountEncodeData(
+                result["id"],
+                result["name"],
+                result["surname"],
+                datetime.fromisoformat(result["startDate"]),
+                datetime.fromisoformat(result["endDate"])
+            )
+
+        return await asyncio.to_thread(_sync_decode)
 
     @staticmethod
-    def hash_password(password: str) -> str:
-        salt = bcrypt.gensalt(12)
-        hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
-        return hashed.decode("utf-8")
+    async def hash_password(password: str) -> str:
+
+        def _sync_hash():
+            salt = bcrypt.gensalt()
+            hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
+            return hashed.decode("utf-8")
+
+        return await asyncio.to_thread(_sync_hash)
 
     @staticmethod
-    def verify_password(password: str, hashed_password: str) -> bool:
-        result = bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8"))
+    async def verify_password(password: str, hashed_password: str) -> bool:
+
+        def _sync_verify():
+            return bcrypt.checkpw(
+                password.encode("utf-8"),
+                hashed_password.encode("utf-8")
+            )
+
+        result = await asyncio.to_thread(_sync_verify)
+
         if not result:
-            log.error(f"Неверный пароль")
-            raise UnauthorizedError(type=ErrorType.INVALID_PASSWORD, message="Неверный пароль")
+            log.error("Неверный пароль")
+            raise UnauthorizedError(
+                type=ErrorType.INVALID_PASSWORD,
+                message="Неверный пароль"
+            )
+
         return True
