@@ -155,7 +155,7 @@ class AuthService:
     async def hash_password(password: str) -> str:
 
         def _sync_hash():
-            salt = bcrypt.gensalt()
+            salt = bcrypt.gensalt(10)
             hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
             return hashed.decode("utf-8")
 
