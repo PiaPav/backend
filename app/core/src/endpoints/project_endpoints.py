@@ -3,6 +3,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from exceptions.service_exception_middleware import get_error_responses
 from exceptions.service_exception_models import ErrorType
+from infrastructure.profile.profile import profile_time
 from models.project_models import ProjectData, ProjectCreateData, ProjectPatchData, ProjectListDataLite
 from services.auth_service import AuthService
 from services.project_service import ProjectService
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/v1/project", tags=["Project"])
             responses=get_error_responses(ErrorType.INVALID_TOKEN,
                                           ErrorType.PROJECT_NO_RIGHT_OR_NOT_FOUND),
             response_model=ProjectData)
+@profile_time
 async def get_project(project_id: int, token: HTTPAuthorizationCredentials = Depends(security),
                       auth_service: AuthService = Depends(), service: ProjectService = Depends()) -> ProjectData:
     log.info(f"Получение проекта {project_id} - начало")
@@ -31,6 +33,7 @@ async def get_project(project_id: int, token: HTTPAuthorizationCredentials = Dep
 @router.post("", status_code=status.HTTP_200_OK,
              responses=get_error_responses(ErrorType.INVALID_TOKEN),
              response_model=ProjectData)
+@profile_time
 async def create_project(name: str, description: str, file: UploadFile = File(...),
                          token: HTTPAuthorizationCredentials = Depends(security),
                          auth_service: AuthService = Depends(), service: ProjectService = Depends()) -> ProjectData:
@@ -46,6 +49,7 @@ async def create_project(name: str, description: str, file: UploadFile = File(..
               responses=get_error_responses(ErrorType.INVALID_TOKEN,
                                             ErrorType.PROJECT_NO_RIGHT_OR_NOT_FOUND),
               response_model=ProjectData)
+@profile_time
 async def patch_project(project_id: int, patch_data: ProjectPatchData,
                         token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(),
                         service: ProjectService = Depends()) -> ProjectData:
@@ -59,6 +63,7 @@ async def patch_project(project_id: int, patch_data: ProjectPatchData,
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT,
                responses=get_error_responses(ErrorType.INVALID_TOKEN,
                                              ErrorType.PROJECT_NO_RIGHT_OR_NOT_FOUND))
+@profile_time
 async def delete_project(project_id: int, token: HTTPAuthorizationCredentials = Depends(security),
                          auth_service: AuthService = Depends(), service: ProjectService = Depends()):
     log.info(f"Удаление проекта {project_id} - начало")
@@ -71,6 +76,7 @@ async def delete_project(project_id: int, token: HTTPAuthorizationCredentials = 
 @router.get("", status_code=status.HTTP_200_OK,
             responses=get_error_responses(ErrorType.INVALID_TOKEN),
             response_model=ProjectListDataLite)
+@profile_time
 async def get_projects_list(token: HTTPAuthorizationCredentials = Depends(security),
                             auth_service: AuthService = Depends(),
                             service: ProjectService = Depends()) -> ProjectListDataLite:

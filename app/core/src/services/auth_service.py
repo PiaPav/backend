@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta
 
 import bcrypt
@@ -20,7 +21,7 @@ log = create_logger("AuthService")
 class AuthService:
     @staticmethod
     async def registration(data: RegistrationData) -> AccountData:
-        hashed_password = await AuthService.hash_password(password=data.password)
+        hashed_password = await asyncio.to_thread(AuthService.hash_password, password=data.password) # В отдельный поток
         try:
             account_exist = await Account.is_login_exists(data.login)
             if account_exist:
@@ -61,7 +62,7 @@ class AuthService:
         try:
             bd_account = await Account.get_account_by_login(
                 login_data.login)  # Может вызвать DataBaseEntityNotExists если нет логина
-            await AuthService.verify_password(login_data.password, bd_account.hashed_password)
+            await asyncio.to_thread(AuthService.verify_password, login_data.password, bd_account.hashed_password) # в отдельный поток, чтобы не блокировать цикл
 
             data_to_token = AccountData(id=bd_account.id, name=bd_account.name, surname=bd_account.surname)
             access = await AuthService.encode_to_token(data_to_token, CONFIG.auth.ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -102,7 +103,7 @@ class AuthService:
                 DataBaseEntityNotExists) as e:  # ошибка декодирования | отсутствие аккаунта в бд (прислали поддельный токен)
             log.error(f"Неверный токен")
             raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен",
-                                    details={"raw_exception": e.message}) from e
+                                    details={"raw_exception": e.message if e is DataBaseEntityNotExists else str(e)}) from e
 
         except ServiceException as e:
             raise e
@@ -129,13 +130,13 @@ class AuthService:
                                  datetime.fromisoformat(result["startDate"]), datetime.fromisoformat(result["endDate"]))
 
     @staticmethod
-    async def hash_password(password: str) -> str:
-        salt = bcrypt.gensalt()
+    def hash_password(password: str) -> str:
+        salt = bcrypt.gensalt(12)
         hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
         return hashed.decode("utf-8")
 
     @staticmethod
-    async def verify_password(password: str, hashed_password: str) -> bool:
+    def verify_password(password: str, hashed_password: str) -> bool:
         result = bcrypt.checkpw(password.encode("utf-8"), hashed_password.encode("utf-8"))
         if not result:
             log.error(f"Неверный пароль")
