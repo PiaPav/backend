@@ -20,7 +20,6 @@ router = APIRouter(prefix="/v1/project", tags=["Project"])
             responses=get_error_responses(ErrorType.INVALID_TOKEN,
                                           ErrorType.PROJECT_NO_RIGHT_OR_NOT_FOUND),
             response_model=ProjectData)
-@profile_time
 async def get_project(project_id: int, token: HTTPAuthorizationCredentials = Depends(security),
                       auth_service: AuthService = Depends(), service: ProjectService = Depends()) -> ProjectData:
     log.info(f"Получение проекта {project_id} - начало")

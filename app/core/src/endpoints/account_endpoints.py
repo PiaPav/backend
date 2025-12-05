@@ -19,7 +19,6 @@ security = HTTPBearer()
 @router.get("", status_code=status.HTTP_200_OK,
             responses=get_error_responses(ErrorType.INVALID_TOKEN),
             response_model=AccountFullData)
-@profile_time
 async def get_account(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(),
                       service: AccountService = Depends()) -> AccountFullData:
     log.info(f"Получение данных аккаунта - начало")
@@ -32,7 +31,6 @@ async def get_account(token: HTTPAuthorizationCredentials = Depends(security), a
 @router.patch("", status_code=status.HTTP_200_OK,
               responses=get_error_responses(ErrorType.INVALID_TOKEN),
               response_model=AccountFullData)
-@profile_time
 async def patch_account(patch_data: AccountPatchData, token: HTTPAuthorizationCredentials = Depends(security),
                         auth_service: AuthService = Depends(), service: AccountService = Depends()) -> AccountFullData:
     log.info(f"Изменение данных аккаунта - начало")
@@ -48,7 +46,6 @@ async def patch_account(patch_data: AccountPatchData, token: HTTPAuthorizationCr
                                            ErrorType.EMAIL_ALREADY_LINKED,
                                            ErrorType.EMAIL_ALREADY_TAKEN),
              response_model=bool)
-@profile_time
 async def link_email(email: str, token: HTTPAuthorizationCredentials = Depends(security),
                      auth_service: AuthService = Depends(), service: AccountService = Depends()) -> bool:
     log.info("Привязка email к аккаунту - начало")
@@ -62,7 +59,6 @@ async def link_email(email: str, token: HTTPAuthorizationCredentials = Depends(s
              responses=get_error_responses(ErrorType.INVALID_TOKEN,
                                            ErrorType.EMAIL_INVALID_CODE),
              response_model=bool)
-@profile_time
 async def verification_email(email: str, verify_type: VerifyEmailType, verification_code: int,
                              token: HTTPAuthorizationCredentials = Depends(security),
                              auth_service: AuthService = Depends(), service: AccountService = Depends()) -> bool:
@@ -79,7 +75,6 @@ async def verification_email(email: str, verify_type: VerifyEmailType, verificat
                                              ErrorType.EMAIL_SEND_CRASH,
                                              ErrorType.EMAIL_DONT_LINKED),
                response_model=bool)
-@profile_time
 async def delete_email(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(),
                        service: AccountService = Depends()) -> bool:
     log.info(f"Удаление почты у аккаунта - начало")

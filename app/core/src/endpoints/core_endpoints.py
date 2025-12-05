@@ -19,7 +19,6 @@ security = HTTPBearer()
 @router.get("/home", status_code=status.HTTP_200_OK,
             responses=get_error_responses(ErrorType.INVALID_TOKEN),
             response_model=HomePageData)
-@profile_time
 async def homepage(token: HTTPAuthorizationCredentials = Depends(security), auth_service: AuthService = Depends(),
                    service: CoreService = Depends()) -> HomePageData:
     log.info(f"Получение главной страницы - начало")
