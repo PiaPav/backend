@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 import bcrypt
 from jwt import PyJWT, DecodeError
@@ -17,6 +18,7 @@ JWT = PyJWT()
 
 log = create_logger("AuthService")
 
+bcrypt_executor = ThreadPoolExecutor(max_workers=32)
 
 class AuthService:
     @staticmethod
@@ -114,9 +116,6 @@ class AuthService:
 
     @staticmethod
     async def encode_to_token(data: AccountData, expire: int, secret_key: str) -> str:
-        """expire в минутах"""
-
-        def _sync_encode():
             start_date = datetime.now()
             end_date = start_date + timedelta(minutes=expire)
 
@@ -130,12 +129,9 @@ class AuthService:
                 algorithm=CONFIG.auth.ALGORITHM
             )
 
-        return await asyncio.to_thread(_sync_encode)
 
     @staticmethod
     async def decode_token(token: str, secret_key: str) -> AccountEncodeData:
-
-        def _sync_decode():
             result = JWT.decode(
                 jwt=token,
                 key=secret_key,
@@ -146,23 +142,21 @@ class AuthService:
                 result["name"],
                 result["surname"],
                 datetime.fromisoformat(result["startDate"]),
-                datetime.fromisoformat(result["endDate"])
-            )
-
-        return await asyncio.to_thread(_sync_decode)
+                datetime.fromisoformat(result["endDate"]))
 
     @staticmethod
     async def hash_password(password: str) -> str:
-
+        loop = asyncio.get_running_loop()
         def _sync_hash():
-            salt = bcrypt.gensalt(10)
+            salt = bcrypt.gensalt(8)
             hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
             return hashed.decode("utf-8")
 
-        return await asyncio.to_thread(_sync_hash)
+        return await loop.run_in_executor(bcrypt_executor, _sync_hash)
 
     @staticmethod
     async def verify_password(password: str, hashed_password: str) -> bool:
+        loop = asyncio.get_running_loop()
 
         def _sync_verify():
             return bcrypt.checkpw(
@@ -170,7 +164,7 @@ class AuthService:
                 hashed_password.encode("utf-8")
             )
 
-        result = await asyncio.to_thread(_sync_verify)
+        result = await loop.run_in_executor(bcrypt_executor,_sync_verify)
 
         if not result:
             log.error("Неверный пароль")
