@@ -1,4 +1,5 @@
 # core_server.py
+import asyncio
 from typing import Dict
 
 import grpc
@@ -149,13 +150,13 @@ class CoreServer:
 # ==== Запуск через main ====
 # ===========================
 
-if __name__ == "__main__":
-    import asyncio
-
-    core_server = CoreServer()
-
-    try:
-        asyncio.run(core_server.start())
-    except KeyboardInterrupt:
-        print("CoreServer: получен сигнал остановки")
-        asyncio.run(core_server.stop())
+# if __name__ == "__main__":
+#     import asyncio
+#
+#     core_server = CoreServer()
+#
+#     try:
+#         asyncio.run(core_server.start())
+#     except KeyboardInterrupt:
+#         print("CoreServer: получен сигнал остановки")
+#         asyncio.run(core_server.stop())
