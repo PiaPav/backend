@@ -21,7 +21,11 @@ T = TypeVar('T')
 
 class DatabaseManager:
     def __init__(self, url: str, echo: bool = False):
-        self.engine = create_async_engine(url, echo=echo, future=True)
+        self.engine = create_async_engine(url,
+                                          echo=echo,
+                                          future=True,
+                                          pool_size=20,         # Максимум соединений в пуле
+                                          max_overflow=10)     # Дополнительные соединения сверх pool_size
         self.session_factory = async_sessionmaker(
             self.engine,
             expire_on_commit=False,
