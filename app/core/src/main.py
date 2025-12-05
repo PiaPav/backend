@@ -25,7 +25,7 @@ class StandaloneApplication(BaseApplication):
 if __name__ == "__main__":
     options = {
         "bind": f"{CONFIG.server.host}:{CONFIG.server.port}",
-        "workers": 4,
+        "workers": 9,
         "worker_class": "uvicorn.workers.UvicornWorker",
         "loglevel": "info",
         "timeout": 120,

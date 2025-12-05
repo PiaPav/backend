@@ -24,8 +24,8 @@ class DatabaseManager:
         self.engine = create_async_engine(url,
                                           echo=echo,
                                           future=True,
-                                          pool_size=20,         # Максимум соединений в пуле
-                                          max_overflow=10)     # Дополнительные соединения сверх pool_size
+                                          pool_size=20,
+                                          max_overflow=10)
         self.session_factory = async_sessionmaker(
             self.engine,
             expire_on_commit=False,
