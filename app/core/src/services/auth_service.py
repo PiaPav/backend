@@ -2,8 +2,10 @@ from datetime import datetime, timedelta
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-import bcrypt
+#import bcrypt
 from jwt import PyJWT, DecodeError
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 
 from database.accounts import Account
 from database.base import DataBaseEntityNotExists
@@ -18,7 +20,16 @@ JWT = PyJWT()
 
 log = create_logger("AuthService")
 
-bcrypt_executor = ThreadPoolExecutor(max_workers=32)
+argon2_hasher = PasswordHasher(
+    time_cost=2,
+    memory_cost=51200,
+    parallelism=2,
+    hash_len=32,
+    salt_len=16
+)
+
+
+bcrypt_executor = ThreadPoolExecutor(max_workers=8)
 
 class AuthService:
     @staticmethod
@@ -147,10 +158,14 @@ class AuthService:
     @staticmethod
     async def hash_password(password: str) -> str:
         loop = asyncio.get_running_loop()
+
         def _sync_hash():
+            return argon2_hasher.hash(password)
+
+        """def _sync_hash():
             salt = bcrypt.gensalt(8)
             hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
-            return hashed.decode("utf-8")
+            return hashed.decode("utf-8")"""
 
         return await loop.run_in_executor(bcrypt_executor, _sync_hash)
 
@@ -158,11 +173,17 @@ class AuthService:
     async def verify_password(password: str, hashed_password: str) -> bool:
         loop = asyncio.get_running_loop()
 
-        def _sync_verify():
+        """def _sync_verify():
             return bcrypt.checkpw(
                 password.encode("utf-8"),
                 hashed_password.encode("utf-8")
-            )
+            )"""
+
+        def _sync_verify():
+            try:
+                return argon2_hasher.verify(hashed_password, password)
+            except VerifyMismatchError:
+                return False
 
         result = await loop.run_in_executor(bcrypt_executor,_sync_verify)
 
