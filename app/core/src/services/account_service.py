@@ -48,6 +48,21 @@ class AccountService:
             raise e
 
     @staticmethod
+    async def delete_account_by_id(account_id: int) -> None:
+        try:
+            await Account.delete_account_by_id(account_id)
+
+            return
+
+        except DataBaseEntityNotExists as e:
+            log.error(f"Аккаунт не найден. Детали: {e.message}")
+            raise UnauthorizedError(type=ErrorType.INVALID_TOKEN, message="Неверный токен",
+                                    details={"raw_exception": e.message}) from e
+
+        except ServiceException as e:
+            raise e
+
+    @staticmethod
     async def link_email(account_id: int, email: str) -> bool:
         try:
             account_db = await Account.get_account_by_id(account_id)

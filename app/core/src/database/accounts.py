@@ -78,6 +78,15 @@ class Account(SQLBase):
             return account
 
     @staticmethod
+    async def delete_account_by_id(account_id: int):
+        async with DataManager.session() as session:
+            account = await Account.get_account_by_id(account_id, session)
+            await session.delete(account)
+
+            return
+
+
+    @staticmethod
     async def add_email_to_account(account_id: int, email: str) -> "Account":
         async with DataManager.session() as session:
             account = await Account.get_account_by_id(account_id, session)

@@ -39,6 +39,16 @@ async def patch_account(patch_data: AccountPatchData, token: HTTPAuthorizationCr
     log.info(f"Изменение данных аккаунта - конец")
     return result
 
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT,
+               responses=get_error_responses(ErrorType.INVALID_TOKEN))
+async def delete_account(token: HTTPAuthorizationCredentials = Depends(security),
+                         auth_service: AuthService = Depends(), service: AccountService = Depends()):
+    log.info(f"Удаление аккаунта - начало")
+    user = await auth_service.verify_token(token=token.credentials)
+    await service.delete_account_by_id(user.id)
+    log.info(f"Удаление аккаунта - конец")
+    return
+
 
 @router.post("/email", status_code=status.HTTP_200_OK,
              responses=get_error_responses(ErrorType.INVALID_TOKEN,
