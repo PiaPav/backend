@@ -22,14 +22,13 @@ log = create_logger("AuthService")
 
 argon2_hasher = PasswordHasher(
     time_cost=2,
-    memory_cost=51200,
+    memory_cost=32768,
     parallelism=2,
     hash_len=32,
     salt_len=16
 )
 
-
-bcrypt_executor = ThreadPoolExecutor(max_workers=8)
+bcrypt_executor = ThreadPoolExecutor(max_workers=CONFIG.server.cryptothread)
 
 class AuthService:
     @staticmethod

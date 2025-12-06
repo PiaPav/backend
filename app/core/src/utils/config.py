@@ -20,6 +20,8 @@ class ConfigAuth:
 class ConfigServer:
     host: str
     port: int
+    cryptothread: int
+    uvicorn_workers: int
 
 
 @dataclass
@@ -102,6 +104,8 @@ def load_config() -> Config:
         server=ConfigServer(
             host=os.environ.get("CORE_HOST", "0.0.0.0"),
             port=int(os.environ.get("CORE_PORT", 8000)),
+            cryptothread=int(os.environ.get("THREAD_CRYPT", 4)),
+            uvicorn_workers=int(os.environ.get("UVICORN_WORKER",9)),
         ),
         db=ConfigDB(
             host=os.environ.get("POSTGRES_HOST", "postgres"),
