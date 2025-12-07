@@ -70,24 +70,28 @@ class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
 
         log.info(f"[FRONT] RunAlgorithm: подключен фронт task_id={request.task_id}")
 
+        # Сначала отдаём уже накопленные сообщения
         for msg in task_session.get_all_messages():
             yield msg
 
         try:
             while True:
-                if task_session.finished and task_session.message_queue.empty():
-                    log.info(f"[FRONT] Задача {request.task_id} завершена, закрываем поток")
-                    break
-
-                message = await task_session.get_next_message()
-                yield message
-
+                # Ждём следующее сообщение с таймаутом, чтобы не блокировать поток
+                try:
+                    message = await asyncio.wait_for(task_session.get_next_message(), timeout=0.1)
+                    yield message
+                except asyncio.TimeoutError:
+                    # Нет новых сообщений — проверяем, завершена ли задача
+                    if task_session.finished and task_session.message_queue.empty():
+                        log.info(f"[FRONT] Задача {request.task_id} завершена, закрываем поток")
+                        break
         except Exception as e:
             log.error(f"[FRONT] Ошибка RunAlgorithm: {e}")
         finally:
             task_session.frontend_connected.discard(context)
             if task_session.finished and not task_session.frontend_connected:
                 self.task_manager.remove_session(request.task_id)
+
 
 
 class AlgorithmConnectionService(algorithm_pb2_grpc.AlgorithmConnectionServiceServicer):
