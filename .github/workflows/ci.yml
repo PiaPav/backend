@@ -123,7 +123,7 @@ jobs:
           echo "GRPC_PROXY_IMAGE=grpc-proxy:latest" >> .env
           
           echo "GRPC_HOST=grpc_proxy" >> .env
-          echo "GRPC_PORT=50051 >> .env
+          echo "GRPC_PORT=50051" >> .env
 
 
       - name: Prepare deploy directory on VPS
