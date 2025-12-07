@@ -11,13 +11,13 @@ from endpoints.auth_endpoints import router as AuthRouter
 from endpoints.core_endpoints import router as CoreRouter
 from endpoints.project_endpoints import router as ProjectRouter
 from infrastructure.redis.redis_control import Redis
-from grpc_.grpc_process_runner import run_grpc
+#from grpc_.grpc_process_runner import run_grpc
 
-grpc_process: Process | None = None
+#grpc_process: Process | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global grpc_process
+    #global grpc_process
     # Перед запуском
     await DataManager.init_models()
     await broker_repo_task.connect()

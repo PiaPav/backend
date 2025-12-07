@@ -120,6 +120,8 @@ jobs:
           echo "S3_MINIO_IMAGE=${{ secrets.S3_MINIO_IMAGE }}" >> .env
           echo "ALGORITHM_SERVICE_IMAGE=${{ secrets.ALGORITHM_SERVICE_IMAGE }}" >> .env
           echo "REDIS_SERVICE_IMAGE=${{ secrets.REDIS_SERVICE_IMAGE }}" >> .env
+          echo "GRPC_PROXY_IMAGE=grpc-proxy:latest=" >> .env
+
           
           
 #          #GRPC
