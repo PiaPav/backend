@@ -21,7 +21,7 @@ class TaskSession:
         self.finished = False
 
     async def add_message(self, message: common_pb2.GraphPartResponse):
-        log.info(f"[TASK_SESSION] Добавлено сообщение {message} для задачи {self.task_id}")
+        log.info(f"[TASK_SESSION] Добавлено сообщение {message.response_id} для задачи {self.task_id}")
         self.all_messages.append(message)
         # Если фронт подключен, сразу помещаем в очередь
         if self.frontend_connected:
@@ -58,18 +58,18 @@ class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
         task_session.frontend_connected = True
 
         log.info(f"[FRONT] Подключен фронт task_id={request.task_id}")
-        log.info(f"[FRONT] Статус сессии: id={task_session.task_id}, messages={len(task_session.all_messages)}, queue={len(task_session.message_queue)}")
+        log.info(f"[FRONT] Статус сессии: id={task_session.task_id}, messages={len(task_session.all_messages)}, queue={task_session.message_queue.empty()}")
 
         # Если фронт подключился позже, помещаем все накопленные сообщения в очередь
         for msg in task_session.all_messages:
-            log.info(f"[FRONT] В очередь добавлено сообщение {msg}")
+            log.info(f"[FRONT] В очередь добавлено сообщение {msg.response_id}")
             await task_session.message_queue.put(msg)
 
         try:
             while True:
                 try:
                     message = await asyncio.wait_for(task_session.message_queue.get(), timeout=0.1)
-                    log.info(f"[FRONT] Отдано сообщение {message}")
+                    log.info(f"[FRONT] Отдано сообщение {message.response_id}")
                     yield message
                 except asyncio.TimeoutError:
                     # Если задача завершена и очередь пуста, заканчиваем поток
