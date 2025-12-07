@@ -67,7 +67,6 @@ services:
       - .env
     ports:
       - "${CORE_PORT}:${CORE_PORT}"
-      - "50051:50051"   # если core поднимает gRPC сам
     networks:
       - backend
     restart: always
@@ -104,8 +103,8 @@ services:
   redis:
     image: ${REDIS_SERVICE_IMAGE}
     container_name: redis
-    ports:
-      - "6379:6379"
+    #ports:
+    #  - "6379:6379"
     volumes:
       - redis-data:/data
     networks:
@@ -117,6 +116,26 @@ services:
       timeout: 3s
       retries: 5
 
+
+  grpc-proxy:
+    image: ${GRPC_PROXY_IMAGE}
+    container_name: grpc_proxy
+    depends_on:
+      core-service:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "50051:50051"   # проброс gRPC прокси на хост
+    networks:
+      - backend
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/core-service/50051'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   envoy:
     image: envoyproxy/envoy:v1.28-latest
@@ -143,4 +162,3 @@ volumes:
   rabbitmq_data:
   minio-data:
   redis-data:
-  loki-data:

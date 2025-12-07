@@ -1,34 +1,41 @@
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from multiprocessing import Process
 
 from database.datamanager import DataManager
 from exceptions.service_exception_middleware import init_handlers
-from grpc_.server_starter import start_grpc, stop_grpc
 from services.manage.broker_manager import broker_repo_task
 from endpoints.account_endpoints import router as AccountRouter
 from endpoints.auth_endpoints import router as AuthRouter
 from endpoints.core_endpoints import router as CoreRouter
 from endpoints.project_endpoints import router as ProjectRouter
 from infrastructure.redis.redis_control import Redis
+from grpc_.grpc_process_runner import run_grpc
 
+grpc_process: Process | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-
+    global grpc_process
     # Перед запуском
     await DataManager.init_models()
     await broker_repo_task.connect()
-    await start_grpc()
+
+    # запускаем gRPC в отдельном процессе
+    #grpc_process = Process(target=run_grpc, daemon=True)
+    #grpc_process.start()
+
     yield
 
-    # После запуска
+    # После завершения
     await DataManager.close()
     await broker_repo_task.close()
-    await stop_grpc()
 
+    # остановка gRPC процесса
+    #if grpc_process.is_alive():
+    #    grpc_process.terminate()
+    #    grpc_process.join()
 
 app = FastAPI(title="PiaPav", lifespan=lifespan)
 
@@ -39,10 +46,7 @@ app.include_router(ProjectRouter)
 
 init_handlers(app=app)
 
-origins = [
-    "*"
-    #https://piapav.space,
-]
+origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -52,11 +56,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
 
 @app.get("/health/redis")
 async def health_redis():

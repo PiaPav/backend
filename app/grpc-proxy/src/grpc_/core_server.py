@@ -92,12 +92,13 @@ class CoreServer:
         algorithm_pb2_grpc.add_AlgorithmConnectionServiceServicer_to_server(
             AlgorithmConnectionService(self.task_manager), self.server
         )
-        self.server.add_insecure_port(f'{host}:{port}')
+        self.port = self.server.add_insecure_port(f'{host}:{port}')
 
     async def start(self):
         await self.server.start()
-        log.info(f"gRPC CoreServer запущен на {self.server._state.port}")
+        log.info(f"gRPC CoreServer запущен на {self.port}")
 
     async def stop(self):
-        await self.server.stop(0)
+        await self.server.stop(grace=0)
         log.info("gRPC CoreServer остановлен")
+
