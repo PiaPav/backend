@@ -140,7 +140,7 @@ class CoreServer:
     async def start(self):
         log.info(f"CoreServer: запуск на {self.host}:{self.port}")
         await self.server.start()
-        await self.server.wait_for_termination()
+        #await self.server.wait_for_termination()
 
     async def stop(self):
         log.info("CoreServer: остановка")
