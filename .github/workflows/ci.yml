@@ -121,13 +121,9 @@ jobs:
           echo "ALGORITHM_SERVICE_IMAGE=${{ secrets.ALGORITHM_SERVICE_IMAGE }}" >> .env
           echo "REDIS_SERVICE_IMAGE=${{ secrets.REDIS_SERVICE_IMAGE }}" >> .env
           echo "GRPC_PROXY_IMAGE=grpc-proxy:latest" >> .env
-
           
-          
-          #GRPC
           echo "GRPC_HOST=grpc_proxy" >> .env
           echo "GRPC_PORT=50051 >> .env
-
 
 
       - name: Prepare deploy directory on VPS

@@ -1,12 +1,13 @@
-import asyncio
 import grpc
-from grpc_control.generated.api import core_pb2_grpc, algorithm_pb2_grpc
-from grpc_control.generated.shared import common_pb2
+import asyncio
 from grpc_reflection.v1alpha import reflection
+from grpc_control.generated.api import core_pb2_grpc, algorithm_pb2_grpc, core_pb2, algorithm_pb2
+from grpc_control.generated.shared import common_pb2
 from utils.logger import create_logger
 
 log = create_logger("CoreGRPC")
 
+# ================== Task Session & Manager ==================
 class TaskSession:
     def __init__(self, task_id: int):
         self.task_id = task_id
@@ -28,6 +29,7 @@ class TaskSession:
     async def mark_done(self):
         self.finished = True
 
+
 class TaskManager:
     def __init__(self):
         self.tasks = {}
@@ -41,6 +43,7 @@ class TaskManager:
         if task_id in self.tasks:
             del self.tasks[task_id]
 
+# ================== gRPC Services ==================
 class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
     def __init__(self, task_manager: TaskManager):
         self.task_manager = task_manager
@@ -51,7 +54,7 @@ class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
 
         log.info(f"[FRONT] Подключен фронт task_id={request.task_id}")
 
-        # Отдать накопленные сообщения
+        # Отдать уже накопленные сообщения
         for msg in session.get_all_messages():
             yield msg
 
@@ -69,6 +72,7 @@ class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
                 self.task_manager.remove_session(request.task_id)
                 log.info(f"[TASK_MANAGER] Удаляем task_id={request.task_id}")
 
+
 class AlgorithmConnectionService(algorithm_pb2_grpc.AlgorithmConnectionServiceServicer):
     def __init__(self, task_manager: TaskManager):
         self.task_manager = task_manager
@@ -83,13 +87,13 @@ class AlgorithmConnectionService(algorithm_pb2_grpc.AlgorithmConnectionServiceSe
                 await session.mark_done()
         return common_pb2.Empty()
 
-
+# ================== CoreServer ==================
 class CoreServer:
-    def __init__(self, host='[::]', port=50051):
+    def __init__(self, host='0.0.0.0', port=50051):
         self.task_manager = TaskManager()
         self.server = grpc.aio.server()
 
-        # Регистрируем свои сервисы
+        # Регистрируем сервисы
         core_pb2_grpc.add_FrontendStreamServiceServicer_to_server(
             FrontendStreamService(self.task_manager), self.server
         )
@@ -97,10 +101,10 @@ class CoreServer:
             AlgorithmConnectionService(self.task_manager), self.server
         )
 
-        from grpc_reflection.v1alpha import reflection
+        # Включаем рефлексию
         SERVICE_NAMES = (
-            core_pb2_grpc.FrontendStreamServiceServicer.service_name,
-            algorithm_pb2_grpc.AlgorithmConnectionServiceServicer.service_name,
+            core_pb2.DESCRIPTOR.services_by_name['FrontendStreamService'].full_name,
+            algorithm_pb2.DESCRIPTOR.services_by_name['AlgorithmConnectionService'].full_name,
             reflection.SERVICE_NAME,
         )
         reflection.enable_server_reflection(SERVICE_NAMES, self.server)
@@ -108,4 +112,11 @@ class CoreServer:
         # Порт
         self.port = self.server.add_insecure_port(f'{host}:{port}')
 
+    async def start(self):
+        await self.server.start()
+        log.info(f"gRPC CoreServer запущен на порту {self.port}")
+
+    async def stop(self):
+        await self.server.stop(0)
+        log.info("gRPC CoreServer остановлен")
 
