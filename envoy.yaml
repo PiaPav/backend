@@ -14,7 +14,7 @@ static_resources:
                 stat_prefix: grpc_web_hcm
                 codec_type: AUTO
 
-                # ===== ВАЖНО: отключаем таймауты, чтобы стрим не обрывался =====
+                # ===== Отключаем все таймауты (как у вас было) =====
                 stream_idle_timeout: 0s
                 request_timeout: 0s
                 delayed_close_timeout: 0s
@@ -24,9 +24,7 @@ static_resources:
                   virtual_hosts:
                     - name: grpc_service
                       domains: ["*"]
-
                       routes:
-                        # OPTIONS preflight
                         - match:
                             prefix: "/"
                             headers:
@@ -34,33 +32,28 @@ static_resources:
                                 exact_match: "OPTIONS"
                           direct_response:
                             status: 200
-
-                        # Основной gRPC маршрут
                         - match:
                             prefix: "/"
                           route:
                             cluster: core
-                            timeout: 0s   # <=== самый важный момент
+                            timeout: 0s
                             max_stream_duration:
                               grpc_timeout_header_max: 0s
                               max_stream_duration: 0s
-
                           typed_per_filter_config:
                             envoy.filters.http.cors:
                               "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.CorsPolicy
                               allow_origin_string_match:
-                                - prefix: "*"   # если хочешь — поменяй на localhost
+                                - prefix: "*"
                               allow_methods: "GET, POST, OPTIONS"
                               allow_headers: "content-type,x-grpc-web,x-user-agent,authorization,accept"
                               max_age: "3600"
                               allow_credentials: true
 
-                # ===== правильный порядок фильтров =====
                 http_filters:
                   - name: envoy.filters.http.grpc_web
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb
-                      # внутри grpc_web БУФЕРА НЕТ, он не режет поток
 
                   - name: envoy.filters.http.cors
                     typed_config:
@@ -70,14 +63,51 @@ static_resources:
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
+                access_log:
+                  - name: envoy.access_loggers.stdout
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                      log_format:
+                        text_format: |
+                          ===========================================
+                          START REQUEST
+                          Time: %START_TIME%
+                          Method: %REQ(:METHOD)%
+                          Path: %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%
+                          Protocol: %PROTOCOL%
+                          Authority: %REQ(:AUTHORITY)%
+                          User-Agent: %REQ(USER-AGENT)%
+                          Content-Type: %REQ(CONTENT-TYPE)%
+                          Authorization: %REQ(AUTHORIZATION)%
+                          Body size: %BYTES_RECEIVED%
+                          -------------------------------------------
+                          RESPONSE
+                          Status: %RESPONSE_CODE%
+                          Flags: %RESPONSE_FLAGS%
+                          Upstream cluster: %UPSTREAM_CLUSTER%
+                          Upstream host: %UPSTREAM_HOST%
+                          Upstream time: %RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%
+                          Bytes sent: %BYTES_SENT%
+                          Duration: %DURATION%ms
+                          ===========================================
+
   clusters:
     - name: core
       connect_timeout: 0.5s
+      # STRICT_DNS потому что мы обращаемся по имени контейнера внутри docker-network
       type: STRICT_DNS
       lb_policy: ROUND_ROBIN
 
-      # ===== обязательный HTTP/2, иначе будут проблемы =====
+      # DNS/TTL поведение — добавлено, чтобы Envoy не «залипал» на отсутствии DNS при старте
+      dns_refresh_rate: 2s
+      respect_dns_ttl: true
+
+      # Для gRPC обязательно http2
       http2_protocol_options: {}
+
+      # (опция для повышения window/производительности, можно оставить)
+      common_http_protocol_options:
+        idle_timeout: 0s
 
       load_assignment:
         cluster_name: core
@@ -86,9 +116,6 @@ static_resources:
               - endpoint:
                   address:
                     socket_address:
-                      address: core_service
+                      # Имя контейнера в docker network — **grpc_proxy**
+                      address: grpc_proxy
                       port_value: 50051
-
-      # ===== отключаем idle timeout (иначе режет долгие стримы) =====
-      common_http_protocol_options:
-        idle_timeout: 0s

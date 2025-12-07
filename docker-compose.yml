@@ -131,11 +131,12 @@ services:
       - backend
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/core-service/50051'"]
-      interval: 15s
-      timeout: 5s
+      # Локальный tcp check; убедитесь, что контейнер прослушивает 50051
+      test: [ "CMD-SHELL", "timeout 2 bash -c '</dev/tcp/grpc_proxy/50051' || exit 1" ]
+      interval: 10s
+      timeout: 3s
       retries: 5
-      start_period: 20s
+      start_period: 10s
 
   envoy:
     image: envoyproxy/envoy:v1.28-latest
@@ -147,10 +148,11 @@ services:
     networks:
       - backend
     depends_on:
-      core-service:
+      grpc-proxy:
         condition: service_healthy
     restart: always
-    command: ["-c", "/etc/envoy/envoy.yaml","-l", "trace"]
+    command: [ "-c", "/etc/envoy/envoy.yaml","-l", "trace" ]
+
 
 networks:
   backend:
