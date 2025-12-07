@@ -11,7 +11,7 @@ class AlgorithmClient:
     - можно вызывать stream(...), передавая async generator
     """
 
-    def __init__(self, core_host: str = "core_service", core_port: int = 50051):
+    def __init__(self, core_host: str = "grpc-proxy", core_port: int = 50051):
         self.core_address = f"{core_host}:{core_port}"
 
     # ===========================
