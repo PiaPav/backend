@@ -12,31 +12,21 @@ log = create_logger("CoreGRPC")
 
 
 class TaskSession:
-    """Контекст одной задачи (task_id)."""
-
     def __init__(self, task_id: int):
         self.task_id = task_id
-        self.message_queue = asyncio.Queue()
         self.all_messages: List[common_pb2.GraphPartResponse] = []
-        self.frontend_connected = set()  # может быть несколько фронтов
+        self.message_queue: asyncio.Queue = asyncio.Queue()
+        self.frontend_connected = False  # один фронт
         self.algorithm_connected = False
         self.finished = False
 
     async def add_message(self, message: common_pb2.GraphPartResponse):
-        """Добавить сообщение от Algorithm и положить в очередь для фронтов."""
         self.all_messages.append(message)
-        await self.message_queue.put(message)
-
-    async def get_next_message(self):
-        """Получить следующее сообщение для фронтенда."""
-        return await self.message_queue.get()
-
-    def get_all_messages(self):
-        """Возвращает уже отправленные сообщения (для поздних фронтов)."""
-        return list(self.all_messages)
+        # Если фронт подключен, сразу помещаем в очередь
+        if self.frontend_connected:
+            await self.message_queue.put(message)
 
     async def mark_done(self):
-        """Пометить сессию завершённой."""
         self.finished = True
 
 
@@ -57,39 +47,38 @@ class TaskManager:
             del self.tasks[task_id]
 
 
-class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
-    """Сервис для фронтенда: RunAlgorithm (server-streaming)."""
 
+class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
     def __init__(self, task_manager: TaskManager):
         self.task_manager = task_manager
 
     async def RunAlgorithm(self, request, context):
         task_session = self.task_manager.get_or_create_session(request.task_id)
-        task_session.frontend_connected.add(context)
+        task_session.frontend_connected = True
+
         log.info(f"[FRONT] Подключен фронт task_id={request.task_id}")
 
-        # Отдать уже накопленные сообщения
-        for msg in task_session.get_all_messages():
-            yield msg
+        # Если фронт подключился позже, помещаем все накопленные сообщения в очередь
+        for msg in task_session.all_messages:
+            await task_session.message_queue.put(msg)
 
         try:
             while True:
                 try:
-                    # Ждём новое сообщение
-                    message = await asyncio.wait_for(task_session.get_next_message(), timeout=0.1)
+                    message = await asyncio.wait_for(task_session.message_queue.get(), timeout=0.1)
                     yield message
                 except asyncio.TimeoutError:
-                    # Если задача закончена и очередь пуста, закрываем поток
+                    # Если задача завершена и очередь пуста, заканчиваем поток
                     if task_session.finished and task_session.message_queue.empty():
                         log.info(f"[FRONT] Задача {request.task_id} завершена, закрываем поток")
                         break
         finally:
-            # Убираем контекст фронта
-            task_session.frontend_connected.discard(context)
+            task_session.frontend_connected = False
+            # Очистка сессии после того, как фронт отключился и задача завершена
+            if task_session.finished and not task_session.frontend_connected:
+                log.info(f"[TASK_MANAGER] Удаляем task_id={task_session.task_id}")
+                self.task_manager.remove_session(task_session.task_id)
 
-            # Если задача завершена и все фронты отключились, удаляем сессию
-            if task_session.finished and not task_session.frontend_connected and task_session.message_queue.empty():
-                self.task_manager.remove_session(request.task_id)
 
 
 class AlgorithmConnectionService(algorithm_pb2_grpc.AlgorithmConnectionServiceServicer):
