@@ -124,9 +124,9 @@ jobs:
 
           
           
-#          #GRPC
-#          echo "GRPC_HOST=${{ secrets.GRPC_HOST }}" >> .env
-#          echo "GRPC_PORT=${{ secrets.GRPC_PORT }}" >> .env
+          #GRPC
+          echo "GRPC_HOST=grpc_proxy" >> .env
+          echo "GRPC_PORT=50051 >> .env
 
 
 

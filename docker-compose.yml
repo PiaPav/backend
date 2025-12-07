@@ -150,8 +150,10 @@ services:
       core-service:
         condition: service_healthy
     restart: always
-    command: [ "-c", "/etc/envoy/envoy.yaml", "-l", "info" ]
-
+    command: [
+      "-c", "/etc/envoy/envoy.yaml",
+      "-l", "trace"
+    ]
 
 networks:
   backend:
