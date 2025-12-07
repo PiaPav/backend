@@ -89,9 +89,13 @@ class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
             log.error(f"[FRONT] Ошибка RunAlgorithm: {e}")
         finally:
             task_session.frontend_connected.discard(context)
-            if task_session.finished and not task_session.frontend_connected:
+            if (
+                    task_session.finished
+                    and not task_session.frontend_connected
+                    and task_session.message_queue.empty()
+            ):
+                log.info(f"[FRONT] Удаляем task_id={request.task_id}, поток полностью завершён")
                 self.task_manager.remove_session(request.task_id)
-
 
 
 class AlgorithmConnectionService(algorithm_pb2_grpc.AlgorithmConnectionServiceServicer):
