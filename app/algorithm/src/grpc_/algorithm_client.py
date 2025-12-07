@@ -14,9 +14,7 @@ class AlgorithmClient:
     def __init__(self, core_host: str = "grpc_proxy", core_port: int = 50051):
         self.core_address = f"{core_host}:{core_port}"
 
-    # ===========================
     # ===== send() — простой способ =====
-    # ===========================
 
     async def send(self, task_id: int, data):
         """
@@ -39,9 +37,7 @@ class AlgorithmClient:
 
         await self._send_stream(generator())
 
-    # ===========================
     # ===== stream() — продвинуто =====
-    # ===========================
 
     async def stream(self, task_id: int, async_iter):
         """
@@ -54,9 +50,7 @@ class AlgorithmClient:
 
         await self._send_stream(generator())
 
-    # ===========================
     # ===== внутренние методы =====
-    # ===========================
 
     async def _send_stream(self, msg_stream):
         """Открывает gRPC канал и отправляет поток сообщений."""
@@ -64,9 +58,7 @@ class AlgorithmClient:
             stub = algorithm_pb2_grpc.AlgorithmConnectionServiceStub(channel)
             await stub.ConnectToCore(msg_stream)
 
-    # ===========================
     # ===== message builder =====
-    # ===========================
 
     def _prepare_msg(self, task_id: int, item) -> common_pb2.GraphPartResponse:
         """
