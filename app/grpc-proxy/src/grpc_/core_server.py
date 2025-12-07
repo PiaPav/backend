@@ -2,6 +2,7 @@ import asyncio
 import grpc
 from grpc_control.generated.api import core_pb2_grpc, algorithm_pb2_grpc
 from grpc_control.generated.shared import common_pb2
+from grpc_reflection.v1alpha import reflection
 from utils.logger import create_logger
 
 log = create_logger("CoreGRPC")
@@ -82,23 +83,29 @@ class AlgorithmConnectionService(algorithm_pb2_grpc.AlgorithmConnectionServiceSe
                 await session.mark_done()
         return common_pb2.Empty()
 
+
 class CoreServer:
     def __init__(self, host='[::]', port=50051):
         self.task_manager = TaskManager()
         self.server = grpc.aio.server()
+
+        # Регистрируем свои сервисы
         core_pb2_grpc.add_FrontendStreamServiceServicer_to_server(
             FrontendStreamService(self.task_manager), self.server
         )
         algorithm_pb2_grpc.add_AlgorithmConnectionServiceServicer_to_server(
             AlgorithmConnectionService(self.task_manager), self.server
         )
+
+        from grpc_reflection.v1alpha import reflection
+        SERVICE_NAMES = (
+            core_pb2_grpc.FrontendStreamServiceServicer.service_name,
+            algorithm_pb2_grpc.AlgorithmConnectionServiceServicer.service_name,
+            reflection.SERVICE_NAME,
+        )
+        reflection.enable_server_reflection(SERVICE_NAMES, self.server)
+
+        # Порт
         self.port = self.server.add_insecure_port(f'{host}:{port}')
 
-    async def start(self):
-        await self.server.start()
-        log.info(f"gRPC CoreServer запущен на {self.port}")
-
-    async def stop(self):
-        await self.server.stop(grace=0)
-        log.info("gRPC CoreServer остановлен")
 
