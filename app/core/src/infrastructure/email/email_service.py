@@ -60,8 +60,10 @@ class EmailService:
             "verify_action": VERIFY_ACTIONS[verify_type]
         }
 
-        template_path = "templates/verification_code.html"
+        template_path = "/core/src/infrastructure/email/templates/verification_code.html"
         if not os.path.exists(template_path):
+            log.error(f"Директория скрипта {os.path.dirname(os.path.abspath(__file__))}")
+            log.error(f"Директория текущая {os.getcwd()}")
             log.error(f"Файл шаблона {template_path} не найден")
             raise FileNotFoundError(f"Файл шаблона {template_path} не найден")
 
