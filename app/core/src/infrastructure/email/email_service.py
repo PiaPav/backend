@@ -69,10 +69,80 @@ class EmailService:
             log.error(f"Текущая директория: {current_dir}")
             log.error(f"Искомый путь: {template_path}")
 
-            # Содержимое текущей папки
-            log.error("\nСодержимое текущей папки:")
-            for item in os.listdir(current_dir):
-                log.error(f"  - {item}")
+            # Функция для рекурсивного вывода содержимого директории
+            def list_directory_contents(dir_path, indent=0, max_depth=3, current_depth=0):
+                """Рекурсивно выводит содержимое директории"""
+                try:
+                    items = os.listdir(dir_path)
+                except PermissionError:
+                    log.error(" " * indent + "  [ОШИБКА ДОСТУПА]")
+                    return
+                except Exception as e:
+                    log.error(" " * indent + f"  [ОШИБКА: {e}]")
+                    return
+
+                for item in sorted(items):
+                    full_path = os.path.join(dir_path, item)
+                    prefix = "  " * indent + "  - "
+
+                    if os.path.isdir(full_path):
+                        log.error(f"{prefix}{item}/")
+                        # Рекурсивно выводим содержимое поддиректорий
+                        if current_depth < max_depth:
+                            list_directory_contents(
+                                full_path,
+                                indent + 1,
+                                max_depth,
+                                current_depth + 1
+                            )
+                    else:
+                        size = os.path.getsize(full_path)
+                        log.error(f"{prefix}{item} ({size} байт)")
+
+            # Содержимое текущей папки с поддиректориями
+            log.error(f"\nСодержимое текущей папки ({current_dir}):")
+            list_directory_contents(current_dir)
+
+            # Также показываем содержимое директории скрипта
+            if current_dir != script_dir:
+                log.error(f"\nСодержимое директории скрипта ({script_dir}):")
+                list_directory_contents(script_dir)
+
+            # Специально ищем нужные директории
+            log.error(f"\nПоиск нужных директорий:")
+
+            # Проверяем существование каждой части пути
+            parts = ["core", "infrastructure", "email", "templates"]
+            current_check_dir = current_dir
+
+            for part in parts:
+                check_path = os.path.join(current_check_dir, part)
+                exists = os.path.exists(check_path)
+                is_dir = exists and os.path.isdir(check_path)
+
+                status = "✅" if exists else "❌"
+                dir_info = " [директория]" if is_dir else " [не директория]" if exists else ""
+
+                log.error(f"  {current_check_dir}/")
+                log.error(f"    └── {part}/ {status}{dir_info}")
+
+                if exists and is_dir:
+                    # Показываем содержимое найденной директории
+                    try:
+                        sub_items = os.listdir(check_path)
+                        for sub_item in sorted(sub_items):
+                            sub_full = os.path.join(check_path, sub_item)
+                            if os.path.isdir(sub_full):
+                                log.error(f"        ├── {sub_item}/")
+                            else:
+                                log.error(f"        ├── {sub_item}")
+                    except:
+                        log.error(f"        └── [не удалось прочитать содержимое]")
+
+                    current_check_dir = check_path
+                else:
+                    break
+
             raise FileNotFoundError(f"Файл шаблона {template_path} не найден")
 
         with open(template_path, "r", encoding="utf-8") as f:
