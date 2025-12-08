@@ -59,8 +59,9 @@ class EmailService:
             "expires_in": expire_minutes,
             "verify_action": VERIFY_ACTIONS[verify_type]
         }
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        template_path = os.path.join(BASE_DIR, "templates/verification_code.html")
 
-        template_path = "/core/infrastructure/email/templates/verification_code.html"
         if not os.path.exists(template_path):
             log.error(f"Директория скрипта {os.path.dirname(os.path.abspath(__file__))}")
             log.error(f"Директория текущая {os.getcwd()}")
