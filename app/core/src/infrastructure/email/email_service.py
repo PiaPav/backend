@@ -62,9 +62,17 @@ class EmailService:
 
         template_path = "/core/infrastructure/email/templates/verification_code.html"
         if not os.path.exists(template_path):
-            log.error(f"Директория скрипта {os.path.dirname(os.path.abspath(__file__))}")
-            log.error(f"Директория текущая {os.getcwd()}")
-            log.error(f"Файл шаблона {template_path} не найден")
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            current_dir = os.getcwd()
+
+            log.error(f"Директория скрипта: {script_dir}")
+            log.error(f"Текущая директория: {current_dir}")
+            log.error(f"Искомый путь: {template_path}")
+
+            # Содержимое текущей папки
+            log.error("\nСодержимое текущей папки:")
+            for item in os.listdir(current_dir):
+                log.error(f"  - {item}")
             raise FileNotFoundError(f"Файл шаблона {template_path} не найден")
 
         with open(template_path, "r", encoding="utf-8") as f:
