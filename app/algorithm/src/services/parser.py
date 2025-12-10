@@ -110,16 +110,22 @@ class EnhancedFunctionParser:
         for dec in node.decorator_list:
             if isinstance(dec, ast.Call):
                 name = EnhancedFunctionParser.get_call_name(dec.func)
-                dec_args = []
-                for kw in getattr(dec, "keywords", []):
-                    if isinstance(kw.value, ast.Name):
-                        dec_args.append(kw.value.id)
-                    elif isinstance(kw.value, ast.Constant):
-                        dec_args.append(kw.value.value)
-                decorators.append({"name": name, "args": dec_args})
+                dec_info = {
+                    "name": name,
+                    "args": [ast.unparse(arg) for arg in dec.args],
+                    "raw_args": dec.args,  # <--- добавлено
+                    "raw_keywords": dec.keywords,  # <--- добавлено
+                }
             else:
                 name = EnhancedFunctionParser.get_call_name(dec)
-                decorators.append({"name": name, "args": []})
+                dec_info = {
+                    "name": name,
+                    "args": [],
+                    "raw_args": [],
+                    "raw_keywords": [],
+                }
+
+            decorators.append(dec_info)
 
         _type = "method" if class_name else ("async_function" if isinstance(node, ast.AsyncFunctionDef) else "function")
         returns = node.returns.id if isinstance(node.returns, ast.Name) else None
