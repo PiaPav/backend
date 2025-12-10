@@ -151,9 +151,14 @@ class EnhancedFunctionParser:
             parts = dec["name"].split(".")
             if len(parts) == 2 and parts[1].lower() in EnhancedFunctionParser.HTTP_METHODS:
                 func_info["is_endpoint"] = True
+                path = ""
+                for raw in dec["raw_args"]:
+                    if isinstance(raw, ast.Constant) and isinstance(raw.value, str):
+                        path = raw.value
+                        break
                 func_info["endpoint_info"] = {
                     "decorator": {"object": parts[0], "method": parts[1].lower(), "args": dec["args"]},
-                    "path": dec["args"][0] if dec["args"] else "",
+                    "path": path,
                     "full_path": dec["args"][0] if dec["args"] else ""
                 }
                 break
