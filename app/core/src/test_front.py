@@ -5,7 +5,7 @@ from grpc_control.generated.shared import common_pb2
 
 MAX_RECEIVE = 50 * 1024 * 1024 *10  # 50MB
 
-async def grpc_collect_all(task_id: int, host: str = "localhost", port: int = 50051):
+async def grpc_collect_all(task_id: int, host: str = "78.153.139.47", port: int = 50051):
     """
     Получаем все сообщения по задаче task_id с сервера Core.
     """
@@ -45,6 +45,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         task_id = int(sys.argv[1])
     else:
-        task_id = 7 # значение по умолчанию
+        task_id = 369 # значение по умолчанию
 
     asyncio.run(grpc_collect_all(task_id))
