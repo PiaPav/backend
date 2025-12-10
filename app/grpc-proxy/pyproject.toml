@@ -1,0 +1,12 @@
+[project]
+name = "grpc-proxy"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.124.0",
+    "grpcio>=1.76.0",
+    "grpcio-reflection>=1.76.0",
+    "grpcio-tools>=1.76.0",
+]
