@@ -55,8 +55,7 @@ class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
         # Отдаём уже накопленные сообщения
         for msg in session.get_all_messages():
             log.info(f"[FRONT] → Отдаём накопленное сообщение на фронт: {msg}")
-            log.info("[FRONT] Детали сообщения", msg)
-            yield msg
+            log.info(f"[FRONT] Детали сообщения:\n{msg}")
 
         try:
             while True:
@@ -65,7 +64,7 @@ class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
 
                     # Логируем САМО сообщение перед отправкой
                     log.info(f"[FRONT] → Отдаём новое сообщение на фронт: {msg}")
-                    log.info("[FRONT] Детали сообщения", msg)
+                    log.info(f"[FRONT] Детали сообщения:\n{msg}")
 
                     yield msg
 
