@@ -44,6 +44,14 @@ jobs:
           push: true
           tags: ghcr.io/piapav/algorithm_service:latest
 
+      - name: Build Docker Image GRPC proxy
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./app/grpc-proxy/Dockerfile
+          push: true
+          tags: ghcr.io/piapav/grpc_proxy:latest
+
 
   deploy:
     #enviroment важно не трогать
@@ -120,7 +128,7 @@ jobs:
           echo "S3_MINIO_IMAGE=${{ secrets.S3_MINIO_IMAGE }}" >> .env
           echo "ALGORITHM_SERVICE_IMAGE=${{ secrets.ALGORITHM_SERVICE_IMAGE }}" >> .env
           echo "REDIS_SERVICE_IMAGE=${{ secrets.REDIS_SERVICE_IMAGE }}" >> .env
-          echo "GRPC_PROXY_IMAGE=grpc-proxy:latest" >> .env
+          echo "GRPC_PROXY_IMAGE=ghcr.io/piapav/grpc_proxy:latest" >> .env
           
           echo "GRPC_HOST=grpc_proxy" >> .env
           echo "GRPC_PORT=50051" >> .env
@@ -178,6 +186,7 @@ jobs:
           script: |
             docker pull ghcr.io/piapav/core_service:latest
             docker pull ghcr.io/piapav/algorithm_service:latest
+            docker pull ghcr.io/piapav/grpc_proxy:latest
             docker pull ${{secrets.POSTGRES_IMAGE}}
             docker pull ${{secrets.S3_MINIO_IMAGE}}
             docker pull ${{secrets.S3_MINIO_IMAGE}}
