@@ -144,24 +144,67 @@ class EnhancedFunctionParser:
 
     @staticmethod
     def _detect_endpoint(func_info: Dict[str, Any]) -> Dict[str, Any]:
-        """Быстрая проверка эндпоинта"""
+
         for dec in func_info["decorators"]:
-            if not dec["name"]:
+            name = dec.get("name")
+            if not name:
                 continue
-            parts = dec["name"].split(".")
-            if len(parts) == 2 and parts[1].lower() in EnhancedFunctionParser.HTTP_METHODS:
-                func_info["is_endpoint"] = True
-                path = ""
-                for raw in dec["raw_args"]:
-                    if isinstance(raw, ast.Constant) and isinstance(raw.value, str):
-                        path = raw.value
-                        break
-                func_info["endpoint_info"] = {
-                    "decorator": {"object": parts[0], "method": parts[1].lower(), "args": dec["args"]},
-                    "path": path,
-                    "full_path": dec["args"][0] if dec["args"] else ""
-                }
-                break
+
+            parts = name.split(".")
+            if len(parts) != 2:
+                continue
+
+            obj, method = parts
+            method_lower = method.lower()
+
+            # Проверяем HTTP-метод
+            if method_lower not in EnhancedFunctionParser.HTTP_METHODS:
+                continue
+
+            # ---- ИЩЕМ ПУТЬ ----
+            # Путь в FastAPI — это СТРОКА (ast.Constant со строкой)
+            path = ""
+
+            raw_args = dec.get("raw_args", [])
+            for arg in raw_args:
+                # позиционный аргумент — строка → это path
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    path = arg.value
+                    break
+
+            # ---- ИЩЕМ response_model ----
+            response_model = None
+            raw_keywords = dec.get("raw_keywords", [])
+
+            for kw in raw_keywords:
+                if kw.arg == "response_model":
+                    if isinstance(kw.value, ast.Name):
+                        response_model = kw.value.id
+                    elif isinstance(kw.value, ast.Attribute):
+                        response_model = EnhancedFunctionParser.get_call_name(kw.value)
+                    break
+
+            # Если response_model не найден — используем return type
+            if not response_model:
+                returns = func_info.get("returns")
+                if returns:
+                    response_model = returns
+
+            # ---- СОХРАНЯЕМ ----
+            func_info["is_endpoint"] = True
+            func_info["endpoint_info"] = {
+                "decorator": {
+                    "object": obj,
+                    "method": method_lower,
+                    "args": dec.get("args", []),
+                },
+                "path": path,
+                "full_path": path,  # префиксы добавятся позднее
+                "response_model": response_model,
+            }
+
+            break
+
         return func_info
 
     @staticmethod
