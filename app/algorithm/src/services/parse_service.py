@@ -38,7 +38,9 @@ class ParseService:
             # ===== эндпоинты =====
             endpoints_raw = await EnhancedFunctionParser.extract_endpoints(project_path_s3)
             log.info(f"Извлечены эндпоинты")
+            log.info(f"Эндпоинты сырые: {endpoints_raw}")
             endpoints = {item["function"]: item["method"] + " " + item["path"] for item in endpoints_raw}
+            log.info(f"Эндпоинты: {endpoints}")
             yield common_pb2.GraphPartResponse(
                 task_id=task_id,
                 response_id=response_id,

@@ -10,7 +10,6 @@ message GraphPartResponse {
   int64 task_id = 1;
   int32 response_id = 2;
   ParseStatus status = 3;
-  // Тип ответа. Первый ответ всегда = 3, второй ответ всегда = 4, третий и последующие всегда = 5
   oneof graph_part_type {
     GraphPartRequirements graph_requirements = 4;
     GraphPartEndpoints graph_endpoints = 5;
