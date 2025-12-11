@@ -1,9 +1,7 @@
 # самая актуальная версия
 import ast
-import json
 import os
 import re
-import tomllib
 from typing import Dict, List, Any, Optional, Union, AsyncIterator, Tuple
 
 from services.manage.object_manager import object_manager
@@ -110,22 +108,16 @@ class EnhancedFunctionParser:
         for dec in node.decorator_list:
             if isinstance(dec, ast.Call):
                 name = EnhancedFunctionParser.get_call_name(dec.func)
-                dec_info = {
-                    "name": name,
-                    "args": [ast.unparse(arg) for arg in dec.args],
-                    "raw_args": dec.args,  # <--- добавлено
-                    "raw_keywords": dec.keywords,  # <--- добавлено
-                }
+                dec_args = []
+                for kw in getattr(dec, "keywords", []):
+                    if isinstance(kw.value, ast.Name):
+                        dec_args.append(kw.value.id)
+                    elif isinstance(kw.value, ast.Constant):
+                        dec_args.append(kw.value.value)
+                decorators.append({"name": name, "args": dec_args})
             else:
                 name = EnhancedFunctionParser.get_call_name(dec)
-                dec_info = {
-                    "name": name,
-                    "args": [],
-                    "raw_args": [],
-                    "raw_keywords": [],
-                }
-
-            decorators.append(dec_info)
+                decorators.append({"name": name, "args": []})
 
         _type = "method" if class_name else ("async_function" if isinstance(node, ast.AsyncFunctionDef) else "function")
         returns = node.returns.id if isinstance(node.returns, ast.Name) else None
@@ -150,67 +142,19 @@ class EnhancedFunctionParser:
 
     @staticmethod
     def _detect_endpoint(func_info: Dict[str, Any]) -> Dict[str, Any]:
-
+        """Быстрая проверка эндпоинта"""
         for dec in func_info["decorators"]:
-            name = dec.get("name")
-            if not name:
+            if not dec["name"]:
                 continue
-
-            parts = name.split(".")
-            if len(parts) != 2:
-                continue
-
-            obj, method = parts
-            method_lower = method.lower()
-
-            # Проверяем HTTP-метод
-            if method_lower not in EnhancedFunctionParser.HTTP_METHODS:
-                continue
-
-            # ---- ИЩЕМ ПУТЬ ----
-            # Путь в FastAPI — это СТРОКА (ast.Constant со строкой)
-            path = ""
-
-            raw_args = dec.get("raw_args", [])
-            for arg in raw_args:
-                # позиционный аргумент — строка → это path
-                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                    path = arg.value
-                    break
-
-            # ---- ИЩЕМ response_model ----
-            response_model = None
-            raw_keywords = dec.get("raw_keywords", [])
-
-            for kw in raw_keywords:
-                if kw.arg == "response_model":
-                    if isinstance(kw.value, ast.Name):
-                        response_model = kw.value.id
-                    elif isinstance(kw.value, ast.Attribute):
-                        response_model = EnhancedFunctionParser.get_call_name(kw.value)
-                    break
-
-            # Если response_model не найден — используем return type
-            if not response_model:
-                returns = func_info.get("returns")
-                if returns:
-                    response_model = returns
-
-            # ---- СОХРАНЯЕМ ----
-            func_info["is_endpoint"] = True
-            func_info["endpoint_info"] = {
-                "decorator": {
-                    "object": obj,
-                    "method": method_lower,
-                    "args": dec.get("args", []),
-                },
-                "path": path,
-                "full_path": path,  # префиксы добавятся позднее
-                "response_model": response_model,
-            }
-
-            break
-
+            parts = dec["name"].split(".")
+            if len(parts) == 2 and parts[1].lower() in EnhancedFunctionParser.HTTP_METHODS:
+                func_info["is_endpoint"] = True
+                func_info["endpoint_info"] = {
+                    "decorator": {"object": parts[0], "method": parts[1].lower(), "args": dec["args"]},
+                    "path": dec["args"][0] if dec["args"] else "",
+                    "full_path": dec["args"][0] if dec["args"] else ""
+                }
+                break
         return func_info
 
     @staticmethod
