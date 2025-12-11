@@ -1,5 +1,6 @@
 # самая актуальная версия
 import ast
+import asyncio
 import os
 import re
 from typing import Dict, List, Any, Optional, Union, AsyncIterator, Tuple
@@ -92,6 +93,44 @@ class EnhancedFunctionParser:
         return ".".join(reversed(parts)) if parts else None
 
     @staticmethod
+    def parse_router_defs(tree: ast.Module) -> Dict[str, str]:
+        """
+        Ищет объявления:
+        router = APIRouter(prefix="/xxx")
+        app = FastAPI(root_path="/xxx")
+        """
+        routers = {}
+
+        for node in tree.body:
+            # Ищем присваивания: router = APIRouter(...)
+            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+                call_name = EnhancedFunctionParser.get_call_name(node.value.func)
+
+                # Сохраняем имя переменной
+                if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+                    continue
+
+                var_name = node.targets[0].id
+
+                # APIRouter
+                if call_name.endswith("APIRouter"):
+                    prefix = ""
+                    for kw in node.value.keywords:
+                        if kw.arg == "prefix":
+                            prefix = ast.literal_eval(kw.value)  # гарантированно str
+                    routers[var_name] = prefix
+
+                # FastAPI
+                if call_name.endswith("FastAPI"):
+                    prefix = ""
+                    for kw in node.value.keywords:
+                        if kw.arg in ("root_path", "prefix"):
+                            prefix = ast.literal_eval(kw.value)
+                    routers[var_name] = prefix
+
+        return routers
+
+    @staticmethod
     def parse_function(node: Union[ast.FunctionDef, ast.AsyncFunctionDef],
                        file_path: str,
                        class_name: Optional[str] = None) -> Dict[str, Any]:
@@ -106,73 +145,105 @@ class EnhancedFunctionParser:
 
         decorators = []
         for dec in node.decorator_list:
+            name = EnhancedFunctionParser.get_call_name(
+                dec.func if isinstance(dec, ast.Call) else dec
+            )
+
+            dec_args = []
+            path = ""
+
             if isinstance(dec, ast.Call):
-                name = EnhancedFunctionParser.get_call_name(dec.func)
-                dec_args = []
-                for kw in getattr(dec, "keywords", []):
-                    if isinstance(kw.value, ast.Name):
-                        dec_args.append(kw.value.id)
-                    elif isinstance(kw.value, ast.Constant):
-                        dec_args.append(kw.value.value)
-                decorators.append({"name": name, "args": dec_args})
-            else:
-                name = EnhancedFunctionParser.get_call_name(dec)
-                decorators.append({"name": name, "args": []})
 
-        _type = "method" if class_name else ("async_function" if isinstance(node, ast.AsyncFunctionDef) else "function")
-        returns = node.returns.id if isinstance(node.returns, ast.Name) else None
+                # --- позиционные аргументы ---
+                for arg in dec.args:
+                    # path должен быть строкой
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        path = arg.value
+                    else:
+                        dec_args.append(ast.unparse(arg))
 
-        func_info = {
-            "_type": _type,
-            "name": node.name,
-            "file": file_path,
-            "args": args,
-            "arg_types": arg_types,
-            "returns": returns,
-            "decorators": decorators,
-            "calls": calls,
-            "is_endpoint": False,
-            "endpoint_info": None
-        }
-        if class_name:
-            func_info["class"] = class_name
+                # --- именованные аргументы ---
+                for kw in dec.keywords:
+                    if kw.arg == "response_model":
+                        dec_args.append(f"response_model={ast.unparse(kw.value)}")
+                    else:
+                        dec_args.append(ast.unparse(kw.value))
 
-        # Сразу проверяем эндпоинт
-        return EnhancedFunctionParser._detect_endpoint(func_info)
+            decorators.append({
+                "name": name,
+                "args": dec_args,
+                "path": path
+            })
+
+            # СФОРМИРОВАТЬ И ВЕРНУТЬ ИНФО О ФУНКЦИИ
+            func_info = {
+                "name": node.name,
+                "file": file_path,
+                "class": class_name,
+                "args": args,
+                "arg_types": arg_types,
+                "decorators": decorators,
+                "calls": calls,
+                "is_endpoint": False,
+                "endpoint_info": None,
+                "_type": "async" if isinstance(node, ast.AsyncFunctionDef) else "sync",
+                "returns": ast.unparse(node.returns) if node.returns else None,
+            }
+
+            func_info = EnhancedFunctionParser._detect_endpoint(func_info)
+
+            return func_info
 
     @staticmethod
     def _detect_endpoint(func_info: Dict[str, Any]) -> Dict[str, Any]:
-        """Быстрая проверка эндпоинта"""
         for dec in func_info["decorators"]:
             if not dec["name"]:
                 continue
+
             parts = dec["name"].split(".")
-            if len(parts) == 2 and parts[1].lower() in EnhancedFunctionParser.HTTP_METHODS:
-                func_info["is_endpoint"] = True
-                func_info["endpoint_info"] = {
-                    "decorator": {"object": parts[0], "method": parts[1].lower(), "args": dec["args"]},
-                    "path": dec["args"][0] if dec["args"] else "",
-                    "full_path": dec["args"][0] if dec["args"] else ""
-                }
-                break
+            if len(parts) == 2:
+                obj, method = parts
+                if method.lower() in EnhancedFunctionParser.HTTP_METHODS:
+                    func_info["is_endpoint"] = True
+
+                    func_info["endpoint_info"] = {
+                        "decorator": {
+                            "object": obj,
+                            "method": method.lower(),
+                            "args": dec["args"]
+                        },
+                        "path": dec.get("path", "") or "",
+                        "full_path": dec.get("path", "") or "",
+                    }
+                    break
         return func_info
 
     @staticmethod
     async def parse_python_file_s3(file_path: str) -> Dict[str, Dict[str, Any]]:
-        """Парсит .py файл из S3"""
         code = await object_manager.repo.read(file_path)
         tree = ast.parse(code, filename=file_path)
-        funcs = {}
 
+        # --- собираем роутеры/APIRouter/приложения ---
+        routers = EnhancedFunctionParser.parse_router_defs(tree)
+
+        funcs = {}
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 func = EnhancedFunctionParser.parse_function(node, file_path)
+                if func is None:
+                    continue
+                func = EnhancedFunctionParser._enhance_endpoint_info(func, routers)
                 funcs[func["name"]] = func
+
             elif isinstance(node, ast.ClassDef):
                 for sub in node.body:
                     if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
                         func = EnhancedFunctionParser.parse_function(sub, file_path, class_name=node.name)
+                        if func is None:
+                            continue
+                        func = EnhancedFunctionParser._enhance_endpoint_info(func, routers)
                         funcs[f"{node.name}.{func['name']}"] = func
+
         return funcs
 
     @staticmethod
@@ -389,26 +460,17 @@ class EnhancedFunctionParser:
 
         return result
 
-
-# Пример использования
+# async def main():
+#     from utils.logger import create_logger
+#     log = create_logger("EnhancedFunctionParser")
+#     log.info(f"Начало")
+#     project_path_s3 = r"12/core.zip/3bcbeadd-58a2-412b-b15f-279d319f8d54/None/unpacked/"
+#
+#     endpoints_raw = await EnhancedFunctionParser.extract_endpoints(project_path_s3)
+#     log.info(f"Извлечены эндпоинты")
+#     log.info(f"Эндпоинты сырые: {endpoints_raw}")
+#     endpoints = {item["function"]: item["method"] + " " + item["path"] for item in endpoints_raw}
+#     log.info(f"Эндпоинты: {endpoints}")
+# # Пример использования
 # if __name__ == "__main__":
-#     project_path = r"C:\Users\Red0c\PycharmProjects\PiaPav\backend\app\core\src"
-#
-#     dependencies = EnhancedFunctionParser.get_dependencies(r"C:\Users\Red0c\PycharmProjects\PiaPav\backend\app\core")
-#     print(dependencies)
-#
-#     # Получаем полный граф вызовов
-#     call_graph = EnhancedFunctionParser.build_call_graph2(project_path)
-#     print("Граф вызовов построен. Функций:", len(call_graph))
-#
-#     # Получаем только эндпоинты
-#     endpoints = EnhancedFunctionParser.extract_endpoints(project_path)
-#     print("Найдено эндпоинтов:", len(endpoints))
-#
-#     # Выводим информацию об эндпоинтах
-#     for endpoint in endpoints:
-#         print(f"{endpoint['method']} {endpoint['path']} -> {endpoint['function']}")
-#     print(json.dumps(call_graph, indent=2))
-#     from visual import visual
-#
-#     visual(call_graph)
+#     asyncio.run(main())
