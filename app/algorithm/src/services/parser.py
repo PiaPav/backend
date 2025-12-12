@@ -1,6 +1,5 @@
 # самая актуальная версия
 import ast
-import asyncio
 import os
 import re
 from typing import Dict, List, Any, Optional, Union, AsyncIterator, Tuple
@@ -9,42 +8,9 @@ from services.manage.object_manager import object_manager
 
 
 class Parser:
-    @staticmethod
-    def get_name(node: ast.AST) -> str:
-        """Получить полное имя объекта (для вызовов и атрибутов)"""
-        if isinstance(node, ast.Name):
-            return node.id
-        elif isinstance(node, ast.Attribute):
-            return f"{Parser.get_name(node.value)}.{node.attr}"
-        elif isinstance(node, ast.Call):
-            return Parser.get_name(node.func)
-        return ""
+    """Улучшенный парсер"""
 
-    @staticmethod
-    def get_decorators(decorator_list: List[ast.AST]) -> List[Dict[str, Any]]:
-        """Собрать информацию о декораторах"""
-        decorators = []
-        for dec in decorator_list:
-            dec_info = {"name": Parser.get_name(dec), "args": []}
-            if isinstance(dec, ast.Call):
-                dec_info["name"] = Parser.get_name(dec.func)
-                dec_info["args"] = [ast.unparse(arg) for arg in dec.args]
-            decorators.append(dec_info)
-        return decorators
-
-    @staticmethod
-    def parse_assignments(node: ast.AST) -> List[Dict[str, Any]]:
-        """Собрать глобальные присваивания"""
-        assigns = []
-        for child in node.body:
-            if isinstance(child, ast.Assign):
-                for target in child.targets:
-                    assigns.append({
-                        "target": ast.unparse(target),
-                        "value": ast.unparse(child.value),
-                        "type": type(child.value).__name__
-                    })
-        return assigns
+    HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
 
     @staticmethod
     def parse_imports(node: ast.AST) -> List[Dict[str, Any]]:
@@ -68,12 +34,6 @@ class Parser:
                         "level": child.level,
                     })
         return imports
-
-
-class EnhancedFunctionParser:
-    """Улучшенный парсер функций с интеграцией поиска эндпоинтов"""
-
-    HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
 
     @staticmethod
     def get_call_name(node: ast.AST) -> Optional[str]:
@@ -104,7 +64,7 @@ class EnhancedFunctionParser:
         for node in tree.body:
             # Ищем присваивания: router = APIRouter(...)
             if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
-                call_name = EnhancedFunctionParser.get_call_name(node.value.func)
+                call_name = Parser.get_call_name(node.value.func)
 
                 # Сохраняем имя переменной
                 if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
@@ -135,9 +95,9 @@ class EnhancedFunctionParser:
                        file_path: str,
                        class_name: Optional[str] = None) -> Dict[str, Any]:
         """Парсит функцию и собирает вызовы и декораторы"""
-        calls = [EnhancedFunctionParser.get_call_name(n.func)
+        calls = [Parser.get_call_name(n.func)
                  for n in ast.walk(node)
-                 if isinstance(n, ast.Call) and EnhancedFunctionParser.get_call_name(n.func)]
+                 if isinstance(n, ast.Call) and Parser.get_call_name(n.func)]
 
         args = [arg.arg for arg in node.args.args]
         arg_types = {arg.arg: arg.annotation.id
@@ -145,7 +105,7 @@ class EnhancedFunctionParser:
 
         decorators = []
         for dec in node.decorator_list:
-            name = EnhancedFunctionParser.get_call_name(
+            name = Parser.get_call_name(
                 dec.func if isinstance(dec, ast.Call) else dec
             )
 
@@ -190,7 +150,7 @@ class EnhancedFunctionParser:
                 "returns": ast.unparse(node.returns) if node.returns else None,
             }
 
-            func_info = EnhancedFunctionParser._detect_endpoint(func_info)
+            func_info = Parser._detect_endpoint(func_info)
 
             return func_info
 
@@ -203,7 +163,7 @@ class EnhancedFunctionParser:
             parts = dec["name"].split(".")
             if len(parts) == 2:
                 obj, method = parts
-                if method.lower() in EnhancedFunctionParser.HTTP_METHODS:
+                if method.lower() in Parser.HTTP_METHODS:
                     func_info["is_endpoint"] = True
 
                     func_info["endpoint_info"] = {
@@ -217,34 +177,6 @@ class EnhancedFunctionParser:
                     }
                     break
         return func_info
-
-    @staticmethod
-    async def parse_python_file_s3(file_path: str) -> Dict[str, Dict[str, Any]]:
-        code = await object_manager.repo.read(file_path)
-        tree = ast.parse(code, filename=file_path)
-
-        # --- собираем роутеры/APIRouter/приложения ---
-        routers = EnhancedFunctionParser.parse_router_defs(tree)
-
-        funcs = {}
-        for node in tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                func = EnhancedFunctionParser.parse_function(node, file_path)
-                if func is None:
-                    continue
-                func = EnhancedFunctionParser._enhance_endpoint_info(func, routers)
-                funcs[func["name"]] = func
-
-            elif isinstance(node, ast.ClassDef):
-                for sub in node.body:
-                    if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        func = EnhancedFunctionParser.parse_function(sub, file_path, class_name=node.name)
-                        if func is None:
-                            continue
-                        func = EnhancedFunctionParser._enhance_endpoint_info(func, routers)
-                        funcs[f"{node.name}.{func['name']}"] = func
-
-        return funcs
 
     @staticmethod
     def _enhance_endpoint_info(func_info: Dict[str, Any], routers: Dict[str, str]) -> Dict[str, Any]:
@@ -274,6 +206,34 @@ class EnhancedFunctionParser:
         return func_info
 
     @staticmethod
+    async def parse_python_file_s3(file_path: str) -> Dict[str, Dict[str, Any]]:
+        code = await object_manager.repo.read(file_path)
+        tree = ast.parse(code, filename=file_path)
+
+        # --- собираем роутеры/APIRouter/приложения ---
+        routers = Parser.parse_router_defs(tree)
+
+        funcs = {}
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                func = Parser.parse_function(node, file_path)
+                if func is None:
+                    continue
+                func = Parser._enhance_endpoint_info(func, routers)
+                funcs[func["name"]] = func
+
+            elif isinstance(node, ast.ClassDef):
+                for sub in node.body:
+                    if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        func = Parser.parse_function(sub, file_path, class_name=node.name)
+                        if func is None:
+                            continue
+                        func = Parser._enhance_endpoint_info(func, routers)
+                        funcs[f"{node.name}.{func['name']}"] = func
+
+        return funcs
+
+    @staticmethod
     async def collect_project_functions_s3(prefix: str) -> AsyncIterator[Tuple[str, Dict[str, Any]]]:
         """Асинхронный генератор функций проекта по мере чтения файлов из S3"""
         keys = await object_manager.repo.get_filenames(prefix)
@@ -281,7 +241,7 @@ class EnhancedFunctionParser:
 
         for file_key in py_files:
             try:
-                funcs = await EnhancedFunctionParser.parse_python_file_s3(file_key)
+                funcs = await Parser.parse_python_file_s3(file_key)
                 for func_name, func_data in funcs.items():
                     yield func_name, func_data
             except Exception as e:
@@ -313,13 +273,13 @@ class EnhancedFunctionParser:
     async def build_call_graph_s3(prefix: str) -> AsyncIterator[Tuple[str, List[str]]]:
         """Асинхронный генератор графа вызовов по мере парсинга"""
         all_funcs: Dict[str, Dict[str, Any]] = {}
-        async for func_name, func_data in EnhancedFunctionParser.collect_project_functions_s3(prefix):
+        async for func_name, func_data in Parser.collect_project_functions_s3(prefix):
             all_funcs[func_name] = func_data
-            all_funcs_index = EnhancedFunctionParser.build_functions_index(all_funcs)
+            all_funcs_index = Parser.build_functions_index(all_funcs)
 
             children: List[str] = []
             for call in func_data["calls"]:
-                target_func = EnhancedFunctionParser.map_call_to_function(call, func_data, all_funcs_index)
+                target_func = Parser.map_call_to_function(call, func_data, all_funcs_index)
                 resolved_name = (
                     f"{target_func['file']}/{target_func['class']}.{target_func['name']}"
                     if target_func and "class" in target_func and "file" in target_func
@@ -330,39 +290,6 @@ class EnhancedFunctionParser:
             yield func_name, children
 
     @staticmethod
-    async def build_call_graph2(project_path: str) -> List[Dict[str, Any]]:
-        """Формирует список связности графа: каждая функция + вызовы с указанием файла"""
-        all_funcs = await EnhancedFunctionParser.collect_project_functions_s3(project_path)
-        results: List[Dict[str, Any]] = []
-
-        for func_name, func_data in all_funcs.items():
-            func_entry = {
-                "name": func_name,
-                "file": func_data["file"],
-                "args": func_data["args"],
-                "_type": func_data["_type"],
-                "returns": func_data.get("returns"),
-                "decorators": func_data.get("decorators", []),
-                "is_endpoint": func_data.get("is_endpoint", False),
-                "endpoint_info": func_data.get("endpoint_info"),
-                "calls": []
-            }
-
-            for call in func_data["calls"]:
-                target_func = EnhancedFunctionParser.map_call_to_function(call, func_data, all_funcs)
-                call_info = {
-                    "name": call,
-                    "resolved_name": f"{target_func['class']}.{target_func['name']}" if target_func and "class" in target_func else call,
-                    "file": target_func["file"] if target_func else "external",
-                    "is_endpoint": target_func.get("is_endpoint", False) if target_func else False
-                }
-                func_entry["calls"].append(call_info)
-
-            results.append(func_entry)
-
-        return results
-
-    @staticmethod
     async def extract_endpoints(prefix: str) -> List[Dict[str, Any]]:
         """Собирает все эндпоинты проекта за один проход"""
         endpoints = []
@@ -371,7 +298,7 @@ class EnhancedFunctionParser:
 
         for file_key in py_files:
             try:
-                funcs = await EnhancedFunctionParser.parse_python_file_s3(file_key)
+                funcs = await Parser.parse_python_file_s3(file_key)
                 for func_name, func_data in funcs.items():
                     if func_data.get("is_endpoint"):
                         endpoint_info = func_data["endpoint_info"]
@@ -445,15 +372,15 @@ class EnhancedFunctionParser:
     async def get_dependencies_s3(prefix: str) -> Dict[str, List[str]]:
         """Возвращает список зависимостей из S3"""
         result = {}
-        files = await EnhancedFunctionParser.find_dependencies_files_s3(prefix)
+        files = await Parser.find_dependencies_files_s3(prefix)
 
         for file_key in files:
             try:
                 if file_key.endswith(".txt"):
-                    deps = await EnhancedFunctionParser.parse_requirements_s3(file_key)
+                    deps = await Parser.parse_requirements_s3(file_key)
                     result[os.path.basename(file_key)] = deps
                 elif file_key.endswith(".toml"):
-                    deps = await EnhancedFunctionParser.parse_pyproject_s3(file_key)
+                    deps = await Parser.parse_pyproject_s3(file_key)
                     result[os.path.basename(file_key)] = deps
             except Exception as e:
                 print(f"Ошибка при чтении зависимостей из {file_key}: {e}")

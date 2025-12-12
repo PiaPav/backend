@@ -4,7 +4,7 @@ import asyncio
 from grpc_.algorithm_client import AlgorithmClient
 import grpc_control.generated.shared.common_pb2 as common_pb2
 
-from services.parser import EnhancedFunctionParser
+from services.parser import Parser
 from utils.config import CONFIG
 from utils.logger import create_logger
 
@@ -21,7 +21,7 @@ class ParseService:
             response_id = 1
 
             # ===== зависимости =====
-            dependencies = await EnhancedFunctionParser.get_dependencies_s3(project_path_s3)
+            dependencies = await Parser.get_dependencies_s3(project_path_s3)
             log.info(f"Извлечены зависимости")
             for key, value in dependencies.items():
                 yield common_pb2.GraphPartResponse(
@@ -36,7 +36,7 @@ class ParseService:
                 response_id += 1
 
             # ===== эндпоинты =====
-            endpoints_raw = await EnhancedFunctionParser.extract_endpoints(project_path_s3)
+            endpoints_raw = await Parser.extract_endpoints(project_path_s3)
             log.info(f"Извлечены эндпоинты")
             log.info(f"Эндпоинты сырые: {endpoints_raw}")
             endpoints = {item["function"]: item["method"] + " " + item["path"] for item in endpoints_raw}
@@ -53,7 +53,7 @@ class ParseService:
             response_id += 1
 
             # ===== архитектура =====
-            async for parent, children in EnhancedFunctionParser.build_call_graph_s3(project_path_s3):
+            async for parent, children in Parser.build_call_graph_s3(project_path_s3):
                 yield common_pb2.GraphPartResponse(
                     task_id=task_id,
                     response_id=response_id,
@@ -84,9 +84,9 @@ async def run_parse_microservice(task_id, project_path_s3):
     service = ParseService()
     await service.parse_project(task_id, project_path_s3)
 
-async def run():
-    ps = ParseService()
-    await ps.parse_project(987, r"")
-
-if __name__ == "__main__":
-    asyncio.run(run())
+# async def run():
+#     ps = ParseService()
+#     await ps.parse_project(987, r"")
+#
+# if __name__ == "__main__":
+#     asyncio.run(run())
