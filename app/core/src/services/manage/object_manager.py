@@ -34,7 +34,7 @@ class ObjectManager:
             return key
 
         except Exception as e:
-            log.error(f"Ошибка {e} при вызовы инфраструктурного слоя в сервисный (ObjectStorage)")
+            log.error(f"Ошибка {e} при вызове инфраструктурного слоя в сервисный (ObjectStorage)")
             raise RuntimeError("Ошибка загрузки файла в хранилище") from e
 
     async def delete(self, key: str):

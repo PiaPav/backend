@@ -1,4 +1,3 @@
-import asyncio
 import json
 from typing import Optional
 
@@ -9,8 +8,9 @@ from utils.logger import create_logger
 
 log = create_logger("BrokerConsumer")
 
+
 class Consumer:
-    def __init__(self, connection:ConnectionBrokerManager):
+    def __init__(self, connection: ConnectionBrokerManager):
         self.connection: ConnectionBrokerManager = connection
         self.queue: Optional[RobustQueue] = None
 
@@ -18,11 +18,10 @@ class Consumer:
         if not self.connection.channel:
             await self.connection.connect()
 
-
         queue = await self.connection.channel.declare_queue(queue_name, durable=True)
         log.info(f"Подписан на очередь: {queue_name}")
 
-        await self.connection.channel.set_qos(prefetch_count=1) # одна задачу в один момент времени
+        await self.connection.channel.set_qos(prefetch_count=1)  # одна задачу в один момент времени
 
         self.queue = queue
 

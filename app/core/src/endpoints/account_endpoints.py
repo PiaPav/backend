@@ -3,7 +3,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from exceptions.service_exception_middleware import get_error_responses
 from exceptions.service_exception_models import ErrorType
-from infrastructure.profile.profile import profile_time
 from models.account_models import AccountFullData, AccountPatchData, VerifyEmailType
 from services.account_service import AccountService
 from services.auth_service import AuthService
@@ -38,6 +37,7 @@ async def patch_account(patch_data: AccountPatchData, token: HTTPAuthorizationCr
     result = await service.patch_account_by_id(user.id, patch_data)
     log.info(f"Изменение данных аккаунта - конец")
     return result
+
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT,
                responses=get_error_responses(ErrorType.INVALID_TOKEN))

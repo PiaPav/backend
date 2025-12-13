@@ -3,7 +3,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from exceptions.service_exception_middleware import get_error_responses
 from exceptions.service_exception_models import ErrorType
-from infrastructure.profile.profile import profile_time
 from models.core_models import HomePageData
 from services.auth_service import AuthService
 from services.core_service import CoreService

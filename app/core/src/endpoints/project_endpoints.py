@@ -3,7 +3,6 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from exceptions.service_exception_middleware import get_error_responses
 from exceptions.service_exception_models import ErrorType
-from infrastructure.profile.profile import profile_time
 from models.project_models import ProjectData, ProjectCreateData, ProjectPatchData, ProjectListDataLite
 from services.auth_service import AuthService
 from services.project_service import ProjectService

@@ -6,7 +6,6 @@ from infrastructure.object_storage.interface import AbstractStorage
 from utils.config import CONFIG
 from utils.logger import create_logger
 
-
 log = create_logger("ObjectStorageManagerInfra")
 
 
@@ -21,14 +20,6 @@ class ObjectStorageManager(AbstractStorage):
         self.access_key_id = access_key_id
         self.secret_access_key = secret_access_key
         self.bucket = bucket
-
-        # session = aioboto3.Session()
-        # self.s3 = session.client(
-        #     service_name="s3",
-        #     endpoint_url=self.endpoint_url,
-        #     aws_access_key_id=self.access_key_id,
-        #     aws_secret_access_key=self.secret_access_key,
-        # )
         self.s3_config = {"service_name": "s3",
                           "endpoint_url": self.endpoint_url,
                           "aws_access_key_id": self.access_key_id,
@@ -77,4 +68,3 @@ class ObjectStorageManager(AbstractStorage):
 
             except s3.exceptions.NoSuchKey:
                 raise FileNotFoundError(f"Файл {file_key} не найден в бакете {self.bucket}")
-

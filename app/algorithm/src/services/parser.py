@@ -1,4 +1,3 @@
-# самая актуальная версия
 import ast
 import os
 import re
@@ -54,11 +53,7 @@ class Parser:
 
     @staticmethod
     def parse_router_defs(tree: ast.Module) -> Dict[str, str]:
-        """
-        Ищет объявления:
-        router = APIRouter(prefix="/xxx")
-        app = FastAPI(root_path="/xxx")
-        """
+        """Собрать роуты"""
         routers = {}
 
         for node in tree.body:

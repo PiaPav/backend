@@ -78,9 +78,6 @@ services:
 
   algorithm-service:
     image: ${ALGORITHM_SERVICE_IMAGE}
-#    container_name: algorithm_service
-#    ports:
-#      - "50051:50051"
     depends_on:
       core-service:
         condition: service_healthy
@@ -103,8 +100,6 @@ services:
   redis:
     image: ${REDIS_SERVICE_IMAGE}
     container_name: redis
-    #ports:
-    #  - "6379:6379"
     volumes:
       - redis-data:/data
     networks:
@@ -131,7 +126,6 @@ services:
       - backend
     restart: always
     healthcheck:
-      # Локальный tcp check; убедитесь, что контейнер прослушивает 50051
       test: [ "CMD-SHELL", "timeout 2 bash -c '</dev/tcp/grpc_proxy/50051' || exit 1" ]
       interval: 10s
       timeout: 3s

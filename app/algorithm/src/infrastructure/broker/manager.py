@@ -1,7 +1,7 @@
-import aio_pika
-from aio_pika import Exchange, RobustConnection, Channel
 from typing import Optional
 
+import aio_pika
+from aio_pika import Exchange, RobustConnection, Channel
 from aio_pika.abc import AbstractQueue
 
 from utils.config import CONFIG
@@ -60,4 +60,3 @@ class ConnectionBrokerManager:
     async def _bind_exchange_as_queue(self, queue: AbstractQueue, routing_key: str) -> None:
         await queue.bind(self.exchange, routing_key=routing_key)
         log.info(f"Очередь {queue} привязана к {self.exchange}")
-

@@ -1,11 +1,12 @@
 import grpc
 import asyncio
 from grpc_reflection.v1alpha import reflection
-from grpc_control.generated.api import core_pb2_grpc, algorithm_pb2_grpc, core_pb2, algorithm_pb2
 from grpc_control.generated.shared import common_pb2
+from grpc_control.generated.api import core_pb2_grpc, algorithm_pb2_grpc, core_pb2, algorithm_pb2
 from utils.logger import create_logger
 
 log = create_logger("CoreGRPC")
+
 
 class TaskSession:
     def __init__(self, task_id: int):
@@ -41,6 +42,7 @@ class TaskManager:
     def remove_session(self, task_id: int):
         if task_id in self.tasks:
             del self.tasks[task_id]
+
 
 class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
     def __init__(self, task_manager: TaskManager):
@@ -84,7 +86,6 @@ class FrontendStreamService(core_pb2_grpc.FrontendStreamServiceServicer):
                 log.info(f"[TASK_MANAGER] Полная очистка task_id={request.task_id}")
 
 
-
 class AlgorithmConnectionService(algorithm_pb2_grpc.AlgorithmConnectionServiceServicer):
     def __init__(self, task_manager: TaskManager):
         self.task_manager = task_manager
@@ -98,6 +99,7 @@ class AlgorithmConnectionService(algorithm_pb2_grpc.AlgorithmConnectionServiceSe
             if msg.status == common_pb2.ParseStatus.DONE:
                 await session.mark_done()
         return common_pb2.Empty()
+
 
 class CoreServer:
     def __init__(self, host='0.0.0.0', port=50051):
@@ -130,4 +132,3 @@ class CoreServer:
     async def stop(self):
         await self.server.stop(0)
         log.info("gRPC CoreServer остановлен")
-
