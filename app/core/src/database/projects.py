@@ -18,7 +18,7 @@ class Project(SQLBase):
     __tablename__ = "projects"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    author_id: Mapped[int] = mapped_column(ForeignKey(Account.id), ondelete="CASCADE")
+    author_id: Mapped[int] = mapped_column(ForeignKey(Account.id, ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String(250))
     description: Mapped[str] = mapped_column(Text)
     picture_url: Mapped[str] = mapped_column(String(250), default="")
