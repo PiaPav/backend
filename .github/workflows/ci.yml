@@ -162,8 +162,8 @@ jobs:
             username: ${{ secrets.SERVER_USER }}
             key: ${{ secrets.SERVER_SSH_KEY }}
             script: |
-              cd ~/deploy
-              docker compose down --remove-orphans
+              cd ~/deploy || exit 0  # если папка нет — скрипт не падает, просто выходит
+              [ -f docker-compose.yml ] && docker compose down --remove-orphans || echo "docker-compose.yml нет, пропускаем"
               docker image rm -f ghcr.io/piapav/core_service:latest || true
               docker image rm -f ghcr.io/piapav/algorithm_service:latest || true
 
