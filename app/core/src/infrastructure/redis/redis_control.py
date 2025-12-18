@@ -2,13 +2,14 @@ from typing import Optional
 
 import redis
 
+from infrastructure.redis.interface import AbstractRedisConnector
 from utils.config import CONFIG
 from utils.logger import create_logger
 
 log = create_logger("RedisConnector")
 
 
-class RedisConnector(redis.asyncio.Redis):
+class RedisConnector(AbstractRedisConnector, redis.asyncio.Redis):
 
     async def set_verification_code(self, key: str, code: int, expire_seconds: int = 60 * 5) -> bool:
         await self.set(name=key, value=str(code), ex=expire_seconds)
@@ -17,6 +18,8 @@ class RedisConnector(redis.asyncio.Redis):
 
     async def get_verification_code(self, key: str) -> Optional[int]:
         code = await self.get(name=key)
+        if code is None:
+            return None
         return int(code)
 
     async def delete_verification_code(self, key: str) -> bool:
@@ -33,5 +36,6 @@ class RedisConnector(redis.asyncio.Redis):
                 log.info("Redis не отвечает")
         except Exception as e:
             print(f"Ошибка подключения к Redis: {e}")
+
 
 Redis = RedisConnector(host=CONFIG.redis.host, port=CONFIG.redis.port, db=CONFIG.redis.db, decode_responses=True)

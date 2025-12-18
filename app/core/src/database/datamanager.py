@@ -1,6 +1,5 @@
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
-from typing import TypeVar
 
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
@@ -14,9 +13,7 @@ from utils.logger import create_logger
 
 log = create_logger("DatabaseManager")
 
-db_url = f"postgresql+asyncpg://{CONFIG.db.user}:{CONFIG.db.password}@{CONFIG.db.host}:{CONFIG.db.port}/{CONFIG.db.name}"
-
-T = TypeVar('T')
+DB_URL = f"postgresql+asyncpg://{CONFIG.db.user}:{CONFIG.db.password}@{CONFIG.db.host}:{CONFIG.db.port}/{CONFIG.db.name}"
 
 
 class DatabaseManager:
@@ -75,7 +72,7 @@ class DatabaseManager:
         await self.engine.dispose()
 
 
-DataManager = DatabaseManager(db_url, echo=CONFIG.db.echo)
+DataManager = DatabaseManager(DB_URL, echo=CONFIG.db.echo)
 
 
 async def init_db():
