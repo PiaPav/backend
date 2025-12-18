@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
     await broker_repo_task.close()
 
 
-app = FastAPI(title="PiaPav", lifespan=lifespan)
+app = FastAPI(title="PiaPav", lifespan=lifespan, root_path="/api")
 
 app.include_router(AuthRouter)
 app.include_router(CoreRouter)
