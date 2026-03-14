@@ -5,12 +5,13 @@ on:
     branches: [main, dev-test]
 
 jobs:
-  build-core-service:
+
+  build-and-push:
     runs-on: ubuntu-24.04
     environment: prod
     strategy:
       matrix:
-        service: [core, algorithm, grpc-proxy]
+        service: [core, algorithm, grpc_proxy]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,98 +25,80 @@ jobs:
           username: MoonliteSoda
           password: ${{ secrets.TOKEN }}
 
-      - name: Build & Push Docker image
+      - name: Build & Push Docker Image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./app/${{ matrix.service }}/Dockerfile
           push: true
           tags: ghcr.io/piapav/${{ matrix.service }}_service:latest
-
-
+          cache-from: type=registry,ref=ghcr.io/piapav/${{ matrix.service }}_service:latest
+          cache-to: type=registry,mode=max,ref=ghcr.io/piapav/${{ matrix.service }}_service:cache
 
   deploy:
-    #enviroment важно не трогать
-    environment: prod
     runs-on: ubuntu-24.04
-    needs: [build-core-service]
+    environment: prod
+    needs: [build-and-push]
     if: github.ref == 'refs/heads/main'
-    # деплой только из main
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (sparse)
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
           sparse-checkout: |
-            docker-compose.yml  # берём compose из репа
+            docker-compose.yml
+            .env.example
 
-      - name: Create .env file
+      - name: Generate .env file
         run: |
-          # Auth
-          echo "ACCESS_SECRET_KEY=${{ secrets.ACCESS_SECRET_KEY }}" > .env
-          echo "REFRESH_SECRET_KEY=${{ secrets.REFRESH_SECRET_KEY }}" >> .env
-          echo "ALGORITHM=${{ secrets.ALGORITHM }}" >> .env
-          echo "ACCESS_TOKEN_EXPIRE_MINUTES=${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}" >> .env
-          echo "REFRESH_TOKEN_EXPIRE_DAYS=${{ secrets.REFRESH_TOKEN_EXPIRE_DAYS }}" >> .env
+          envsubst < .env.example > .env
+        env:
+          ACCESS_SECRET_KEY: ${{ secrets.ACCESS_SECRET_KEY }}
+          REFRESH_SECRET_KEY: ${{ secrets.REFRESH_SECRET_KEY }}
+          ALGORITHM: ${{ secrets.ALGORITHM }}
+          ACCESS_TOKEN_EXPIRE_MINUTES: ${{ secrets.ACCESS_TOKEN_EXPIRE_MINUTES }}
+          REFRESH_TOKEN_EXPIRE_DAYS: ${{ secrets.REFRESH_TOKEN_EXPIRE_DAYS }}
+          CORE_HOST: ${{ secrets.CORE_HOST }}
+          CORE_PORT: ${{ secrets.CORE_PORT }}
+          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_ECHO: ${{ secrets.DB_ECHO }}
+          MINIO_HOST: ${{ secrets.MINIO_HOST }}
+          MINIO_ROOT_USER: ${{ secrets.MINIO_ROOT_USER }}
+          MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
+          S3_API_PORT: ${{ secrets.S3_API_PORT }}
+          S3_CONSOLE_PORT: ${{ secrets.S3_CONSOLE_PORT }}
+          BUCKET: ${{ secrets.BUCKET }}
+          ACCESS_ID: ${{ secrets.ACCESS_ID }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          RabbitMQ_API_PORT: ${{ secrets.RabbitMQ_API_PORT }}
+          RabbitMQ_CONSOLE_PORT: ${{ secrets.RabbitMQ_CONSOLE_PORT }}
+          RabbitMQ_USER: ${{ secrets.RabbitMQ_USER }}
+          RabbitMQ_PASSWORD: ${{ secrets.RabbitMQ_PASSWORD }}
+          RABBIT_HOST: ${{ secrets.RABBIT_HOST }}
+          RABBIT_QUEUE_TASKS: ${{ secrets.RABBIT_QUEUE_TASKS }}
+          RABBIT_QUEUE_RESULTS: ${{ secrets.RABBIT_QUEUE_RESULTS }}
+          RABBIT_EXCHANGE: ${{ secrets.RABBIT_EXCHANGE }}
+          REDIS_HOST: ${{ secrets.REDIS_HOST }}
+          REDIS_PORT: ${{ secrets.REDIS_PORT }}
+          REDIS_DB: ${{ secrets.REDIS_DB }}
+          ID_KEY: ${{ secrets.ID_KEY }}
+          ACCESS_KEY: ${{ secrets.ACCESS_KEY }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          CORE_SERVICE_IMAGE: ${{ secrets.CORE_SERVICE_IMAGE }}
+          RABBIT_IMAGE: ${{ secrets.RABBIT_IMAGE }}
+          POSTGRES_IMAGE: ${{ secrets.POSTGRES_IMAGE }}
+          S3_MINIO_IMAGE: ${{ secrets.S3_MINIO_IMAGE }}
+          ALGORITHM_SERVICE_IMAGE: ${{ secrets.ALGORITHM_SERVICE_IMAGE }}
+          REDIS_SERVICE_IMAGE: ${{ secrets.REDIS_SERVICE_IMAGE }}
+          GRPC_PROXY_IMAGE: ghcr.io/piapav/grpc_proxy:latest
+          GRPC_HOST: grpc_proxy
+          GRPC_PORT: 50051
 
-          # Core service
-          echo "CORE_HOST=${{ secrets.CORE_HOST }}" >> .env
-          echo "CORE_PORT=${{ secrets.CORE_PORT }}" >> .env
-
-          # PostgreSQL
-          echo "POSTGRES_HOST=${{ secrets.POSTGRES_HOST }}" >> .env
-          echo "POSTGRES_PORT=${{ secrets.POSTGRES_PORT }}" >> .env
-          echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
-          echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> .env
-          echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
-          echo "POSTGRES_ECHO=${{ secrets.DB_ECHO }}" >> .env
-
-          # S3 storage
-          echo "MINIO_HOST=${{ secrets.MINIO_HOST }}" >> .env
-          echo "MINIO_ROOT_USER=${{ secrets.MINIO_ROOT_USER }}" >> .env
-          echo "MINIO_ROOT_PASSWORD=${{ secrets.MINIO_ROOT_PASSWORD }}" >> .env
-          echo "S3_API_PORT=${{ secrets.S3_API_PORT }}" >> .env
-          echo "S3_CONSOLE_PORT=${{ secrets.S3_CONSOLE_PORT }}" >> .env
-          echo "BUCKET=${{ secrets.BUCKET }}" >> .env
-          echo "ACCESS_ID=${{ secrets.ACCESS_ID }}" >> .env
-          echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
-
-          # RabbitMQ
-          echo "RabbitMQ_API_PORT=${{ secrets.RabbitMQ_API_PORT }}" >> .env
-          echo "RabbitMQ_CONSOLE_PORT=${{ secrets.RabbitMQ_CONSOLE_PORT }}" >> .env
-          echo "RabbitMQ_USER=${{ secrets.RabbitMQ_USER }}" >> .env
-          echo "RabbitMQ_PASSWORD=${{ secrets.RabbitMQ_PASSWORD }}" >> .env
-          echo "RABBIT_HOST=${{ secrets.RABBIT_HOST }}" >> .env
-          echo "RABBIT_QUEUE_TASKS=${{ secrets.RABBIT_QUEUE_TASKS }}" >> .env
-          echo "RABBIT_QUEUE_RESULTS=${{ secrets.RABBIT_QUEUE_RESULTS }}" >> .env
-          echo "RABBIT_EXCHANGE=${{ secrets.RABBIT_EXCHANGE }}" >> .env
-
-          # Redis
-          echo "REDIS_HOST=${{ secrets.REDIS_HOST }}" >> .env
-          echo "REDIS_PORT=${{ secrets.REDIS_PORT }}" >> .env
-          echo "REDIS_DB=${{ secrets.REDIS_DB }}" >> .env
-
-          # YandexPostman
-          echo "ID_KEY=${{ secrets.ID_KEY }}" >> .env
-          echo "ACCESS_KEY=${{ secrets.ACCESS_KEY }}" >> .env
-          echo "SENDER_EMAIL=${{ secrets.SENDER_EMAIL }}" >> .env
-
-          
-          # Service image
-          
-          echo "CORE_SERVICE_IMAGE=${{ secrets.CORE_SERVICE_IMAGE }}" >> .env
-          echo "RABBIT_IMAGE=${{ secrets.RABBIT_IMAGE }}" >> .env
-          echo "POSTGRES_IMAGE=${{ secrets.POSTGRES_IMAGE }}" >> .env
-          echo "S3_MINIO_IMAGE=${{ secrets.S3_MINIO_IMAGE }}" >> .env
-          echo "ALGORITHM_SERVICE_IMAGE=${{ secrets.ALGORITHM_SERVICE_IMAGE }}" >> .env
-          echo "REDIS_SERVICE_IMAGE=${{ secrets.REDIS_SERVICE_IMAGE }}" >> .env
-          echo "GRPC_PROXY_IMAGE=ghcr.io/piapav/grpc_proxy:latest" >> .env
-          
-          echo "GRPC_HOST=grpc_proxy" >> .env
-          echo "GRPC_PORT=50051" >> .env
-
-
-      - name: Prepare deploy directory on VPS
+      - name: Deploy to VPS
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -127,59 +110,27 @@ jobs:
             cd ~/deploy
             rm -f docker-compose.yml .env
 
-      - name: Copy files to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "./docker-compose.yml, ./.env"
-          target: "~/deploy/"
+            # Copy files
+            scp $GITHUB_WORKSPACE/docker-compose.yml . 
+            scp $GITHUB_WORKSPACE/.env .
 
-      - name: Clean old containers on VPS
-        uses: appleboy/ssh-action@v0.1.10
-        with:
-            host: ${{ secrets.SERVER_HOST }}
-            username: ${{ secrets.SERVER_USER }}
-            key: ${{ secrets.SERVER_SSH_KEY }}
-            script: |
-              cd ~/deploy || exit 0  # если папка нет — скрипт не падает, просто выходит
-              [ -f docker-compose.yml ] && docker compose down --remove-orphans || echo "docker-compose.yml нет, пропускаем"
-              docker image rm -f ghcr.io/piapav/core_service:latest || true
-              docker image rm -f ghcr.io/piapav/algorithm_service:latest || true
+            # Clean old containers and images
+            docker compose down --remove-orphans || true
+            docker image rm -f ghcr.io/piapav/core_service:latest || true
+            docker image rm -f ghcr.io/piapav/algorithm_service:latest || true
+            docker image rm -f ghcr.io/piapav/grpc_proxy:latest || true
 
-
-      - name: Login to GHCR on VPS
-        uses: appleboy/ssh-action@v0.1.10
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
+            # Login to GHCR
             echo "${{ secrets.TOKEN }}" | docker login ghcr.io -u MoonliteSoda --password-stdin
 
-      - name: Pull images on VPS
-        uses: appleboy/ssh-action@v0.1.10
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
+            # Pull images
             docker pull ghcr.io/piapav/core_service:latest
             docker pull ghcr.io/piapav/algorithm_service:latest
             docker pull ghcr.io/piapav/grpc_proxy:latest
-            docker pull ${{secrets.POSTGRES_IMAGE}}
-            docker pull ${{secrets.S3_MINIO_IMAGE}}
-            docker pull ${{secrets.S3_MINIO_IMAGE}}
+            docker pull ${{ secrets.POSTGRES_IMAGE }}
+            docker pull ${{ secrets.S3_MINIO_IMAGE }}
+            docker pull ${{ secrets.REDIS_SERVICE_IMAGE }}
 
-
-      - name: Run docker-compose on VPS
-        uses: appleboy/ssh-action@v0.1.10
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            cd ~/deploy
+            # Start containers
             docker compose --env-file .env up -d --scale algorithm-service=3
             docker compose ps
