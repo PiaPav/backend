@@ -18,3 +18,4 @@
 /app/core/src/infrastructure/broker/consumer test only/
 /app/algorithm/.env
 /app/core/src/infrastructure/email/test.py
+/app/core/src/localtest/
