@@ -19,14 +19,13 @@ jobs:
         with:
           fetch-depth: 1
 
-      # Создаём один buildx builder с docker-container
+      # Создаём Buildx builder с docker-container
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
         with:
           install: true
           driver: docker-container
           use: true
-          name: mybuilder
           buildkitd-flags: --debug
 
       - name: Login to GHCR
@@ -43,7 +42,7 @@ jobs:
           file: ./app/${{ matrix.service }}/Dockerfile
           push: true
           tags: ghcr.io/piapav/${{ matrix.service }}_service:latest
-          builder: mybuilder
+          builder: default
           cache-from: type=registry,ref=ghcr.io/piapav/${{ matrix.service }}_service:latest
           cache-to: type=registry,mode=max,ref=ghcr.io/piapav/${{ matrix.service }}_service:cache
 
