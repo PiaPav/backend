@@ -10,7 +10,7 @@ jobs:
     environment: prod
     strategy:
       matrix:
-        service: [core, algorithm, grpc_proxy]
+        service: [core, algorithm, grpc-proxy]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
