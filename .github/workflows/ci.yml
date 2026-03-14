@@ -26,7 +26,7 @@ jobs:
         with:
           registry: ghcr.io
           username: MoonliteSoda    # выпустивший ниже токен НЕ ТРОГАТЬ
-          password: ${{ secrets.GITHUB_TOKEN }} #это личный? токен с правами
+          password: ${{ secrets.TOKEN }} #это личный? токен с правами
 
       - name: Build Docker Image Core
         uses: docker/build-push-action@v5
