@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
 RUN pip install --no-cache-dir uv grpcio grpcio-tools
 
 COPY app/grpc-proxy/pyproject.toml .
-COPY uv.lock .
+COPY app/grpc-proxy/uv.lock .
 
 RUN uv sync --locked --no-dev
 
