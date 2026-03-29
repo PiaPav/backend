@@ -1,0 +1,1953 @@
+{
+  "src/main.py": {
+    "": {
+      "deps": [
+        "src/utils/config.py.CONFIG.server",
+        "src/main.py.StandaloneApplication.run",
+        "src/utils/config.py.CONFIG.server.host",
+        "src/utils/config.py.CONFIG.server.port",
+        "src/utils/config.py.CONFIG.server.uvicorn_workers",
+        "src/main.py.StandaloneApplication"
+      ],
+      "objects": {
+        "options": {
+          "deps": []
+        }
+      }
+    },
+    "StandaloneApplication": {
+      "methods": {
+        "__init__": [],
+        "load_config": [],
+        "load": [],
+        "run": []
+      },
+      "attributes": []
+    }
+  },
+  "src/database/accounts.py": {
+    "": {
+      "deps": [
+        "src/utils/logger.py.create_logger"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        }
+      }
+    },
+    "Account": {
+      "methods": {
+        "create_account": [
+          "src/database/accounts.py.Account",
+          "src/database/datamanager.py.DataManager.session"
+        ],
+        "get_account_by_id": [
+          "src/database/accounts.py.log.error",
+          "src/database/base.py.DataBaseEntityNotExists",
+          "src/database/datamanager.py.DataManager.session"
+        ],
+        "get_account_by_login": [
+          "src/database/accounts.py.Account.login",
+          "src/database/accounts.py.log.error",
+          "src/database/base.py.DataBaseEntityNotExists",
+          "src/database/datamanager.py.DataManager.session"
+        ],
+        "is_login_exists": [
+          "src/database/accounts.py.Account.login",
+          "src/database/accounts.py.Account.id",
+          "src/database/datamanager.py.DataManager.session"
+        ],
+        "patch_account_by_id": [
+          "src/database/datamanager.py.DataManager.session",
+          "src/database/accounts.py.Account.get_account_by_id"
+        ],
+        "delete_account_by_id": [
+          "src/database/datamanager.py.DataManager.session",
+          "src/database/accounts.py.Account.get_account_by_id"
+        ],
+        "add_email_to_account": [
+          "src/database/datamanager.py.DataManager.session",
+          "src/database/accounts.py.Account.get_account_by_id"
+        ],
+        "delete_email_from_account": [
+          "src/database/datamanager.py.DataManager.session",
+          "src/database/accounts.py.Account.get_account_by_id"
+        ],
+        "is_email_exists": [
+          "src/database/accounts.py.Account.id",
+          "src/database/datamanager.py.DataManager.session",
+          "src/database/accounts.py.Account.email"
+        ]
+      },
+      "attributes": [
+        {
+          "name": "email",
+          "deps": []
+        },
+        {
+          "name": "id",
+          "deps": []
+        },
+        {
+          "name": "login",
+          "deps": []
+        },
+        {
+          "name": "surname",
+          "deps": []
+        },
+        {
+          "name": "__tablename__",
+          "deps": []
+        },
+        {
+          "name": "hashed_password",
+          "deps": []
+        },
+        {
+          "name": "name",
+          "deps": []
+        }
+      ]
+    }
+  },
+  "src/database/base.py": {
+    "": {
+      "deps": [],
+      "objects": {
+        "Base": {
+          "deps": [],
+          "instance_of": "sqlalchemy/orm.declarative_base"
+        }
+      }
+    },
+    "SQLBase": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "__abstract__",
+          "deps": []
+        },
+        {
+          "name": "created_at",
+          "deps": []
+        }
+      ]
+    },
+    "DataBaseException": {
+      "methods": {
+        "__init__": [],
+        "name": []
+      },
+      "attributes": []
+    },
+    "DataBaseEntityNotExists": {
+      "methods": {
+        "__init__": []
+      },
+      "attributes": []
+    }
+  },
+  "src/database/datamanager.py": {
+    "": {
+      "deps": [
+        "src/utils/config.py.CONFIG.db.echo",
+        "src/utils/config.py.CONFIG.db.password",
+        "src/utils/config.py.CONFIG.db",
+        "src/utils/logger.py.create_logger",
+        "src/utils/config.py.CONFIG.db.port",
+        "src/database/datamanager.py.DatabaseManager",
+        "src/utils/config.py.CONFIG.db.user",
+        "src/utils/config.py.CONFIG.db.host",
+        "src/utils/config.py.CONFIG.db.name"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        },
+        "DB_URL": {
+          "deps": []
+        },
+        "DataManager": {
+          "deps": [
+            "src/database/datamanager.py.DatabaseManager"
+          ],
+          "instance_of": "src/database/datamanager.py.DatabaseManager"
+        },
+        "init_db": {
+          "deps": [
+            "src/database/datamanager.py.DataManager.init_models"
+          ]
+        }
+      }
+    },
+    "DatabaseManager": {
+      "methods": {
+        "__init__": [],
+        "init_models": [
+          "src/database/datamanager.py.log.info",
+          "src/database/base.py.Base.metadata",
+          "src/database/base.py.Base.metadata.drop_all",
+          "src/database/base.py.Base.metadata.create_all",
+          "src/database/base.py.Base.metadata.tables.get",
+          "src/database/base.py.Base.metadata.tables"
+        ],
+        "session": [],
+        "close": []
+      },
+      "attributes": []
+    }
+  },
+  "src/database/projects.py": {
+    "": {
+      "deps": [
+        "src/utils/logger.py.create_logger"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        }
+      }
+    },
+    "Project": {
+      "": {
+        "deps": [
+          "src/database/accounts.py.Account.id"
+        ]
+      },
+      "methods": {
+        "create_project": [
+          "src/database/datamanager.py.DataManager.session",
+          "src/database/projects.py.Project"
+        ],
+        "get_project_by_id": [
+          "src/database/base.py.DataBaseEntityNotExists",
+          "src/database/projects.py.log.error",
+          "src/database/datamanager.py.DataManager.session"
+        ],
+        "patch_project_by_id": [
+          "src/database/projects.py.Project.get_project_by_id",
+          "src/database/datamanager.py.DataManager.session"
+        ],
+        "get_project_list_by_account_id": [
+          "src/database/datamanager.py.DataManager.session",
+          "src/database/projects.py.Project.author_id"
+        ],
+        "delete_project": [
+          "src/database/projects.py.Project.get_project_by_id",
+          "src/database/datamanager.py.DataManager.session"
+        ]
+      },
+      "attributes": [
+        {
+          "name": "author_id",
+          "deps": []
+        },
+        {
+          "name": "files_url",
+          "deps": []
+        },
+        {
+          "name": "architecture",
+          "deps": []
+        },
+        {
+          "name": "name",
+          "deps": []
+        },
+        {
+          "name": "description",
+          "deps": []
+        },
+        {
+          "name": "__tablename__",
+          "deps": []
+        },
+        {
+          "name": "picture_url",
+          "deps": []
+        },
+        {
+          "name": "id",
+          "deps": []
+        }
+      ]
+    }
+  },
+  "src/endpoints/account_endpoints.py": {
+    "": {
+      "deps": [
+        "src/endpoints/account_endpoints.py.router.delete",
+        "src/endpoints/account_endpoints.py.router.post",
+        "src/exceptions/service_exception_models.py.ErrorType.EMAIL_ALREADY_TAKEN",
+        "src/endpoints/account_endpoints.py.router.get",
+        "src/utils/logger.py.create_logger",
+        "src/exceptions/service_exception_models.py.ErrorType.INVALID_TOKEN",
+        "src/endpoints/account_endpoints.py.router.patch",
+        "src/exceptions/service_exception_models.py.ErrorType.EMAIL_SEND_CRASH",
+        "src/exceptions/service_exception_models.py.ErrorType.EMAIL_INVALID_CODE",
+        "src/exceptions/service_exception_models.py.ErrorType.EMAIL_DONT_LINKED",
+        "src/exceptions/service_exception_models.py.ErrorType.EMAIL_ALREADY_LINKED",
+        "src/exceptions/service_exception_middleware.py.get_error_responses"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        },
+        "router": {
+          "deps": [],
+          "instance_of": "fastapi.APIRouter"
+        },
+        "security": {
+          "deps": [],
+          "instance_of": "fastapi/security.HTTPBearer"
+        },
+        "get_account": {
+          "deps": [
+            "src/endpoints/account_endpoints.py.log.info"
+          ]
+        },
+        "patch_account": {
+          "deps": [
+            "src/endpoints/account_endpoints.py.log.info"
+          ]
+        },
+        "delete_account": {
+          "deps": [
+            "src/endpoints/account_endpoints.py.log.info"
+          ]
+        },
+        "link_email": {
+          "deps": [
+            "src/endpoints/account_endpoints.py.log.info"
+          ]
+        },
+        "verification_email": {
+          "deps": [
+            "src/endpoints/account_endpoints.py.log.info"
+          ]
+        },
+        "delete_email": {
+          "deps": [
+            "src/endpoints/account_endpoints.py.log.info"
+          ]
+        }
+      }
+    }
+  },
+  "src/endpoints/auth_endpoints.py": {
+    "": {
+      "deps": [
+        "src/exceptions/service_exception_models.py.ErrorType.INVALID_LOGIN",
+        "src/utils/logger.py.create_logger",
+        "src/endpoints/auth_endpoints.py.router.post",
+        "src/exceptions/service_exception_models.py.ErrorType.INVALID_TOKEN",
+        "src/exceptions/service_exception_middleware.py.get_error_responses",
+        "src/exceptions/service_exception_models.py.ErrorType.INVALID_PASSWORD",
+        "src/exceptions/service_exception_models.py.ErrorType.LOGIN_ALREADY_EXISTS"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        },
+        "router": {
+          "deps": [],
+          "instance_of": "fastapi.APIRouter"
+        },
+        "login": {
+          "deps": [
+            "src/endpoints/auth_endpoints.py.log.info"
+          ]
+        },
+        "refresh": {
+          "deps": [
+            "src/endpoints/auth_endpoints.py.log.info"
+          ]
+        },
+        "registration": {
+          "deps": [
+            "src/endpoints/auth_endpoints.py.log.info"
+          ]
+        },
+        "free_try": {
+          "deps": [
+            "src/endpoints/auth_endpoints.py.log.info"
+          ]
+        }
+      }
+    }
+  },
+  "src/endpoints/core_endpoints.py": {
+    "": {
+      "deps": [
+        "src/utils/logger.py.create_logger",
+        "src/exceptions/service_exception_models.py.ErrorType.INVALID_TOKEN",
+        "src/endpoints/core_endpoints.py.router.get",
+        "src/exceptions/service_exception_middleware.py.get_error_responses"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        },
+        "router": {
+          "deps": [],
+          "instance_of": "fastapi.APIRouter"
+        },
+        "security": {
+          "deps": [],
+          "instance_of": "fastapi/security.HTTPBearer"
+        },
+        "homepage": {
+          "deps": [
+            "src/endpoints/core_endpoints.py.log.info"
+          ]
+        }
+      }
+    }
+  },
+  "src/endpoints/project_endpoints.py": {
+    "": {
+      "deps": [
+        "src/endpoints/project_endpoints.py.router.delete",
+        "src/endpoints/project_endpoints.py.router.patch",
+        "src/utils/logger.py.create_logger",
+        "src/exceptions/service_exception_models.py.ErrorType.INVALID_TOKEN",
+        "src/endpoints/project_endpoints.py.router.get",
+        "src/exceptions/service_exception_middleware.py.get_error_responses",
+        "src/endpoints/project_endpoints.py.router.post",
+        "src/exceptions/service_exception_models.py.ErrorType.PROJECT_NO_RIGHT_OR_NOT_FOUND"
+      ],
+      "objects": {
+        "security": {
+          "deps": [],
+          "instance_of": "fastapi/security.HTTPBearer"
+        },
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        },
+        "router": {
+          "deps": [],
+          "instance_of": "fastapi.APIRouter"
+        },
+        "get_project": {
+          "deps": [
+            "src/endpoints/project_endpoints.py.log.info"
+          ]
+        },
+        "create_project": {
+          "deps": [
+            "src/endpoints/project_endpoints.py.log.info",
+            "src/models/project_models.py.ProjectCreateData"
+          ]
+        },
+        "patch_project": {
+          "deps": [
+            "src/endpoints/project_endpoints.py.log.info"
+          ]
+        },
+        "delete_project": {
+          "deps": [
+            "src/endpoints/project_endpoints.py.log.info"
+          ]
+        },
+        "get_projects_list": {
+          "deps": [
+            "src/endpoints/project_endpoints.py.log.info"
+          ]
+        }
+      }
+    }
+  },
+  "src/endpoints/routers.py": {
+    "": {
+      "deps": [
+        "src/exceptions/service_exception_middleware.py.init_handlers",
+        "src/endpoints/routers.py.app.include_router",
+        "src/endpoints/routers.py.app.get",
+        "src/endpoints/routers.py.app.add_middleware"
+      ],
+      "objects": {
+        "lifespan": {
+          "deps": [
+            "src/services/manage/broker_manager.py.broker_repo_task.close",
+            "src/services/manage/broker_manager.py.broker_repo_task.connect",
+            "src/database/datamanager.py.DataManager.init_models",
+            "src/database/datamanager.py.DataManager.close"
+          ]
+        },
+        "app": {
+          "deps": [],
+          "instance_of": "fastapi.FastAPI"
+        },
+        "origins": {
+          "deps": []
+        },
+        "health": {
+          "deps": []
+        },
+        "health_redis": {
+          "deps": [
+            "src/infrastructure/redis/redis_control.py.Redis.check_redis"
+          ]
+        }
+      }
+    }
+  },
+  "src/exceptions/service_exception_descriptions.py": {
+    "": {
+      "deps": [
+        "src/exceptions/service_exception_models.py.ErrorType.EMAIL_ALREADY_TAKEN",
+        "src/exceptions/service_exception_models.py.ErrorType.INVALID_LOGIN",
+        "src/exceptions/service_exception_models.py.ErrorType.INVALID_TOKEN",
+        "src/exceptions/service_exception_models.py.ErrorType.EMAIL_SEND_CRASH",
+        "src/exceptions/service_exception_models.py.ErrorType.EMAIL_DONT_LINKED",
+        "src/exceptions/service_exception_models.py.ErrorType.EMAIL_INVALID_CODE",
+        "src/exceptions/service_exception_models.py.ErrorType.EMAIL_ALREADY_LINKED",
+        "src/exceptions/service_exception_models.py.ErrorType.ACCOUNT_NOT_FOUND",
+        "src/exceptions/service_exception_models.py.ErrorType.INVALID_PASSWORD",
+        "src/exceptions/service_exception_models.py.ErrorType.LOGIN_ALREADY_EXISTS",
+        "src/exceptions/service_exception_models.py.ErrorType.PROJECT_NO_RIGHT_OR_NOT_FOUND"
+      ],
+      "objects": {
+        "ERROR_DESCRIPTIONS": {
+          "deps": []
+        }
+      }
+    }
+  },
+  "src/exceptions/service_exception_middleware.py": {
+    "": {
+      "deps": [
+        "src/utils/logger.py.create_logger"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        },
+        "ERROR_SCHEMA": {
+          "deps": []
+        },
+        "get_error_responses": {
+          "deps": []
+        }
+      }
+    },
+    "init_handlers": {
+      "": {
+        "deps": [
+          "src/exceptions/service_exception_middleware.py.log.info"
+        ]
+      },
+      "methods": {
+        "service_exception_handler": [
+          "src/exceptions/service_exception_middleware.py.log.error"
+        ]
+      },
+      "attributes": []
+    }
+  },
+  "src/exceptions/service_exception_models.py": {
+    "ErrorType": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "INVALID_LOGIN",
+          "deps": []
+        },
+        {
+          "name": "EMAIL_INVALID_CODE",
+          "deps": []
+        },
+        {
+          "name": "EMAIL_DONT_LINKED",
+          "deps": []
+        },
+        {
+          "name": "EMAIL_ALREADY_LINKED",
+          "deps": []
+        },
+        {
+          "name": "LOGIN_ALREADY_EXISTS",
+          "deps": []
+        },
+        {
+          "name": "ACCOUNT_NOT_FOUND",
+          "deps": []
+        },
+        {
+          "name": "EMAIL_SEND_CRASH",
+          "deps": []
+        },
+        {
+          "name": "EMAIL_ALREADY_TAKEN",
+          "deps": []
+        },
+        {
+          "name": "PROJECT_NO_RIGHT_OR_NOT_FOUND",
+          "deps": []
+        },
+        {
+          "name": "INVALID_PASSWORD",
+          "deps": []
+        },
+        {
+          "name": "INVALID_TOKEN",
+          "deps": []
+        }
+      ]
+    },
+    "ErrorDetails": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "message",
+          "deps": []
+        },
+        {
+          "name": "details",
+          "deps": []
+        },
+        {
+          "name": "type",
+          "deps": []
+        }
+      ]
+    },
+    "ServiceException": {
+      "methods": {
+        "__init__": [
+          "src/exceptions/service_exception_models.py.ErrorDetails"
+        ],
+        "name": []
+      },
+      "attributes": [
+        {
+          "name": "status_code",
+          "deps": []
+        }
+      ]
+    },
+    "ClientError": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "status_code",
+          "deps": []
+        }
+      ]
+    },
+    "UnauthorizedError": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "status_code",
+          "deps": []
+        }
+      ]
+    },
+    "NotFoundError": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "status_code",
+          "deps": []
+        }
+      ]
+    },
+    "ConflictError": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "status_code",
+          "deps": []
+        }
+      ]
+    },
+    "InternalServerError": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "status_code",
+          "deps": []
+        }
+      ]
+    }
+  },
+  "src/infrastructure/broker/interface.py": {
+    "AbstractConnectionBroker": {
+      "methods": {
+        "connect": [],
+        "close": []
+      },
+      "attributes": [
+        {
+          "name": "channel",
+          "deps": []
+        },
+        {
+          "name": "queue",
+          "deps": []
+        },
+        {
+          "name": "exchange",
+          "deps": []
+        },
+        {
+          "name": "connection",
+          "deps": []
+        }
+      ]
+    }
+  },
+  "src/infrastructure/broker/manager.py": {
+    "": {
+      "deps": [
+        "src/utils/logger.py.create_logger"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        }
+      }
+    },
+    "ConnectionBrokerManager": {
+      "methods": {
+        "__init__": [
+          "src/utils/config.py.CONFIG.broker.host",
+          "src/utils/config.py.CONFIG.broker.password",
+          "src/utils/config.py.CONFIG.broker.user",
+          "src/utils/config.py.CONFIG.broker.exchange",
+          "src/utils/config.py.CONFIG.broker"
+        ],
+        "connect": [
+          "src/infrastructure/broker/manager.py.log.info"
+        ],
+        "close": [
+          "src/infrastructure/broker/manager.py.log.info"
+        ],
+        "_create_queue": [
+          "src/infrastructure/broker/manager.py.log.info"
+        ],
+        "_bind_exchange_as_queue": [
+          "src/infrastructure/broker/manager.py.log.info"
+        ]
+      },
+      "attributes": []
+    }
+  },
+  "src/infrastructure/broker/producer.py": {
+    "": {
+      "deps": [
+        "src/utils/logger.py.create_logger"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        }
+      }
+    },
+    "Producer": {
+      "methods": {
+        "__init__": [],
+        "publish": [
+          "src/infrastructure/broker/producer.py.log.info",
+          "src/infrastructure/broker/producer.py.log.error"
+        ]
+      },
+      "attributes": []
+    }
+  },
+  "src/infrastructure/email/email_service.py": {
+    "": {
+      "deps": [
+        "src/utils/logger.py.create_logger",
+        "src/infrastructure/email/email_service.py.EmailService"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        },
+        "email_service": {
+          "deps": [
+            "src/infrastructure/email/email_service.py.EmailService"
+          ],
+          "instance_of": "src/infrastructure/email/email_service.py.EmailService"
+        }
+      }
+    },
+    "EmailServiceException": {
+      "methods": {
+        "__init__": [],
+        "name": []
+      },
+      "attributes": []
+    },
+    "EmailService": {
+      "methods": {
+        "__init__": [
+          "src/utils/config.py.CONFIG.postbox.secret_key",
+          "src/utils/config.py.CONFIG.postbox",
+          "src/utils/config.py.CONFIG.postbox.key_id",
+          "src/utils/config.py.CONFIG.postbox.sender_email"
+        ],
+        "_create_verification_code_template": [
+          "src/models/account_models.py.VerifyEmailType.link",
+          "src/models/account_models.py.VerifyEmailType.unlink"
+        ],
+        "_sync_send_email": [
+          "src/infrastructure/email/email_service.py.log.error",
+          "src/infrastructure/email/email_service.py.EmailServiceException",
+          "src/infrastructure/email/email_service.py.log.info"
+        ],
+        "send_email": []
+      },
+      "attributes": []
+    }
+  },
+  "src/infrastructure/object_storage/interface.py": {
+    "AbstractStorage": {
+      "methods": {
+        "upload_fileobj": [],
+        "delete_file": [],
+        "upload_file_with_path": []
+      },
+      "attributes": []
+    }
+  },
+  "src/infrastructure/object_storage/object_storage_manager.py": {
+    "": {
+      "deps": [
+        "src/utils/logger.py.create_logger"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        }
+      }
+    },
+    "ObjectStorageManager": {
+      "methods": {
+        "__init__": [
+          "src/utils/config.py.CONFIG.s3.SECRET_KEY",
+          "src/utils/config.py.CONFIG.s3",
+          "src/utils/config.py.CONFIG.s3.port",
+          "src/utils/config.py.CONFIG.s3.ACCESS_ID",
+          "src/utils/config.py.CONFIG.s3.host",
+          "src/utils/config.py.CONFIG.s3.BUCKET"
+        ],
+        "upload_fileobj": [
+          "src/infrastructure/object_storage/object_storage_manager.py.log.error",
+          "src/infrastructure/object_storage/object_storage_manager.py.log.info"
+        ],
+        "upload_file_with_path": [
+          "src/infrastructure/object_storage/object_storage_manager.py.log.error",
+          "src/infrastructure/object_storage/object_storage_manager.py.log.info"
+        ],
+        "delete_file": [
+          "src/infrastructure/object_storage/object_storage_manager.py.log.error",
+          "src/infrastructure/object_storage/object_storage_manager.py.log.info"
+        ]
+      },
+      "attributes": []
+    }
+  },
+  "src/infrastructure/profile/profile.py": {
+    "": {
+      "deps": [
+        "src/utils/logger.py.create_logger"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        }
+      }
+    },
+    "profile_time": {
+      "methods": {
+        "wrapper": [
+          "src/infrastructure/profile/profile.py.log.info"
+        ]
+      },
+      "attributes": []
+    }
+  },
+  "src/infrastructure/redis/interface.py": {
+    "AbstractRedisConnector": {
+      "methods": {
+        "set_verification_code": [],
+        "get_verification_code": [],
+        "delete_verification_code": [],
+        "check_redis": [],
+        "create_guest_account": []
+      },
+      "attributes": []
+    }
+  },
+  "src/infrastructure/redis/redis_control.py": {
+    "": {
+      "deps": [
+        "src/utils/config.py.CONFIG.redis.port",
+        "src/utils/logger.py.create_logger",
+        "src/utils/config.py.CONFIG.redis.host",
+        "src/utils/config.py.CONFIG.redis.db",
+        "src/infrastructure/redis/redis_control.py.RedisConnector",
+        "src/utils/config.py.CONFIG.redis"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        },
+        "Redis": {
+          "deps": [
+            "src/infrastructure/redis/redis_control.py.RedisConnector"
+          ],
+          "instance_of": "src/infrastructure/redis/redis_control.py.RedisConnector"
+        }
+      }
+    },
+    "RedisConnector": {
+      "methods": {
+        "set_verification_code": [
+          "src/infrastructure/redis/redis_control.py.log.info"
+        ],
+        "get_verification_code": [],
+        "delete_verification_code": [
+          "src/infrastructure/redis/redis_control.py.log.info"
+        ],
+        "check_redis": [
+          "src/infrastructure/redis/redis_control.py.log.info"
+        ],
+        "create_guest_account": [
+          "src/infrastructure/redis/redis_control.py.log.info"
+        ]
+      },
+      "attributes": []
+    }
+  },
+  "src/infrastructure/security/security.py": {
+    "": {
+      "deps": [
+        "src/utils/logger.py.create_logger"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        }
+      }
+    },
+    "Security": {
+      "methods": {
+        "_sync_generate_code": [
+          "src/infrastructure/security/security.py.log.error"
+        ],
+        "generate_code": [
+          "src/infrastructure/security/security.py.Security._sync_generate_code"
+        ]
+      },
+      "attributes": []
+    }
+  },
+  "src/models/account_models.py": {
+    "AccountFullData": {
+      "methods": {
+        "model_validate": []
+      },
+      "attributes": [
+        {
+          "name": "email",
+          "deps": []
+        },
+        {
+          "name": "name",
+          "deps": []
+        },
+        {
+          "name": "login",
+          "deps": []
+        },
+        {
+          "name": "surname",
+          "deps": []
+        },
+        {
+          "name": "id",
+          "deps": []
+        }
+      ]
+    },
+    "AccountData": {
+      "methods": {
+        "model_validate": []
+      },
+      "attributes": [
+        {
+          "name": "surname",
+          "deps": []
+        },
+        {
+          "name": "id",
+          "deps": []
+        },
+        {
+          "name": "name",
+          "deps": []
+        }
+      ]
+    },
+    "AccountCreateData": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "login",
+          "deps": []
+        },
+        {
+          "name": "hashed_password",
+          "deps": []
+        },
+        {
+          "name": "surname",
+          "deps": []
+        },
+        {
+          "name": "name",
+          "deps": []
+        }
+      ]
+    },
+    "AccountEncodeData": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "id",
+          "deps": []
+        },
+        {
+          "name": "endDate",
+          "deps": []
+        },
+        {
+          "name": "surname",
+          "deps": []
+        },
+        {
+          "name": "user_session",
+          "deps": []
+        },
+        {
+          "name": "startDate",
+          "deps": []
+        },
+        {
+          "name": "name",
+          "deps": []
+        }
+      ]
+    },
+    "AccountPatchData": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "name",
+          "deps": []
+        },
+        {
+          "name": "surname",
+          "deps": []
+        }
+      ]
+    },
+    "VerifyEmailType": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "unlink",
+          "deps": []
+        },
+        {
+          "name": "link",
+          "deps": []
+        }
+      ]
+    }
+  },
+  "src/models/auth_models.py": {
+    "AuthResponseData": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "token_type",
+          "deps": []
+        },
+        {
+          "name": "refresh_token",
+          "deps": []
+        },
+        {
+          "name": "access_token",
+          "deps": []
+        }
+      ]
+    },
+    "RefreshData": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "refresh_token",
+          "deps": []
+        }
+      ]
+    },
+    "LoginData": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "login",
+          "deps": []
+        },
+        {
+          "name": "password",
+          "deps": []
+        }
+      ]
+    },
+    "RegistrationData": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "login",
+          "deps": []
+        },
+        {
+          "name": "password",
+          "deps": []
+        },
+        {
+          "name": "surname",
+          "deps": []
+        },
+        {
+          "name": "name",
+          "deps": []
+        }
+      ]
+    }
+  },
+  "src/models/core_models.py": {
+    "HomePageData": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "projects",
+          "deps": []
+        },
+        {
+          "name": "user",
+          "deps": []
+        }
+      ]
+    }
+  },
+  "src/models/project_models.py": {
+    "ArchitectureModel": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "data",
+          "deps": []
+        },
+        {
+          "name": "endpoints",
+          "deps": []
+        },
+        {
+          "name": "requirements",
+          "deps": []
+        }
+      ]
+    },
+    "ProjectDataLite": {
+      "methods": {
+        "model_validate": []
+      },
+      "attributes": [
+        {
+          "name": "description",
+          "deps": []
+        },
+        {
+          "name": "name",
+          "deps": []
+        },
+        {
+          "name": "id",
+          "deps": []
+        },
+        {
+          "name": "picture_url",
+          "deps": []
+        }
+      ]
+    },
+    "ProjectData": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "name",
+          "deps": []
+        },
+        {
+          "name": "description",
+          "deps": []
+        },
+        {
+          "name": "architecture",
+          "deps": []
+        },
+        {
+          "name": "id",
+          "deps": []
+        },
+        {
+          "name": "picture_url",
+          "deps": []
+        }
+      ]
+    },
+    "ProjectCreateData": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "description",
+          "deps": []
+        },
+        {
+          "name": "name",
+          "deps": []
+        }
+      ]
+    },
+    "ProjectPatchData": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "description",
+          "deps": []
+        },
+        {
+          "name": "name",
+          "deps": []
+        },
+        {
+          "name": "architecture",
+          "deps": []
+        }
+      ]
+    },
+    "ProjectListData": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "total",
+          "deps": []
+        },
+        {
+          "name": "data",
+          "deps": []
+        }
+      ]
+    },
+    "ProjectListDataLite": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "total",
+          "deps": []
+        },
+        {
+          "name": "data",
+          "deps": []
+        }
+      ]
+    }
+  },
+  "src/services/account_service.py": {
+    "": {
+      "deps": [
+        "src/utils/logger.py.create_logger"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        },
+        "EXPIRE_VERIFICATION_CODE_MINUTES": {
+          "deps": []
+        }
+      }
+    },
+    "AccountService": {
+      "methods": {
+        "get_account_by_id": [
+          "src/exceptions/service_exception_models.py.ErrorType.INVALID_TOKEN",
+          "src/services/account_service.py.log.error",
+          "src/models/account_models.py.AccountFullData.model_validate",
+          "src/database/accounts.py.Account.get_account_by_id",
+          "src/exceptions/service_exception_models.py.UnauthorizedError"
+        ],
+        "patch_account_by_id": [
+          "src/exceptions/service_exception_models.py.ErrorType.INVALID_TOKEN",
+          "src/services/account_service.py.log.error",
+          "src/models/account_models.py.AccountFullData.model_validate",
+          "src/database/accounts.py.Account.patch_account_by_id",
+          "src/exceptions/service_exception_models.py.UnauthorizedError"
+        ],
+        "delete_account_by_id": [
+          "src/services/account_service.py.log.error",
+          "src/exceptions/service_exception_models.py.ErrorType.INVALID_TOKEN",
+          "src/database/accounts.py.Account.delete_account_by_id",
+          "src/exceptions/service_exception_models.py.UnauthorizedError"
+        ],
+        "link_email": [
+          "src/infrastructure/security/security.py.Security.generate_code",
+          "src/exceptions/service_exception_models.py.ClientError",
+          "src/exceptions/service_exception_models.py.ErrorType.EMAIL_ALREADY_TAKEN",
+          "src/infrastructure/email/email_service.py.email_service.send_email",
+          "src/exceptions/service_exception_models.py.InternalServerError",
+          "src/exceptions/service_exception_models.py.ErrorType.INVALID_TOKEN",
+          "src/exceptions/service_exception_models.py.ErrorType.EMAIL_SEND_CRASH",
+          "src/services/account_service.py.log.info",
+          "src/exceptions/service_exception_models.py.ErrorType.EMAIL_ALREADY_LINKED",
+          "src/infrastructure/redis/redis_control.py.Redis.set_verification_code",
+          "src/database/accounts.py.Account.is_email_exists",
+          "src/services/account_service.py.log.error",
+          "src/models/account_models.py.VerifyEmailType.link",
+          "src/database/accounts.py.Account.get_account_by_id",
+          "src/exceptions/service_exception_models.py.UnauthorizedError"
+        ],
+        "verify_email": [
+          "src/exceptions/service_exception_models.py.ErrorType.INVALID_TOKEN",
+          "src/infrastructure/redis/redis_control.py.Redis.delete_verification_code",
+          "src/exceptions/service_exception_models.py.ErrorType.EMAIL_INVALID_CODE",
+          "src/database/accounts.py.Account.delete_email_from_account",
+          "src/database/accounts.py.Account.add_email_to_account",
+          "src/models/account_models.py.VerifyEmailType.unlink",
+          "src/services/account_service.py.log.error",
+          "src/models/account_models.py.VerifyEmailType.link",
+          "src/infrastructure/redis/redis_control.py.Redis.get_verification_code",
+          "src/exceptions/service_exception_models.py.UnauthorizedError"
+        ],
+        "delete_email": [
+          "src/infrastructure/security/security.py.Security.generate_code",
+          "src/exceptions/service_exception_models.py.ClientError",
+          "src/infrastructure/email/email_service.py.email_service.send_email",
+          "src/exceptions/service_exception_models.py.InternalServerError",
+          "src/exceptions/service_exception_models.py.ErrorType.INVALID_TOKEN",
+          "src/exceptions/service_exception_models.py.ErrorType.EMAIL_SEND_CRASH",
+          "src/exceptions/service_exception_models.py.ErrorType.EMAIL_DONT_LINKED",
+          "src/models/account_models.py.VerifyEmailType.unlink",
+          "src/infrastructure/redis/redis_control.py.Redis.set_verification_code",
+          "src/services/account_service.py.log.error",
+          "src/database/accounts.py.Account.get_account_by_id",
+          "src/exceptions/service_exception_models.py.UnauthorizedError"
+        ]
+      },
+      "attributes": []
+    }
+  },
+  "src/services/auth_service.py": {
+    "": {
+      "deps": [
+        "src/utils/config.py.CONFIG.server.cryptothread",
+        "src/utils/logger.py.create_logger",
+        "src/utils/config.py.CONFIG.server"
+      ],
+      "objects": {
+        "JWT": {
+          "deps": [],
+          "instance_of": "jwt.PyJWT"
+        },
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        },
+        "argon2_hasher": {
+          "deps": [],
+          "instance_of": "argon2.PasswordHasher"
+        },
+        "argon_executor": {
+          "deps": [],
+          "instance_of": "concurrent/futures.ThreadPoolExecutor"
+        }
+      }
+    },
+    "AuthService": {
+      "methods": {
+        "registration": [
+          "src/database/accounts.py.Account.create_account",
+          "src/models/account_models.py.AccountData.model_validate",
+          "src/services/auth_service.py.log.error",
+          "src/services/auth_service.py.AuthService.hash_password",
+          "src/models/account_models.py.AccountCreateData",
+          "src/exceptions/service_exception_models.py.ConflictError",
+          "src/exceptions/service_exception_models.py.ErrorType.LOGIN_ALREADY_EXISTS",
+          "src/database/accounts.py.Account.is_login_exists"
+        ],
+        "verify_token": [
+          "src/utils/config.py.CONFIG.auth",
+          "src/services/auth_service.py.AuthService.check_token",
+          "src/services/auth_service.py.log.error",
+          "src/exceptions/service_exception_models.py.ErrorType.INVALID_TOKEN",
+          "src/utils/config.py.CONFIG.auth.ACCESS_SECRET_KEY",
+          "src/exceptions/service_exception_models.py.UnauthorizedError"
+        ],
+        "check_token": [
+          "src/services/auth_service.py.AuthService.decode_token",
+          "src/services/auth_service.py.log.error",
+          "src/exceptions/service_exception_models.py.ErrorType.INVALID_TOKEN",
+          "src/exceptions/service_exception_models.py.UnauthorizedError"
+        ],
+        "login": [
+          "src/utils/config.py.CONFIG.auth.ACCESS_TOKEN_EXPIRE_MINUTES",
+          "src/utils/config.py.CONFIG.auth",
+          "src/models/account_models.py.AccountData",
+          "src/utils/config.py.CONFIG.auth.REFRESH_TOKEN_EXPIRE_DAYS",
+          "src/database/accounts.py.Account.get_account_by_login",
+          "src/models/auth_models.py.AuthResponseData",
+          "src/services/auth_service.py.log.error",
+          "src/exceptions/service_exception_models.py.UnauthorizedError",
+          "src/exceptions/service_exception_models.py.ErrorType.INVALID_LOGIN",
+          "src/services/auth_service.py.AuthService.encode_to_token",
+          "src/utils/config.py.CONFIG.auth.ACCESS_SECRET_KEY",
+          "src/utils/config.py.CONFIG.auth.REFRESH_SECRET_KEY",
+          "src/services/auth_service.py.AuthService.verify_password"
+        ],
+        "refresh": [
+          "src/utils/config.py.CONFIG.auth.ACCESS_TOKEN_EXPIRE_MINUTES",
+          "src/utils/config.py.CONFIG.auth",
+          "src/services/auth_service.py.AuthService.check_token",
+          "src/models/account_models.py.AccountData",
+          "src/utils/config.py.CONFIG.auth.REFRESH_TOKEN_EXPIRE_DAYS",
+          "src/exceptions/service_exception_models.py.ErrorType.INVALID_TOKEN",
+          "src/services/auth_service.py.log.error",
+          "src/models/auth_models.py.AuthResponseData",
+          "src/services/auth_service.py.AuthService.encode_to_token",
+          "src/utils/config.py.CONFIG.auth.ACCESS_SECRET_KEY",
+          "src/utils/config.py.CONFIG.auth.REFRESH_SECRET_KEY",
+          "src/database/accounts.py.Account.get_account_by_id",
+          "src/exceptions/service_exception_models.py.UnauthorizedError"
+        ],
+        "free_try": [
+          "src/utils/config.py.CONFIG.auth.ACCESS_TOKEN_EXPIRE_MINUTES",
+          "src/utils/config.py.CONFIG.auth",
+          "src/models/account_models.py.AccountData",
+          "src/utils/config.py.CONFIG.auth.REFRESH_TOKEN_EXPIRE_DAYS",
+          "src/models/auth_models.py.AuthResponseData",
+          "src/services/auth_service.py.AuthService.encode_to_token",
+          "src/infrastructure/redis/redis_control.py.Redis.create_guest_account",
+          "src/utils/config.py.CONFIG.auth.ACCESS_SECRET_KEY",
+          "src/utils/config.py.CONFIG.auth.REFRESH_SECRET_KEY"
+        ],
+        "encode_to_token": [
+          "src/utils/config.py.CONFIG.auth.ALGORITHM",
+          "src/services/auth_service.py.JWT.encode",
+          "src/utils/config.py.CONFIG.auth"
+        ],
+        "decode_token": [
+          "src/services/auth_service.py.JWT.decode",
+          "src/models/account_models.py.AccountEncodeData",
+          "src/utils/config.py.CONFIG.auth.ALGORITHM",
+          "src/utils/config.py.CONFIG.auth"
+        ],
+        "hash_password": [
+          "src/services/auth_service.py.AuthService._sync_hash"
+        ],
+        "verify_password": [
+          "src/services/auth_service.py.log.error",
+          "src/exceptions/service_exception_models.py.ErrorType.INVALID_PASSWORD",
+          "src/exceptions/service_exception_models.py.UnauthorizedError",
+          "src/services/auth_service.py.AuthService._sync_verify"
+        ]
+      },
+      "attributes": []
+    }
+  },
+  "src/services/core_service.py": {
+    "": {
+      "deps": [
+        "src/utils/logger.py.create_logger"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        }
+      }
+    },
+    "CoreService": {
+      "methods": {
+        "get_homepage": [
+          "src/models/account_models.py.AccountData.model_validate",
+          "src/database/projects.py.Project.get_project_list_by_account_id",
+          "src/services/account_service.py.AccountService.get_account_by_id",
+          "src/models/project_models.py.ProjectDataLite.model_validate",
+          "src/models/project_models.py.ProjectListDataLite",
+          "src/models/core_models.py.HomePageData"
+        ]
+      },
+      "attributes": []
+    }
+  },
+  "src/services/project_service.py": {
+    "": {
+      "deps": [
+        "src/utils/logger.py.create_logger"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        }
+      }
+    },
+    "ProjectService": {
+      "methods": {
+        "get_project_by_id": [
+          "src/models/project_models.py.ArchitectureModel",
+          "src/services/project_service.py.log.error",
+          "src/exceptions/service_exception_models.py.NotFoundError",
+          "src/database/projects.py.Project.get_project_by_id",
+          "src/models/project_models.py.ProjectData"
+        ],
+        "create_project": [
+          "src/models/project_models.py.ArchitectureModel",
+          "src/services/manage/object_manager.py.object_manager.upload_repozitory",
+          "src/services/manage/broker_manager.py.broker_manager.publish",
+          "src/models/project_models.py.ProjectData",
+          "src/database/projects.py.Project.create_project"
+        ],
+        "update_project": [
+          "src/models/project_models.py.ArchitectureModel",
+          "src/services/project_service.py.log.error",
+          "src/exceptions/service_exception_models.py.NotFoundError",
+          "src/database/projects.py.Project.patch_project_by_id",
+          "src/models/project_models.py.ProjectData"
+        ],
+        "delete_project": [
+          "src/database/projects.py.Project.delete_project",
+          "src/services/project_service.py.log.error",
+          "src/exceptions/service_exception_models.py.NotFoundError"
+        ],
+        "get_projects_by_account_id": [
+          "src/database/projects.py.Project.get_project_list_by_account_id",
+          "src/models/project_models.py.ProjectDataLite.model_validate"
+        ]
+      },
+      "attributes": []
+    }
+  },
+  "src/services/manage/broker_manager.py": {
+    "": {
+      "deps": [
+        "src/infrastructure/broker/manager.py.ConnectionBrokerManager",
+        "src/utils/logger.py.create_logger",
+        "src/services/manage/broker_manager.py.BrokerManager"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        },
+        "broker_repo_task": {
+          "deps": [
+            "src/infrastructure/broker/manager.py.ConnectionBrokerManager"
+          ],
+          "instance_of": "src/infrastructure/broker/manager.py.ConnectionBrokerManager"
+        },
+        "broker_manager": {
+          "deps": [
+            "src/services/manage/broker_manager.py.BrokerManager"
+          ],
+          "instance_of": "src/services/manage/broker_manager.py.BrokerManager"
+        }
+      }
+    },
+    "BrokerManager": {
+      "methods": {
+        "__init__": [
+          "src/infrastructure/broker/producer.py.Producer"
+        ],
+        "publish": [
+          "src/services/manage/broker_manager.py.log.error"
+        ]
+      },
+      "attributes": []
+    }
+  },
+  "src/services/manage/object_manager.py": {
+    "": {
+      "deps": [
+        "src/utils/logger.py.create_logger",
+        "src/infrastructure/object_storage/object_storage_manager.py.ObjectStorageManager",
+        "src/services/manage/object_manager.py.ObjectManager"
+      ],
+      "objects": {
+        "log": {
+          "deps": [
+            "src/utils/logger.py.create_logger"
+          ],
+          "instance_of": "src/utils/logger.py.create_logger"
+        },
+        "s3_repo": {
+          "deps": [
+            "src/infrastructure/object_storage/object_storage_manager.py.ObjectStorageManager"
+          ],
+          "instance_of": "src/infrastructure/object_storage/object_storage_manager.py.ObjectStorageManager"
+        },
+        "object_manager": {
+          "deps": [
+            "src/services/manage/object_manager.py.ObjectManager"
+          ],
+          "instance_of": "src/services/manage/object_manager.py.ObjectManager"
+        }
+      }
+    },
+    "ObjectManager": {
+      "methods": {
+        "__init__": [],
+        "generate_key": [],
+        "upload": [
+          "src/services/manage/object_manager.py.log.error"
+        ],
+        "delete": [],
+        "upload_repozitory": []
+      },
+      "attributes": []
+    }
+  },
+  "src/utils/config.py": {
+    "": {
+      "deps": [],
+      "objects": {
+        "load_config": {
+          "deps": [
+            "src/utils/config.py.Config",
+            "src/utils/config.py.ConfigServer",
+            "src/utils/config.py.ConfigS3",
+            "src/utils/config.py.ConfigPostbox",
+            "src/utils/config.py.ConfigGRPC",
+            "src/utils/config.py.ConfigRedis",
+            "src/utils/config.py.ConfigAuth",
+            "src/utils/config.py.ConfigBroker",
+            "src/utils/config.py.ConfigEmail",
+            "src/utils/config.py.ConfigDB"
+          ]
+        },
+        "CONFIG": {
+          "deps": [],
+          "instance_of": "load_config"
+        }
+      }
+    },
+    "ConfigAuth": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "REFRESH_SECRET_KEY",
+          "deps": []
+        },
+        {
+          "name": "REFRESH_TOKEN_EXPIRE_DAYS",
+          "deps": []
+        },
+        {
+          "name": "ACCESS_SECRET_KEY",
+          "deps": []
+        },
+        {
+          "name": "ALGORITHM",
+          "deps": []
+        },
+        {
+          "name": "ACCESS_TOKEN_EXPIRE_MINUTES",
+          "deps": []
+        }
+      ]
+    },
+    "ConfigServer": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "uvicorn_workers",
+          "deps": []
+        },
+        {
+          "name": "host",
+          "deps": []
+        },
+        {
+          "name": "cryptothread",
+          "deps": []
+        },
+        {
+          "name": "port",
+          "deps": []
+        }
+      ]
+    },
+    "ConfigDB": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "password",
+          "deps": []
+        },
+        {
+          "name": "host",
+          "deps": []
+        },
+        {
+          "name": "name",
+          "deps": []
+        },
+        {
+          "name": "port",
+          "deps": []
+        },
+        {
+          "name": "echo",
+          "deps": []
+        },
+        {
+          "name": "user",
+          "deps": []
+        }
+      ]
+    },
+    "ConfigBroker": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "password",
+          "deps": []
+        },
+        {
+          "name": "host",
+          "deps": []
+        },
+        {
+          "name": "user",
+          "deps": []
+        },
+        {
+          "name": "exchange",
+          "deps": []
+        },
+        {
+          "name": "queue_result",
+          "deps": []
+        },
+        {
+          "name": "queue_task",
+          "deps": []
+        }
+      ]
+    },
+    "ConfigS3": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "SECRET_KEY",
+          "deps": []
+        },
+        {
+          "name": "ACCESS_ID",
+          "deps": []
+        },
+        {
+          "name": "host",
+          "deps": []
+        },
+        {
+          "name": "BUCKET",
+          "deps": []
+        },
+        {
+          "name": "port_console",
+          "deps": []
+        },
+        {
+          "name": "port",
+          "deps": []
+        }
+      ]
+    },
+    "ConfigGRPC": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "host",
+          "deps": []
+        },
+        {
+          "name": "port",
+          "deps": []
+        }
+      ]
+    },
+    "ConfigEmail": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "password",
+          "deps": []
+        },
+        {
+          "name": "login",
+          "deps": []
+        }
+      ]
+    },
+    "ConfigPostbox": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "key_id",
+          "deps": []
+        },
+        {
+          "name": "secret_key",
+          "deps": []
+        },
+        {
+          "name": "sender_email",
+          "deps": []
+        }
+      ]
+    },
+    "ConfigRedis": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "db",
+          "deps": []
+        },
+        {
+          "name": "port",
+          "deps": []
+        },
+        {
+          "name": "host",
+          "deps": []
+        }
+      ]
+    },
+    "Config": {
+      "methods": {},
+      "attributes": [
+        {
+          "name": "redis",
+          "deps": []
+        },
+        {
+          "name": "grpc",
+          "deps": []
+        },
+        {
+          "name": "s3",
+          "deps": []
+        },
+        {
+          "name": "postbox",
+          "deps": []
+        },
+        {
+          "name": "auth",
+          "deps": []
+        },
+        {
+          "name": "email",
+          "deps": []
+        },
+        {
+          "name": "server",
+          "deps": []
+        },
+        {
+          "name": "broker",
+          "deps": []
+        },
+        {
+          "name": "db",
+          "deps": []
+        }
+      ]
+    }
+  },
+  "src/utils/logger.py": {
+    "": {
+      "deps": [],
+      "objects": {
+        "create_logger": {
+          "deps": []
+        }
+      }
+    }
+  }
+}
