@@ -1,0 +1,521 @@
+{
+  "body": [
+    {
+      "file": {
+        "name": "main",
+        "path": "",
+        "path_parts": [],
+        "imports": [
+          {
+            "object": "SomeClass",
+            "asname": "SC",
+            "path": "logic.logic",
+            "from_lib": false
+          },
+          {
+            "object": "CreateData",
+            "path": "models",
+            "from_lib": false
+          },
+          {
+            "object": "EnumTypes",
+            "path": "models",
+            "from_lib": false
+          }
+        ],
+        "calls": [
+          {
+            "object": "SomeClass.__init__",
+            "args": []
+          },
+          {
+            "object": "SomeClass.create",
+            "args": [
+              {
+                "name": "create_data",
+                "value": {
+                  "type": "call",
+                  "object": "CreateData.__init__",
+                  "args": [
+                    {
+                      "name": "",
+                      "value": "Имя"
+                    },
+                    {
+                      "name": "",
+                      "value": 5
+                    },
+                    {
+                      "name": "",
+                      "value": {
+                        "type": "value",
+                        "object": "EnumTypes.red"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "file": {
+        "name": "models",
+        "path": "",
+        "path_parts": [],
+        "imports": [
+          {
+            "object": "dataclass",
+            "path": "dataclasses",
+            "from_lib": true
+          },
+          {
+            "object": "Enum",
+            "path": "enum",
+            "from_lib": true
+          }
+        ],
+        "classes": [
+          {
+            "name": "EnumTypes",
+            "parent": "Enum",
+            "type": "enum",
+            "fields": [
+              {
+                "name": "red",
+                "type": "str",
+                "value": "RED"
+              },
+              {
+                "name": "blue",
+                "type": "str",
+                "value": "BLUE"
+              }
+            ],
+            "methods": []
+          },
+          {
+            "name": "Cell",
+            "parent": null,
+            "type": "dataclass",
+            "fields": [
+              {
+                "name": "name",
+                "type": "str",
+                "value": null
+              },
+              {
+                "name": "count",
+                "type": "int",
+                "value": null
+              },
+              {
+                "name": "x",
+                "type": "int",
+                "value": null
+              },
+              {
+                "name": "y",
+                "type": "int",
+                "value": null
+              },
+              {
+                "name": "type",
+                "type": "EnumTypes",
+                "value": null
+              }
+            ],
+            "methods": []
+          },
+          {
+            "name": "Data",
+            "parent": null,
+            "type": "dataclass",
+            "fields": [
+              {
+                "name": "points",
+                "type": {
+                  "parent": "list",
+                  "child": "Cell"
+                },
+                "value": null
+              },
+              {
+                "name": "score",
+                "type": "int",
+                "value": null
+              }
+            ],
+            "methods": []
+          },
+          {
+            "name": "CreateData",
+            "parent": null,
+            "type": "dataclass",
+            "fields": [
+              {
+                "name": "name",
+                "type": "str",
+                "value": null
+              },
+              {
+                "name": "count",
+                "type": "int",
+                "value": null
+              },
+              {
+                "name": "type",
+                "type": "EnumTypes",
+                "value": null
+              }
+            ],
+            "methods": []
+          }
+        ]
+      }
+    },
+    {
+      "file": {
+        "name": "interface",
+        "path": "",
+        "path_parts": [],
+        "imports": [
+          {
+            "object": "ABC",
+            "path": "abc",
+            "from_lib": true
+          },
+          {
+            "object": "abstractmethod",
+            "path": "abc",
+            "from_lib": true
+          },
+          {
+            "object": "CreateData",
+            "path": "models",
+            "from_lib": false
+          }
+        ],
+        "classes": [
+          {
+            "name": "SomeInterface",
+            "parent": "ABC",
+            "type": "abstract",
+            "fields": [],
+            "methods": [
+              {
+                "name": "create",
+                "args": [
+                  {
+                    "name": "create_data",
+                    "type": "CreateData",
+                    "value": null
+                  }
+                ],
+                "return_type": null,
+                "metrics": {
+                  "cyclomatic_complexity": 1,
+                  "cognitive_complexity": 0,
+                  "max_nesting": 0,
+                  "lines_of_code": 2,
+                  "statement_count": 1,
+                  "return_count": 0,
+                  "raise_count": 0,
+                  "await_count": 0,
+                  "broad_exception_handlers": 0,
+                  "raised_exceptions": [],
+                  "caught_exceptions": [],
+                  "self_attribute_accesses": [],
+                  "is_async": false
+                }
+              },
+              {
+                "name": "clear",
+                "args": [],
+                "return_type": null,
+                "metrics": {
+                  "cyclomatic_complexity": 1,
+                  "cognitive_complexity": 0,
+                  "max_nesting": 0,
+                  "lines_of_code": 2,
+                  "statement_count": 1,
+                  "return_count": 0,
+                  "raise_count": 0,
+                  "await_count": 0,
+                  "broad_exception_handlers": 0,
+                  "raised_exceptions": [],
+                  "caught_exceptions": [],
+                  "self_attribute_accesses": [],
+                  "is_async": false
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "file": {
+        "name": "logic",
+        "path": "logic",
+        "path_parts": [
+          "logic"
+        ],
+        "imports": [
+          {
+            "object": "get_random_x_y",
+            "path": "logic.generator",
+            "from_lib": false
+          },
+          {
+            "object": "SomeInterface",
+            "path": "interface",
+            "from_lib": false
+          },
+          {
+            "object": "CreateData",
+            "path": "models",
+            "from_lib": false
+          },
+          {
+            "object": "Data",
+            "path": "models",
+            "from_lib": false
+          },
+          {
+            "object": "Cell",
+            "path": "models",
+            "from_lib": false
+          }
+        ],
+        "classes": [
+          {
+            "name": "SomeClass",
+            "parent": "SomeInterface",
+            "type": "class",
+            "fields": [
+              {
+                "name": "data",
+                "type": "Data",
+                "value": "Data([], 0)"
+              }
+            ],
+            "methods": [
+              {
+                "name": "__init__",
+                "args": [],
+                "return_type": null,
+                "metrics": {
+                  "cyclomatic_complexity": 1,
+                  "cognitive_complexity": 0,
+                  "max_nesting": 0,
+                  "lines_of_code": 2,
+                  "statement_count": 1,
+                  "return_count": 0,
+                  "raise_count": 0,
+                  "await_count": 0,
+                  "broad_exception_handlers": 0,
+                  "raised_exceptions": [],
+                  "caught_exceptions": [],
+                  "self_attribute_accesses": [
+                    "data"
+                  ],
+                  "is_async": false
+                },
+                "calls": [
+                  {
+                    "object": "Data.__init__",
+                    "args": [
+                      {
+                        "name": "",
+                        "value": "[]"
+                      },
+                      {
+                        "name": "",
+                        "value": 0
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "create",
+                "args": [
+                  {
+                    "name": "create_data",
+                    "type": "CreateData",
+                    "value": null
+                  }
+                ],
+                "return_type": null,
+                "metrics": {
+                  "cyclomatic_complexity": 1,
+                  "cognitive_complexity": 0,
+                  "max_nesting": 0,
+                  "lines_of_code": 8,
+                  "statement_count": 3,
+                  "return_count": 0,
+                  "raise_count": 0,
+                  "await_count": 0,
+                  "broad_exception_handlers": 0,
+                  "raised_exceptions": [],
+                  "caught_exceptions": [],
+                  "self_attribute_accesses": [
+                    "data"
+                  ],
+                  "is_async": false
+                },
+                "calls": [
+                  {
+                    "object": "get_random_x_y",
+                    "args": []
+                  },
+                  {
+                    "object": "Cell.__init__",
+                    "args": [
+                      {
+                        "name": "name",
+                        "value": "create_data.name"
+                      },
+                      {
+                        "name": "count",
+                        "value": "create_data.count"
+                      },
+                      {
+                        "name": "type",
+                        "value": "create_data.type"
+                      },
+                      {
+                        "name": "x",
+                        "value": "xy[0]"
+                      },
+                      {
+                        "name": "y",
+                        "value": "xy[1]"
+                      }
+                    ]
+                  },
+                  {
+                    "object": "self.data.points.append",
+                    "args": [
+                      {
+                        "name": "",
+                        "value": "cell"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "clear",
+                "args": [],
+                "return_type": null,
+                "metrics": {
+                  "cyclomatic_complexity": 1,
+                  "cognitive_complexity": 0,
+                  "max_nesting": 0,
+                  "lines_of_code": 2,
+                  "statement_count": 1,
+                  "return_count": 0,
+                  "raise_count": 0,
+                  "await_count": 0,
+                  "broad_exception_handlers": 0,
+                  "raised_exceptions": [],
+                  "caught_exceptions": [],
+                  "self_attribute_accesses": [
+                    "data"
+                  ],
+                  "is_async": false
+                },
+                "calls": [
+                  {
+                    "object": "Data.__init__",
+                    "args": [
+                      {
+                        "name": "",
+                        "value": "[]"
+                      },
+                      {
+                        "name": "",
+                        "value": 0
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "file": {
+        "name": "generator",
+        "path": "logic",
+        "path_parts": [
+          "logic"
+        ],
+        "imports": [
+          {
+            "object": "random",
+            "path": "",
+            "from_lib": true
+          }
+        ],
+        "classes": [],
+        "functions": [
+          {
+            "name": "get_random_x_y",
+            "args": [],
+            "return_type": "tuple[int, int]",
+            "metrics": {
+              "cyclomatic_complexity": 1,
+              "cognitive_complexity": 0,
+              "max_nesting": 0,
+              "lines_of_code": 2,
+              "statement_count": 1,
+              "return_count": 1,
+              "raise_count": 0,
+              "await_count": 0,
+              "broad_exception_handlers": 0,
+              "raised_exceptions": [],
+              "caught_exceptions": [],
+              "self_attribute_accesses": [],
+              "is_async": false
+            },
+            "calls": [
+              {
+                "object": "random.randint",
+                "args": [
+                  {
+                    "name": "",
+                    "value": 0
+                  },
+                  {
+                    "name": "",
+                    "value": 100
+                  }
+                ]
+              },
+              {
+                "object": "random.randint",
+                "args": [
+                  {
+                    "name": "",
+                    "value": 0
+                  },
+                  {
+                    "name": "",
+                    "value": 100
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
