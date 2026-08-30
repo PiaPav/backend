@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ast
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from .complexity import analyze_function_metrics
 from .expressions import annotation_value, dotted_name, infer_literal_type, simple_value
@@ -196,8 +196,12 @@ def _module_constant(
     ]
 
 
-def collect_definitions(module: ModuleInfo) -> None:
+def collect_definitions(
+    module: ModuleInfo, on_node: Callable[[ast.stmt], None] | None = None
+) -> None:
     for node in module.tree.body:
+        if on_node is not None:
+            on_node(node)
         if isinstance(node, ast.ClassDef):
             info = ClassInfo(
                 name=node.name,

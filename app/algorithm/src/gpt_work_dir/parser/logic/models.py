@@ -127,6 +127,9 @@ class ModuleInfo:
     relative_path: Path
     file: Path
     tree: ast.Module
+    source: str
+    source_bytes: bytes
+    byte_order_mark_size: int = 0
     imports: list[ImportInfo] = field(default_factory=list)
     constants: list[FieldInfo] = field(default_factory=list)
     classes: list[ClassInfo] = field(default_factory=list)

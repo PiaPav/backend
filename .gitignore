@@ -19,3 +19,9 @@
 /app/algorithm/.env
 /app/core/src/infrastructure/email/test.py
 /app/core/src/localtest/
+/app/harness-micro/.venv/
+/app/algorithm/src/gpt_work_dir/graph.json
+/app/algorithm/src/gpt_work_dir/graph_metrics.json
+/app/algorithm/src/gpt_work_dir/graph_metrics.optimized.json
+/app/algorithm/src/gpt_work_dir/project_graph.html
+/app/algorithm/src/gpt_work_dir/source_index.json

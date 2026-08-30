@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from gpt_work_dir.analyze_project import build_project_graph
 from gpt_work_dir.parser.logic.main import starter
@@ -14,9 +16,25 @@ HERE = Path(__file__).resolve().parent
 class VisualizerTests(unittest.TestCase):
     def test_combined_entrypoint_analyzes_project_and_writes_page(self) -> None:
         output = HERE / "project1" / "graph" / "graph.html"
-        result = build_project_graph(
-            HERE / "project1" / "data", output, open_browser=False
-        )
+        with tempfile.TemporaryDirectory() as directory:
+            working_directory = Path(directory)
+            with patch(
+                "gpt_work_dir.analyze_project.Path.cwd",
+                return_value=working_directory,
+            ):
+                result = build_project_graph(
+                    HERE / "project1" / "data",
+                    output,
+                    working_directory / "graph_metrics.json",
+                    open_browser=False,
+                )
+
+            self.assertTrue((working_directory / "graph.json").is_file())
+            self.assertTrue((working_directory / "graph_metrics.json").is_file())
+            source_index_path = working_directory / "source_index.json"
+            self.assertTrue(source_index_path.is_file())
+            source_index = json.loads(source_index_path.read_text(encoding="utf-8"))
+            self.assertIn("logic/logic.py::SomeClass::create", source_index["lookup"]["methods"])
         self.assertEqual(result, output.resolve())
         self.assertIn("file-group", output.read_text(encoding="utf-8"))
 

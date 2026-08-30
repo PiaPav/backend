@@ -6,6 +6,7 @@ from pathlib import Path
 
 from gpt_work_dir.parser.logic.errors import SourceSyntaxError
 from gpt_work_dir.parser.logic.main import starter
+from gpt_work_dir.parser.logic.main import starter_with_source_index
 
 HERE = Path(__file__).resolve().parent
 
@@ -20,6 +21,39 @@ class ParserGoldenTests(unittest.TestCase):
     def test_output_is_deterministic(self) -> None:
         project = HERE / "project1" / "data"
         self.assertEqual(starter(project), starter(project))
+
+    def test_source_index_does_not_change_the_graph(self) -> None:
+        project = HERE / "project1" / "data"
+        graph, source_index = starter_with_source_index(project)
+        self.assertEqual(graph, starter(project))
+        self.assertEqual(source_index["schema_version"], 1)
+        self.assertEqual(source_index["project"]["file_count"], 5)
+
+    def test_method_source_is_available_through_direct_lookup(self) -> None:
+        project = HERE / "project1" / "data"
+        _, source_index = starter_with_source_index(project)
+        source_ids = source_index["lookup"]["methods"][
+            "logic/logic.py::SomeClass::create"
+        ]
+        self.assertEqual(len(source_ids), 1)
+        symbol = source_index["symbols"][source_ids[0]]
+        source_bytes = (project / symbol["file"]).read_bytes()
+        span = symbol["span"]
+        source = source_bytes[span["start_byte"] : span["end_byte"]].decode("utf-8")
+        self.assertTrue(source.startswith("def create("))
+        self.assertIn("self.data.points.append", source)
+
+    def test_decorated_structure_span_includes_decorator(self) -> None:
+        project = HERE / "project1" / "data"
+        _, source_index = starter_with_source_index(project)
+        source_id = source_index["lookup"]["methods"][
+            "interface.py::SomeInterface::create"
+        ][0]
+        symbol = source_index["symbols"][source_id]
+        source_bytes = (project / symbol["file"]).read_bytes()
+        span = symbol["span"]
+        source = source_bytes[span["start_byte"] : span["end_byte"]].decode("utf-8")
+        self.assertTrue(source.startswith("@abstractmethod"))
 
 
 class ParserEdgeCaseTests(unittest.TestCase):

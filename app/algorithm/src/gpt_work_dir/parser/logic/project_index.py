@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import codecs
 from pathlib import Path
 
 from .errors import ProjectNotFoundError, SourceReadError, SourceSyntaxError
@@ -68,7 +69,8 @@ class ProjectIndex:
         module_name = ".".join(module_parts)
         package = ".".join(relative.parent.parts) if relative.parent != Path(".") else ""
         try:
-            source = path.read_text(encoding="utf-8-sig")
+            source_bytes = path.read_bytes()
+            source = source_bytes.decode("utf-8-sig")
         except (OSError, UnicodeError) as exc:
             raise SourceReadError(f"Cannot read {path}: {exc}") from exc
         try:
@@ -82,6 +84,11 @@ class ProjectIndex:
             relative_path=relative,
             file=path,
             tree=tree,
+            source=source,
+            source_bytes=source_bytes,
+            byte_order_mark_size=(
+                len(codecs.BOM_UTF8) if source_bytes.startswith(codecs.BOM_UTF8) else 0
+            ),
         )
 
     def resolve_module(

@@ -20,16 +20,20 @@
 
 Основная точка входа для готового сценария — `analyze_project.py`.
 
-В начале файла задаются три настройки:
+В начале файла задаются пять настроек:
 
 ```python
 PROJECT_PATH = Path(r"C:\projects\my_project")
 OUTPUT_HTML = Path(__file__).with_name("project_graph.html")
+OUTPUT_METRICS = Path(__file__).with_name("graph_metrics.json")
+OUTPUT_SOURCE_INDEX = Path(__file__).with_name("source_index.json")
 OPEN_BROWSER = True
 ```
 
 - `PROJECT_PATH` — корень анализируемого проекта;
 - `OUTPUT_HTML` — путь итоговой интерактивной страницы;
+- `OUTPUT_METRICS` — путь JSON-файла с полными метриками;
+- `OUTPUT_SOURCE_INDEX` — путь поискового индекса исходного кода;
 - `OPEN_BROWSER` — нужно ли открыть страницу после построения.
 
 Рекомендуется указывать абсолютный путь и использовать raw-строку `r"..."`, чтобы обратные слеши Windows не интерпретировались как escape-последовательности.
@@ -45,8 +49,15 @@ python analyze_project.py
 
 - HTML по адресу из `OUTPUT_HTML`;
 - `graph.json` в текущей рабочей директории процесса.
+- JSON с полным набором рассчитанных метрик по адресу из `OUTPUT_METRICS`.
+- `source_index.json` с координатами исходных структур по адресу из
+  `OUTPUT_SOURCE_INDEX`.
 
-Важно: текущая реализация сохраняет JSON через `open("graph.json", ...)`. Поэтому расположение JSON зависит от директории, из которой запущена команда, а не от расположения `analyze_project.py`.
+Формат и гарантии поискового индекса подробно описаны в
+[`SOURCE_INDEX.md`](SOURCE_INDEX.md).
+
+Важно: расположение `graph.json` зависит от текущей рабочей директории процесса
+(`Path.cwd()`). Путь к метрикам задаётся явно через `OUTPUT_METRICS`.
 
 ## 3. Программное использование
 
@@ -68,6 +79,7 @@ from gpt_work_dir.analyze_project import build_project_graph
 result = build_project_graph(
     project_path=r"C:\projects\my_project",
     output_html="project_graph.html",
+    output_metrics="graph_metrics.json",
     open_browser=True,
 )
 
@@ -393,6 +405,8 @@ JSON перед вставкой в `<script type="application/json">` экра�
 | `graph_metrics/call_graph.py` | Граф функций и методов, цепочки вызовов, рекурсия и центральность вершин |
 | `graph_metrics/quality.py` | Сложность, вложенность, async и поток исключений |
 | `graph_metrics/object_metrics.py` | Объектные метрики WMC, CBO, RFC, LCOM, DIT и NOC |
+| `graph_metrics/serialization.py` | Сохранение полных метрик и обратимое компактное представление для LLM |
+| `optimize_metrics.py` | CLI для создания компактного JSON метрик |
 | `parser/__init__.py` | Общий публичный фасад двух подсистем |
 | `parser/logic/main.py` | Минимальный публичный API парсера |
 | `parser/logic/analyzer.py` | Оркестрация проходов |
@@ -411,6 +425,7 @@ JSON перед вставкой в `<script type="application/json">` экра�
 | `parser/visualizer/__main__.py` | CLI визуализатора |
 | `tests/test_parser.py` | Golden-тест и граничные случаи парсера |
 | `tests/test_visualizer.py` | Тесты генерации страницы и единой точки входа |
+| `tests/test_metrics_serialization.py` | Тесты сохранения, сжатия и восстановления метрик |
 
 Разделение обязанностей нужно, чтобы изменение визуального представления не влияло на AST-анализ, а изменение внутреннего анализа не требовало переписывать файловый обход.
 
@@ -591,6 +606,41 @@ risk = 100 × (
 from gpt_work_dir.graph_metrics import calculate_graph_metrics
 
 metrics = calculate_graph_metrics(graph)
+```
+
+### Компактный JSON метрик для нейросети
+
+Пути задаются константами в начале `optimize_metrics.py`:
+
+```python
+INPUT_METRICS = Path(__file__).with_name("graph_metrics.json")
+OUTPUT_METRICS = Path(__file__).with_name("graph_metrics.optimized.json")
+```
+
+После их настройки скрипт запускается без аргументов командной строки:
+
+```powershell
+python optimize_metrics.py
+```
+
+Скрипт удаляет только форматирующие пробелы. Повторяющиеся списки однотипных
+объектов он заменяет представлением `{"$columns": [...], "$rows": [...]}`, если
+оно занимает меньше места. `null`, числовые нули и пустые списки сохраняются,
+так как они могут быть значимыми метриками. Ключи одиночных объектов не
+сокращаются, поэтому структура остаётся понятной модели без отдельной схемы.
+
+После обработки в консоли выводятся размеры и примерное количество токенов до
+и после оптимизации. Автономная оценка использует соотношение `1 токен ≈ 4
+байта UTF-8`; точное число может отличаться в зависимости от токенизатора
+конкретной модели.
+
+Программный API также позволяет восстановить исходную структуру:
+
+```python
+from gpt_work_dir.graph_metrics import compact_graph_metrics, restore_graph_metrics
+
+compact = compact_graph_metrics(metrics)
+assert restore_graph_metrics(compact) == metrics
 ```
 
 ## 9. Ошибки
