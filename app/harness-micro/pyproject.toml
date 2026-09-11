@@ -1,0 +1,10 @@
+[project]
+name = "harness-micro"
+version = "0.1.0"
+description = "Сервис взаимодействия с нейросетью"
+requires-python = ">=3.13"
+dependencies = [
+    "dotenv>=0.9.9",
+    "openai>=3.7.0",
+    "pyyaml>=6.0.3",
+]

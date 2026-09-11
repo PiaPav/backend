@@ -1,0 +1,3 @@
+tools_rules:
+  max_extraction_file_size: 10000 # В байтах
+  max_extraction_structure_size: 1000 # В байтах

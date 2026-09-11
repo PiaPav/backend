@@ -10,7 +10,6 @@
 /app/core/uv.lock
 /tokens
 /.env
-/.env
 /scripts/
 /minio-data/
 /merge-commit.sh
@@ -25,3 +24,4 @@
 /app/algorithm/src/gpt_work_dir/graph_metrics.optimized.json
 /app/algorithm/src/gpt_work_dir/project_graph.html
 /app/algorithm/src/gpt_work_dir/source_index.json
+/app/harness-micro/src/utils/config-local.yml
