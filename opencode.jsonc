@@ -1,19 +1,26 @@
 {
   "$schema": "https://opencode.ai/config.json",
-
   "default_agent": "orchestrator",
 
   "permission": {
     "edit": "allow",
 
     "bash": {
-      "*": "allow",
+      "*": "ask",
 
-      "git push": "deny",
-      "git push *": "deny",
+      "git *": "deny",
 
-      "git reset --hard": "deny",
-      "git reset --hard *": "deny"
+      "git status": "allow",
+      "git status *": "allow",
+
+      "git diff": "allow",
+      "git diff *": "allow",
+
+      "git log": "allow",
+      "git log *": "allow",
+
+      "git show": "allow",
+      "git show *": "allow"
     },
 
     "external_directory": "deny"
