@@ -14,9 +14,10 @@ external, dynamic and unresolved callsites have no internal target. Callsite
 IDs are non-empty, `awaited` is a boolean, and declared callsite/edge locations
 are structurally valid. Every exact internal callsite group has exactly the
 corresponding aggregated `calls`/`awaits` weight (and vice versa); such edges
-always carry a positive integer weight.
+always carry a positive integer weight. File/module nodes may own module-level
+callsites and be call-edge sources; targets remain function/method nodes.
 
-The current parser output includes file/class/callable nodes, containment and
-resolved local import edges. Full canonical callsite, inheritance and type
-resolution is explicitly marked incomplete by a diagnostic; legacy facts are
-available only through the temporary top-level `body` mirror.
+The current parser output includes file/class/callable nodes, containment,
+resolved local import edges, canonical callsites and aggregated exact call/await
+edges. Canonical inheritance and type resolution remain incomplete; legacy facts
+are available through the temporary top-level `body` mirror.

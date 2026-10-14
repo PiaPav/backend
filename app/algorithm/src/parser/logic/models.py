@@ -45,6 +45,21 @@ class CallInfo:
 
 
 @dataclass(slots=True)
+class CanonicalCallsiteInfo:
+    """Canonical call fact kept separate from the legacy call projection."""
+
+    node: ast.Call
+    expression: str
+    syntactic_depth: int
+    awaited: bool
+    resolution: str
+    target: tuple[str, int] | None = None
+    file: Path | None = None
+    line: int | None = None
+    column: int | None = None
+
+
+@dataclass(slots=True)
 class FieldInfo:
     name: str
     annotation: Any = None
@@ -78,6 +93,7 @@ class FunctionInfo:
     args: list[ArgumentInfo] = field(default_factory=list)
     return_type: Any = None
     calls: list[CallInfo] = field(default_factory=list)
+    canonical_callsites: list[CanonicalCallsiteInfo] = field(default_factory=list)
     decorators: list[str] = field(default_factory=list)
     metrics: FunctionMetricsInfo = field(default_factory=FunctionMetricsInfo)
     node: ast.FunctionDef | ast.AsyncFunctionDef | None = None
@@ -142,6 +158,7 @@ class ModuleInfo:
     classes: list[ClassInfo] = field(default_factory=list)
     functions: list[FunctionInfo] = field(default_factory=list)
     calls: list[CallInfo] = field(default_factory=list)
+    canonical_callsites: list[CanonicalCallsiteInfo] = field(default_factory=list)
 
     @property
     def import_aliases(self) -> dict[str, ImportInfo]:

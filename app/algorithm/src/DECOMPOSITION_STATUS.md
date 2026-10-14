@@ -1,6 +1,6 @@
 # Статус декомпозиции
 
-Статус получен статическим сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Актуальные тесты `graph_dto/test_contract.py`, `parser/test_core.py`, `metrics/test_core.py` запущены через `app/algorithm/.venv`: `95 passed, 0 failed, 0 skipped`. Legacy suite не запускался, поэтому ссылки на legacy tests подтверждены только статически. Результат актуальных тестов подтверждает текущее покрытие, но не полноту выполнения этапов.
+Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. После последних исправлений независимый tester выполнил через `app/algorithm/.venv/Scripts/python.exe` совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 109 passed, 0 failed, 0 skipped.
 
 ## Общий итог
 
@@ -41,11 +41,11 @@
 ## Этап 4. Ввести версионированный Graph DTO
 
 1. **Выполнен.** Envelope с `schema_version`, `parser_semantics_version` и fingerprint строится в `parser/graph_v1.py::build_graph_v1`; контракт проверяет `graph_dto/contract.py::validate_graph_v1`. Остатка нет.
-2. **Частично.** Canonical file/class/function/method IDs и `parent_id` создаются в `build_graph_v1`, инварианты проверяются validator-ом, но caller/owner identity для callsites отсутствует, потому что canonical callsites не формируются. Остаток: завершить IDs для callsites и типизированных отношений.
+2. **Выполнен для callsite scope.** Canonical file/class/function/method IDs, `parent_id` и caller identity создаются в `build_graph_v1`; module-level calls принадлежат file node. Остаток этапа относится к другим типизированным отношениям.
 3. **Частично.** Локальные import edges сериализуются как `dependent -> dependency` с ID, включая package collision (`parser/test_core.py`), но внешний/неразрешённый импорт остаётся в legacy `body`, а canonical import-модель неполна. Остаток: представить все исходы импорта типизированно.
-4. **Частично.** Parser записывает legacy `semantic_target` (`parser/test_core.py::test_calls_preserve_import_semantic_targets_for_aliases_and_nested_calls`), но `build_graph_v1` оставляет `callsites` пустым и добавляет diagnostic `semantic_callsites_transition`. Остаток: canonical callsites и call/await edges с ID.
+4. **Выполнен для вызовов.** Parser сохраняет legacy `semantic_target`, отдельно собирает canonical callsites и испускает exact `calls`/`awaits` edges по ID; переходный diagnostic удалён.
 5. **Не выполнен.** Canonical inheritance, field-type и coupling target edges по ID не испускаются; `metrics/logic/object_metrics.py` всё ещё разрешает имена эвристически. Остаток: перенести разрешение в Parser.
-6. **Не выполнен.** Схема callsite валидируется в `validate_graph_v1`, но Parser не сериализует location/resolution/candidates/multiplicity. Остаток: фактически наполнить `callsites` и агрегированные call edges.
+6. **Выполнен.** Parser сериализует location, expression, syntactic depth, await/resolution и агрегирует exact edges с multiplicity; validator допускает file/module caller и сохраняет callable-only target.
 7. **Не выполнен.** `metrics/logic/object_metrics.py::calculate_object_metrics` работает по строкам legacy `body`, а не только по типизированным ID-рёбрам. Остаток: переключить DIT/NOC/CBO/RFC и связанные расчёты на canonical edges.
 8. **Выполнен.** Общий пакет `graph_dto` содержит декларативные константы, canonicalization/fingerprint и чистую валидацию без бизнес-логики Parser/Metrics. Остатка нет.
 9. **Выполнен.** `build_graph_v1` сохраняет transitional `body`, а `metrics/core.py` валидирует и использует его как compatibility projection. Остаток плановый: удалить адаптер только отдельным версионированным изменением.
@@ -72,7 +72,6 @@
 ## Приоритет доработок
 
 1. Зафиксировать семантику `call_owner_count`; добавить full-equality golden Graph DTO v1 и Metrics DTO.
-2. Испускать canonical callsites и call/await edges, сохраняя вложенность и multiplicity.
-3. Перенести в Parser разрешение inheritance, field types и coupling; перевести object metrics на typed ID edges.
-4. Разделить complexity facts/formulas и перенести формулы в Metrics через dual golden transition.
-5. Ввести единую read-only projection-модель Metrics и удалить дублирование и topology heuristics.
+2. Перенести в Parser разрешение inheritance, field types и coupling; перевести object metrics на typed ID edges.
+3. Разделить complexity facts/formulas и перенести формулы в Metrics через dual golden transition.
+4. Ввести единую read-only projection-модель Metrics и удалить дублирование и topology heuristics.

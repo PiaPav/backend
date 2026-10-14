@@ -91,9 +91,7 @@ def test_declared_edge_location_is_validated():
 
 
 @pytest.mark.parametrize("mutate", [
-    lambda graph: graph["callsites"][0].__setitem__("caller_id", "file:a.py"),
     lambda graph: graph["callsites"][0].__setitem__("target_id", "file:a.py"),
-    lambda graph: graph["edges"][1].__setitem__("source_id", "file:a.py"),
     lambda graph: graph["edges"].append({"id": "calls:duplicate", "kind": "calls",
                                          "source_id": "function:a.py:1:0:f",
                                          "target_id": "function:a.py:1:0:f", "weight": 1}),
@@ -102,6 +100,26 @@ def test_callsite_edges_require_callable_endpoints_and_unique_aggregates(mutate)
     graph = _exact_call_graph()
     mutate(graph)
     with pytest.raises(ValueError, match="Invalid Graph DTO v1"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+def test_file_is_a_valid_call_owner_but_never_a_call_target():
+    graph = _exact_call_graph()
+    graph["callsites"][0]["caller_id"] = "file:a.py"
+    graph["edges"][1]["source_id"] = "file:a.py"
+    validate_graph_v1(graph, verify_fingerprint=False)
+
+    graph["callsites"][0]["target_id"] = "file:a.py"
+    graph["edges"][1]["target_id"] = "file:a.py"
+    with pytest.raises(ValueError, match="target"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+@pytest.mark.parametrize("weight", [0, -1, True, 1.5])
+def test_aggregated_call_weights_are_positive_integers(weight):
+    graph = _exact_call_graph()
+    graph["edges"][1]["weight"] = weight
+    with pytest.raises(ValueError, match="weight"):
         validate_graph_v1(graph, verify_fingerprint=False)
 
 

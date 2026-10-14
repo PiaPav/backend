@@ -99,8 +99,10 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         if "location" in edge:
             _location(edge["location"], f"edges[{index}].location")
         if kind in {"calls", "awaits"}:
-            if nodes[source]["kind"] not in {"function", "method"} or nodes[target]["kind"] not in {"function", "method"}:
-                _error(f"edges[{index}] {kind} endpoints must be callable nodes")
+            if nodes[source]["kind"] not in {"file", "module", "function", "method"}:
+                _error(f"edges[{index}] {kind} source must be a call owner")
+            if nodes[target]["kind"] not in {"function", "method"}:
+                _error(f"edges[{index}] {kind} target must be a callable node")
             if "weight" not in edge:
                 _error(f"edges[{index}].weight is required for {kind}")
             weight = edge["weight"]
@@ -130,8 +132,8 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         if not isinstance(identifier, str) or not identifier or identifier in seen_callsites: _error(f"callsites[{index}].id is missing or duplicate")
         seen_callsites.add(identifier)
         if caller not in nodes: _error(f"callsites[{index}].caller_id is invalid")
-        if nodes[caller]["kind"] not in {"function", "method"}:
-            _error(f"callsites[{index}].caller_id must reference a callable node")
+        if nodes[caller]["kind"] not in {"file", "module", "function", "method"}:
+            _error(f"callsites[{index}].caller_id must reference a call owner node")
         if not isinstance(callsite.get("expression"), str) or not callsite["expression"]:
             _error(f"callsites[{index}].expression is required")
         _location(callsite.get("location"), f"callsites[{index}].location")

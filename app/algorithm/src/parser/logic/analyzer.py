@@ -45,7 +45,7 @@ class ProjectAnalyzer:
             )
             collect_definitions(module, on_node)
         classify_classes(modules)
-        calls = CallResolver(modules)
+        calls = CallResolver(modules, self.index)
         calls.resolve_all()
         graph = GraphSerializer(modules, calls).serialize()
         validate_graph(graph)
