@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from .graph_algorithms import strong_components
+
 
 def _package(file: Mapping[str, Any]) -> str:
     parts = file.get("path_parts")
@@ -28,74 +30,51 @@ def _critical_topology(
     articulation: set[str] = set()
     bridges: set[tuple[str, str]] = set()
 
-    def visit(node: str) -> None:
-        nonlocal time
-        discovered[node] = low[node] = time
+    for root in sorted(nodes):
+        if root in discovered:
+            continue
+        parent[root] = None
+        discovered[root] = low[root] = time
         time += 1
-        children = 0
-        for target in adjacency[node]:
+        child_counts = {root: 0}
+        stack = [(root, iter(sorted(adjacency[root])))]
+        while stack:
+            node, targets = stack[-1]
+            try:
+                target = next(targets)
+            except StopIteration:
+                stack.pop()
+                ancestor = parent[node]
+                if ancestor is None:
+                    if child_counts[node] > 1:
+                        articulation.add(node)
+                    continue
+                low[ancestor] = min(low[ancestor], low[node])
+                if parent[ancestor] is not None and low[node] >= discovered[ancestor]:
+                    articulation.add(ancestor)
+                if low[node] > discovered[ancestor]:
+                    bridges.add(tuple(sorted((ancestor, node))))
+                continue
             if target not in discovered:
                 parent[target] = node
-                children += 1
-                visit(target)
-                low[node] = min(low[node], low[target])
-                if parent[node] is None and children > 1:
-                    articulation.add(node)
-                if parent[node] is not None and low[target] >= discovered[node]:
-                    articulation.add(node)
-                if low[target] > discovered[node]:
-                    bridges.add(tuple(sorted((node, target))))
+                child_counts[node] += 1
+                child_counts[target] = 0
+                discovered[target] = low[target] = time
+                time += 1
+                stack.append((target, iter(sorted(adjacency[target]))))
             elif target != parent[node]:
                 low[node] = min(low[node], discovered[target])
-
-    for node in sorted(nodes):
-        if node not in discovered:
-            parent[node] = None
-            visit(node)
     return sorted(articulation), [list(edge) for edge in sorted(bridges)]
 
 
 def _cyclic_components(
     nodes: set[str], edges: set[tuple[str, str]]
 ) -> list[list[str]]:
-    adjacency = {node: set() for node in nodes}
-    for source, target in edges:
-        adjacency[source].add(target)
-    index = 0
-    indices: dict[str, int] = {}
-    low: dict[str, int] = {}
-    stack: list[str] = []
-    on_stack: set[str] = set()
-    cycles: list[list[str]] = []
-
-    def visit(node: str) -> None:
-        nonlocal index
-        indices[node] = low[node] = index
-        index += 1
-        stack.append(node)
-        on_stack.add(node)
-        for target in adjacency[node]:
-            if target not in indices:
-                visit(target)
-                low[node] = min(low[node], low[target])
-            elif target in on_stack:
-                low[node] = min(low[node], indices[target])
-        if low[node] != indices[node]:
-            return
-        component: list[str] = []
-        while True:
-            target = stack.pop()
-            on_stack.remove(target)
-            component.append(target)
-            if target == node:
-                break
-        if len(component) > 1:
-            cycles.append(sorted(component))
-
-    for node in sorted(nodes):
-        if node not in indices:
-            visit(node)
-    return sorted(cycles)
+    return sorted(
+        sorted(component)
+        for component in strong_components(nodes, edges)
+        if len(component) > 1
+    )
 
 
 def calculate_architecture_metrics(

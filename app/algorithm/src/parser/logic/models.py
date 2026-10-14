@@ -37,6 +37,7 @@ class CallArgumentInfo:
 class CallInfo:
     node: ast.Call
     object_name: str = ""
+    semantic_target: tuple[str, str] | None = None
     args: list[CallArgumentInfo] = field(default_factory=list)
     file: Path | None = None
     line: int | None = None
@@ -116,7 +117,13 @@ class ImportInfo:
 
     @property
     def local_name(self) -> str:
-        return self.asname or self.object_name
+        # ``import a.b.c`` binds ``a``; ``import a.b.c as c`` binds ``c``.
+        # From-imports keep binding the imported object itself.
+        if self.asname:
+            return self.asname
+        if not self.module:
+            return self.object_name.split(".", 1)[0]
+        return self.object_name
 
 
 @dataclass(slots=True)

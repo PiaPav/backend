@@ -10,22 +10,16 @@ from .architecture import calculate_architecture_metrics
 from .call_graph import calculate_call_graph_metrics
 from .object_metrics import calculate_object_metrics
 from .quality import calculate_quality_metrics
+from .identity import effective_module_ids, graph_files, legacy_file_id
+from .graph_algorithms import strong_components as _strong_components
 
 
 def _file_id(file: Mapping[str, Any]) -> str:
-    name = str(file.get("name") or "unknown")
-    path = str(file.get("path") or "")
-    if name == "__init__":
-        return path or name
-    return ".".join(part for part in (path, name) if part)
+    return legacy_file_id(file)
 
 
 def _files(graph: Mapping[str, Any]) -> list[dict[str, Any]]:
-    result: list[dict[str, Any]] = []
-    for wrapper in graph.get("body", []):
-        if isinstance(wrapper, Mapping) and isinstance(wrapper.get("file"), Mapping):
-            result.append(dict(wrapper["file"]))
-    return result
+    return graph_files(graph)
 
 
 def _count_call(call: Mapping[str, Any]) -> int:
@@ -49,12 +43,13 @@ def _dependency_edges(
     files: list[dict[str, Any]], nodes: set[str]
 ) -> set[tuple[str, str]]:
     edges: set[tuple[str, str]] = set()
+    modules = effective_module_ids(files)
     for file in files:
         source = _file_id(file)
         for imported in file.get("imports", []):
             if not isinstance(imported, Mapping) or imported.get("from_lib") is not False:
                 continue
-            target = str(imported.get("path") or "")
+            target = modules.get(str(imported.get("path") or ""), str(imported.get("path") or ""))
             if target in nodes and target != source:
                 edges.add((source, target))
     return edges
@@ -82,48 +77,6 @@ def _weak_components(
     return components
 
 
-def _strong_components(
-    nodes: set[str], edges: set[tuple[str, str]]
-) -> list[set[str]]:
-    adjacency = {node: set() for node in nodes}
-    for source, target in edges:
-        adjacency[source].add(target)
-
-    index = 0
-    indices: dict[str, int] = {}
-    lowlinks: dict[str, int] = {}
-    stack: list[str] = []
-    on_stack: set[str] = set()
-    result: list[set[str]] = []
-
-    def visit(node: str) -> None:
-        nonlocal index
-        indices[node] = lowlinks[node] = index
-        index += 1
-        stack.append(node)
-        on_stack.add(node)
-        for target in adjacency[node]:
-            if target not in indices:
-                visit(target)
-                lowlinks[node] = min(lowlinks[node], lowlinks[target])
-            elif target in on_stack:
-                lowlinks[node] = min(lowlinks[node], indices[target])
-        if lowlinks[node] == indices[node]:
-            component: set[str] = set()
-            while True:
-                target = stack.pop()
-                on_stack.remove(target)
-                component.add(target)
-                if target == node:
-                    break
-            result.append(component)
-
-    for node in sorted(nodes):
-        if node not in indices:
-            visit(node)
-    return result
-
-
 def _degree_peak(degrees: Mapping[str, int]) -> dict[str, Any]:
     maximum = max(degrees.values(), default=0)
     return {
@@ -143,7 +96,10 @@ def _directory_count(files: list[dict[str, Any]]) -> int:
     return len(directories)
 
 
-def calculate_graph_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
+def calculate_graph_metrics(
+    graph: Mapping[str, Any], *, canonical_mode: bool = False,
+    legacy_resolution: bool | None = None,
+) -> dict[str, Any]:
     """Return deterministic size, coupling, density and connectivity metrics."""
     files = _files(graph)
     nodes = {_file_id(file) for file in files}
@@ -192,11 +148,11 @@ def calculate_graph_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
         fan_in[target] += 1
 
     weak_components = _weak_components(nodes, edges)
-    cyclic_components = [
+    cyclic_components = sorted([
         sorted(component)
         for component in _strong_components(nodes, edges)
         if len(component) > 1
-    ]
+    ])
     node_count = len(nodes)
     callable_count = len(functions) + len(methods)
     call_owner_count = callable_count + sum(bool(file.get("calls")) for file in files)
@@ -256,8 +212,10 @@ def calculate_graph_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
         },
         "architecture": calculate_architecture_metrics(files, nodes, edges, _file_id),
         "code_quality": calculate_quality_metrics(graph),
-        "object_oriented": calculate_object_metrics(graph),
-        "call_graph": calculate_call_graph_metrics(graph),
+        "object_oriented": calculate_object_metrics(graph, cyclic_dit_is_none=canonical_mode),
+        "call_graph": calculate_call_graph_metrics(
+            graph, legacy_resolution=legacy_resolution
+        ),
     }
 
 

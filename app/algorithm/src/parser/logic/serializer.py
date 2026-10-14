@@ -77,7 +77,7 @@ class GraphSerializer:
     def _call(
         self, item: CallInfo, module: ModuleInfo, owner: str | None
     ) -> dict[str, Any]:
-        return {
+        result = {
             "object": item.object_name,
             "args": [
                 {
@@ -87,6 +87,12 @@ class GraphSerializer:
                 for argument in item.args
             ],
         }
+        if item.semantic_target:
+            result["semantic_target"] = {
+                "module": item.semantic_target[0],
+                "object": item.semantic_target[1],
+            }
+        return result
 
 
 def save_graph(graph: dict[str, Any], output_path: str | Path) -> None:

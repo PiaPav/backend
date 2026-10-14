@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from .quality import callable_metrics
+from .identity import effective_module_ids, graph_files, legacy_file_id
+from .graph_algorithms import strong_components as _strong_components
 
 
 BUILTIN_CALLS = {
@@ -19,17 +21,11 @@ BUILTIN_CALLS = {
 
 
 def _file_id(file: Mapping[str, Any]) -> str:
-    path = str(file.get("path") or "")
-    name = str(file.get("name") or "unknown")
-    return path or name if name == "__init__" else ".".join(filter(None, (path, name)))
+    return legacy_file_id(file)
 
 
 def _graph_files(graph: Mapping[str, Any]) -> list[dict[str, Any]]:
-    return [
-        dict(wrapper["file"])
-        for wrapper in graph.get("body", [])
-        if isinstance(wrapper, Mapping) and isinstance(wrapper.get("file"), Mapping)
-    ]
+    return graph_files(graph)
 
 
 def _nested_calls(call: Mapping[str, Any], depth: int = 1):
@@ -40,46 +36,6 @@ def _nested_calls(call: Mapping[str, Any], depth: int = 1):
         value = argument.get("value")
         if isinstance(value, Mapping) and value.get("type") == "call":
             yield from _nested_calls(value, depth + 1)
-
-
-def _strong_components(nodes: set[str], edges: set[tuple[str, str]]) -> list[set[str]]:
-    adjacency = {node: set() for node in nodes}
-    for source, target in edges:
-        adjacency[source].add(target)
-    index = 0
-    indices: dict[str, int] = {}
-    lowlinks: dict[str, int] = {}
-    stack: list[str] = []
-    on_stack: set[str] = set()
-    result: list[set[str]] = []
-
-    def visit(node: str) -> None:
-        nonlocal index
-        indices[node] = lowlinks[node] = index
-        index += 1
-        stack.append(node)
-        on_stack.add(node)
-        for target in adjacency[node]:
-            if target not in indices:
-                visit(target)
-                lowlinks[node] = min(lowlinks[node], lowlinks[target])
-            elif target in on_stack:
-                lowlinks[node] = min(lowlinks[node], indices[target])
-        if lowlinks[node] != indices[node]:
-            return
-        component: set[str] = set()
-        while True:
-            target = stack.pop()
-            on_stack.remove(target)
-            component.add(target)
-            if target == node:
-                break
-        result.append(component)
-
-    for node in sorted(nodes):
-        if node not in indices:
-            visit(node)
-    return result
 
 
 def _longest_component_path(
@@ -106,15 +62,18 @@ def _longest_component_path(
     def path_key(path: list[int]) -> tuple[str, ...]:
         return tuple(component_label(index) for index in path)
 
-    def longest(start: int) -> list[int]:
-        if start not in cache:
-            tails = [longest(target) for target in adjacency[start]]
+    remaining = set(adjacency)
+    while remaining:
+        ready = sorted(index for index in remaining if adjacency[index] <= cache.keys())
+        if not ready: raise ValueError("component graph must be acyclic")
+        for start in ready:
+            tails = [cache[target] for target in adjacency[start]]
             best_tail = min(tails, key=lambda tail: (-len(tail), path_key(tail))) if tails else []
             cache[start] = [start, *best_tail]
-        return cache[start]
+            remaining.remove(start)
 
     path = min(
-        (longest(index) for index in adjacency),
+        cache.values(),
         key=lambda candidate: (-len(candidate), path_key(candidate)),
     )
     return [
@@ -190,9 +149,17 @@ def _top(values: Mapping[str, float], limit: int = 5) -> list[dict[str, Any]]:
     ]
 
 
-def calculate_call_graph_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
+def calculate_call_graph_metrics(
+    graph: Mapping[str, Any], *, legacy_resolution: bool | None = None
+) -> dict[str, Any]:
     """Build a qualified call graph and calculate vertex-oriented metrics."""
     files = _graph_files(graph)
+    module_ids = effective_module_ids(files)
+    use_legacy_resolution = (
+        graph.get("parser_semantics_version") is None
+        if legacy_resolution is None
+        else legacy_resolution
+    )
     nodes: set[str] = set()
     kinds: dict[str, str] = {}
     local_symbols: dict[tuple[str, str], str] = {}
@@ -208,16 +175,23 @@ def calculate_call_graph_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
             if not isinstance(imported, Mapping):
                 continue
             original = str(imported.get("object") or "")
-            local_names = {original, str(imported.get("asname") or original)}
+            alias = str(imported.get("asname") or "")
+            # Legacy parser records the full object for ``import a.b.c``, but
+            # Python binds only ``a``.  Aliased imports bind only the alias.
+            local_names = {alias} if alias else {original.split(".", 1)[0]}
             if imported.get("from_lib") is True:
                 external_roots[module].update(local_names)
                 external_roots[module].add(str(imported.get("path") or "").split(".", 1)[0])
                 continue
             if imported.get("from_lib") is not False:
                 continue
-            target_module = str(imported.get("path") or "")
+            import_path = str(imported.get("path") or "")
+            target_module = module_ids.get(import_path, import_path)
             for local_name in local_names:
-                imports[module][local_name] = (target_module, original)
+                # ``import pkg`` binds a module prefix, while
+                # ``from pkg import chosen`` binds a symbol in that module.
+                imported_symbol = "" if original == import_path else original
+                imports[module][local_name] = (target_module, imported_symbol)
         if file.get("calls"):
             module_node = f"{module}.__module__"
             nodes.add(module_node)
@@ -259,7 +233,19 @@ def calculate_call_graph_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
             if len(parts) >= size:
                 suffix_index.setdefault(".".join(parts[-size:]), []).append(node)
 
-    def resolve(name: str, module: str, owner: str | None) -> str | None:
+    def resolve(
+        name: str,
+        module: str,
+        owner: str | None,
+        semantic_target: Any = None,
+    ) -> str | None:
+        if isinstance(semantic_target, Mapping):
+            target_module = str(semantic_target.get("module") or "")
+            target_object = str(semantic_target.get("object") or "")
+            if not target_module or not target_object:
+                return None
+            target_module = module_ids.get(target_module, target_module)
+            return local_symbols.get((target_module, target_object))
         if not name:
             return None
         if name.startswith("self.") and owner:
@@ -269,14 +255,31 @@ def calculate_call_graph_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
         candidate = local_symbols.get((module, name))
         if candidate:
             return candidate
+        if not use_legacy_resolution:
+            # Current parser output carries exact provenance for project-local
+            # imports. Its absence is intentional after a shadowing write, so
+            # legacy import and suffix guesses are unsafe.
+            return None
         parts = name.split(".")
         imported = imports.get(module, {}).get(parts[0])
         if imported:
             target_module, original = imported
-            imported_name = ".".join([original, *parts[1:]])
+            imported_name = ".".join(filter(None, [original, *parts[1:]]))
             candidate = local_symbols.get((target_module, imported_name))
             if candidate:
                 return candidate
+        if len(parts) == 1:
+            # The legacy parser normalizes both ``pkg.chosen()`` and an aliased
+            # ``from pkg import chosen`` call to ``chosen``. Recover its module
+            # only when all matching imports provide one unambiguous target.
+            candidates = {
+                local_symbols[(target_module, parts[0])]
+                for target_module, original in imports.get(module, {}).values()
+                if (not original or original == parts[0])
+                and (target_module, parts[0]) in local_symbols
+            }
+            if len(candidates) == 1:
+                return next(iter(candidates))
         matches = suffix_index.get(name, [])
         return matches[0] if len(matches) == 1 else None
 
@@ -295,7 +298,12 @@ def calculate_call_graph_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
                     deepest_owners = {caller}
                 elif depth == maximum_nesting:
                     deepest_owners.add(caller)
-                target = resolve(str(call.get("object") or ""), module, owner)
+                target = resolve(
+                    str(call.get("object") or ""),
+                    module,
+                    owner,
+                    call.get("semantic_target"),
+                )
                 if target:
                     edge_weights[(caller, target)] += 1
                 else:
@@ -315,11 +323,11 @@ def calculate_call_graph_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
         incoming[target] += 1
         adjacency[source].add(target)
     components = _strong_components(nodes, edges)
-    recursive = [
+    recursive = sorted([
         sorted(component)
         for component in components
         if len(component) > 1 or any((node, node) in edges for node in component)
-    ]
+    ])
     longest_chain = _longest_component_path(components, edges)
 
     reach = {}

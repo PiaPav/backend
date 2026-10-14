@@ -6,6 +6,7 @@ from collections import Counter
 from collections.abc import Mapping
 from itertools import combinations
 from typing import Any
+from .identity import graph_files, legacy_file_id
 
 
 BUILTIN_TYPES = {
@@ -15,9 +16,7 @@ BUILTIN_TYPES = {
 
 
 def _file_id(file: Mapping[str, Any]) -> str:
-    path = str(file.get("path") or "")
-    name = str(file.get("name") or "unknown")
-    return (path or name) if name == "__init__" else ".".join(filter(None, (path, name)))
+    return legacy_file_id(file)
 
 
 def _type_names(value: Any) -> set[str]:
@@ -64,12 +63,9 @@ def _top(rows: list[dict[str, Any]], key: str, *, reverse: bool = True) -> list[
     )[:10]
 
 
-def calculate_object_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
+def calculate_object_metrics(graph: Mapping[str, Any], *, cyclic_dit_is_none: bool = False) -> dict[str, Any]:
     classes: list[tuple[str, str, Mapping[str, Any]]] = []
-    for wrapper in graph.get("body", []):
-        if not isinstance(wrapper, Mapping) or not isinstance(wrapper.get("file"), Mapping):
-            continue
-        file = wrapper["file"]
+    for file in graph_files(graph):
         module = _file_id(file)
         for class_info in file.get("classes", []):
             if isinstance(class_info, Mapping):
@@ -82,6 +78,10 @@ def calculate_object_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
     class_names = {qualified for qualified, _, _ in classes}
 
     def resolve(name: str, module: str) -> str | None:
+        if "." in name:
+            # A qualified external/imported base must never bind to an unrelated
+            # local class merely because its final component happens to match.
+            return name if name in class_names else None
         short = name.rsplit(".", 1)[-1]
         local = f"{module}.{short}"
         if local in class_names:
@@ -101,13 +101,39 @@ def calculate_object_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
         }
         children.update(parents[qualified])
 
-    def inheritance_depth(name: str, visiting: set[str] | None = None) -> int:
+    def legacy_inheritance_depth(name: str, visiting: set[str] | None = None) -> int | None:
         visiting = visiting or set()
-        if name in visiting or not parents.get(name):
+        if name in visiting:
             return 0
-        return 1 + max(
-            inheritance_depth(parent, visiting | {name}) for parent in parents[name]
-        )
+        if not parents.get(name):
+            return 0
+        depths = [legacy_inheritance_depth(parent, visiting | {name}) for parent in parents[name]]
+        return 1 + max(depths)  # type: ignore[arg-type]
+
+    depths: dict[str, int | None] = {}
+    if cyclic_dit_is_none:
+        # Explicit DFS frames avoid Python recursion limits.  A repeated active
+        # node poisons the cycle and every class that depends on it.
+        for root in sorted(parents):
+            if root in depths: continue
+            active: set[str] = set(); stack = [(root, False)]
+            while stack:
+                name, complete = stack.pop()
+                if name in depths: continue
+                if complete:
+                    active.discard(name)
+                    values = [depths[parent] for parent in parents.get(name, ())]
+                    depths[name] = None if any(value is None for value in values) else (1 + max(values) if values else 0)  # type: ignore[arg-type]
+                    continue
+                if name in active:
+                    depths[name] = None
+                    continue
+                active.add(name); stack.append((name, True))
+                for parent in sorted(parents.get(name, ()), reverse=True):
+                    if parent in active:
+                        depths[parent] = None
+                    elif parent not in depths:
+                        stack.append((parent, False))
 
     rows: list[dict[str, Any]] = []
     for qualified, module, class_info in classes:
@@ -151,12 +177,12 @@ def calculate_object_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
                 "cbo": len(dependencies),
                 "rfc": len(methods) + len(response),
                 "lcom": round(lack_of_cohesion, 4) if lack_of_cohesion is not None else None,
-                "dit": inheritance_depth(qualified),
+                "dit": depths.get(qualified) if cyclic_dit_is_none else legacy_inheritance_depth(qualified),
                 "noc": children[qualified],
             }
         )
 
-    return {
+    result = {
         "classes_analyzed": len(rows),
         "highest_weighted_method_complexity": _top(rows, "wmc"),
         "highest_class_coupling": _top(rows, "cbo"),
@@ -165,3 +191,6 @@ def calculate_object_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
         "deepest_inheritance": _top(rows, "dit"),
         "most_direct_children": _top(rows, "noc"),
     }
+    if cyclic_dit_is_none:
+        result["classes"] = sorted(rows, key=lambda row: row["class"])
+    return result

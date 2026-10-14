@@ -5,20 +5,16 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Mapping
 from typing import Any
+from .identity import graph_files, legacy_file_id
 
 
 def _file_id(file: Mapping[str, Any]) -> str:
-    path = str(file.get("path") or "")
-    name = str(file.get("name") or "unknown")
-    return (path or name) if name == "__init__" else ".".join(filter(None, (path, name)))
+    return legacy_file_id(file)
 
 
 def callable_metrics(graph: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
-    for wrapper in graph.get("body", []):
-        if not isinstance(wrapper, Mapping) or not isinstance(wrapper.get("file"), Mapping):
-            continue
-        file = wrapper["file"]
+    for file in graph_files(graph):
         module = _file_id(file)
         for function in file.get("functions", []):
             if isinstance(function, Mapping) and isinstance(function.get("metrics"), Mapping):

@@ -32,6 +32,8 @@ class ProjectIndex:
             raise ProjectNotFoundError(f"Project directory does not exist: {self.root}")
         self.modules: list[ModuleInfo] = []
         self.by_module: dict[str, ModuleInfo] = {}
+        self.by_module_candidates: dict[str, tuple[ModuleInfo, ...]] = {}
+        self.shadowed_modules: list[tuple[str, ModuleInfo, ModuleInfo]] = []
 
     @staticmethod
     def _sort_key(path: Path) -> tuple[object, ...]:
@@ -58,8 +60,26 @@ class ProjectIndex:
         ]
         paths.sort(key=lambda item: self._sort_key(item.relative_to(self.root)))
         self.modules = [self._parse(path) for path in paths]
-        self.by_module = {module.module: module for module in self.modules}
+        grouped: dict[str, list[ModuleInfo]] = {}
+        for module in self.modules:
+            grouped.setdefault(module.module, []).append(module)
+        self.by_module_candidates = {
+            name: tuple(sorted(items, key=self._module_preference))
+            for name, items in grouped.items()
+        }
+        self.by_module = {name: items[0] for name, items in self.by_module_candidates.items()}
+        self.shadowed_modules = [
+            (name, shadowed, items[0])
+            for name, items in sorted(self.by_module_candidates.items())
+            for shadowed in items[1:]
+        ]
         return self.modules
+
+    @staticmethod
+    def _module_preference(module: ModuleInfo) -> tuple[int, str]:
+        # Python chooses a regular package over a same-directory module.
+        is_package = module.relative_path.name == "__init__.py"
+        return (0 if is_package else 1, module.relative_path.as_posix())
 
     def _parse(self, path: Path) -> ModuleInfo:
         relative = path.relative_to(self.root)

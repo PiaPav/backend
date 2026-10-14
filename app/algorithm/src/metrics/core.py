@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .logic.calculator import calculate_graph_metrics
+from graph_dto import graph_fingerprint, validate_graph_v1
 
 __all__ = ["calculate_graph_metrics", "calculate_metrics", "load_graph"]
 
@@ -25,7 +26,7 @@ def _require_path(value: Path, name: str) -> Path:
 
 
 def load_graph(graph_path: Path) -> dict[str, Any]:
-    """Load the unversioned legacy graph accepted by the migrated formulas."""
+    """Load a legacy graph or validated Graph DTO v1."""
     path = _require_path(graph_path, "graph_path").expanduser().resolve()
     return _load_graph_bytes(path.read_bytes())
 
@@ -40,14 +41,14 @@ def _load_graph_bytes(raw: bytes) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("Graph root must be a JSON object")
     if "schema_version" in data:
-        version = data["schema_version"]
-        if version != 0:
-            raise ValueError(
-                f"Unsupported graph schema_version: {version!r}; "
-                "Graph DTO v1 is not supported"
-            )
-        raise ValueError("Versioned legacy graph is not supported")
-    _validate_legacy_graph(data)
+        if data["schema_version"] != 1:
+            raise ValueError(f"Unsupported graph schema_version: {data['schema_version']!r}")
+        validate_graph_v1(data)
+        if "body" not in data:
+            raise ValueError("Graph DTO v1 requires a legacy body mirror in this metrics increment")
+        _validate_legacy_graph({"body": data["body"]})
+    else:
+        _validate_legacy_graph(data)
     return data
 
 
@@ -180,14 +181,29 @@ def calculate_metrics(graph_path: Path, output_path: Path) -> Path:
     source = graph_path.expanduser().resolve()
     raw = source.read_bytes()
     graph = _load_graph_bytes(raw)
+    is_v1 = graph.get("schema_version") == 1
+    legacy_body = {"body": graph["body"]} if is_v1 else graph
+    legacy_projection = (
+        {
+            "body": graph["body"],
+            "parser_semantics_version": graph["parser_semantics_version"],
+        }
+        if is_v1 else graph
+    )
     envelope = {
         "schema_version": 1,
-        "metrics_semantics_version": 1,
+        "metrics_semantics_version": 2 if is_v1 else 1,
         "input": {
-            "graph_schema_version": None,
-            "graph_fingerprint": _legacy_graph_fingerprint(graph),
+            "graph_schema_version": 1 if is_v1 else None,
+            "graph_fingerprint": graph_fingerprint(graph) if is_v1 else _legacy_graph_fingerprint(graph),
+            **({"legacy_body_fingerprint": _legacy_graph_fingerprint(legacy_body)} if is_v1 else {}),
         },
-        "metrics": calculate_graph_metrics(graph),
+        # v1 formulas are temporarily isolated on the documented body adapter.
+        "metrics": calculate_graph_metrics(
+            legacy_projection,
+            canonical_mode=is_v1,
+            legacy_resolution=not is_v1,
+        ),
     }
     target = output_path.expanduser().resolve()
     target.parent.mkdir(parents=True, exist_ok=True)
