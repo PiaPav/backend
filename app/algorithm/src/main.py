@@ -28,7 +28,7 @@ async def main():
         project_path = msg["project_path"]
         log.info(f"Получена задача: {msg}")
 
-        asyncio.create_task(run_parse_microservice(task_id, project_path))
+        await run_parse_microservice(task_id, project_path)
 
 
 asyncio.run(main())
