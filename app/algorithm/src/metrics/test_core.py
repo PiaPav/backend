@@ -10,6 +10,16 @@ from metrics import calculate_graph_metrics, calculate_metrics, load_graph
 from graph_dto import graph_fingerprint
 
 
+def test_committed_graph_matches_complete_metrics_v2_golden(tmp_path: Path) -> None:
+    fixtures = Path(__file__).resolve().parents[1] / "gpt_work_dir/tests/golden_v1"
+    actual_path = calculate_metrics(fixtures / "graph.json", tmp_path / "metrics.json")
+
+    actual = json.loads(actual_path.read_text(encoding="utf-8"))
+    expected = json.loads((fixtures / "metrics.json").read_text(encoding="utf-8"))
+
+    assert actual == expected
+
+
 def _graph() -> dict:
     return {
         "body": [
@@ -42,6 +52,41 @@ def test_full_metrics_and_file_api_are_deterministic(tmp_path: Path) -> None:
     assert result["input"]["graph_schema_version"] is None
     assert set(result["metrics"]) == {"size", "activity", "dependency_graph", "architecture", "code_quality", "object_oriented", "call_graph"}
     assert result["metrics"]["activity"]["average_calls_per_call_owner"] == 1.0
+
+
+def test_average_calls_per_call_owner_keeps_legacy_hybrid_denominator() -> None:
+    """All callables count, while only modules that call are module owners."""
+    function = lambda name, calls=[]: {
+        "name": name,
+        "metrics": {"cyclomatic_complexity": 1},
+        "calls": calls,
+    }
+    graph = {
+        "body": [{
+            "file": {
+                "name": "owners",
+                "path": "",
+                "path_parts": [],
+                "imports": [],
+                "functions": [
+                    function("active", [{"object": "target", "args": []}]),
+                    function("idle_one"),
+                    function("idle_two"),
+                ],
+                "calls": [
+                    {"object": "first", "args": []},
+                    {"object": "second", "args": []},
+                ],
+            }
+        }]
+    }
+
+    activity = calculate_graph_metrics(graph)["activity"]
+
+    # Legacy semantics v1/v2: 3 calls / (3 callables + 1 active module).
+    assert activity["average_calls_per_call_owner"] == 0.75
+    # An active-owner formula would divide by active + module == 2 instead.
+    assert activity["average_calls_per_call_owner"] != 1.5
 
 
 def test_metrics_fingerprint_ignores_root_body_order(tmp_path: Path) -> None:

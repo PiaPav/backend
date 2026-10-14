@@ -12,6 +12,14 @@ DIT is `null` for classes whose ancestry reaches an inheritance cycle.
 Canonical-mode object metrics expose deterministic per-class rows in `classes`
 so this unknown depth is not replaced by a false finite value.
 
+Semantics v1 and v2 intentionally preserve the historical hybrid denominator
+of `activity.average_calls_per_call_owner`: every declared function and method
+is counted, whether or not it contains a call, and a module is counted only
+when it contains at least one module-level call. In symbols, the denominator is
+`functions + methods + modules_with_calls`. The name "call owner" must not be
+read as "active owner" for these versions. Changing to active owners only would
+change metric values and therefore requires a new metrics semantics version.
+
 `input.graph_fingerprint` is calculated from canonical decoded legacy DTO
 content, including a canonical order exclusively for the root graph `body`
 file collection, rather than from the source JSON bytes. All nested lists,

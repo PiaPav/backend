@@ -8,6 +8,16 @@ import pytest
 from parser import parse_project, starter
 
 
+def test_committed_source_matches_complete_graph_v1_golden(tmp_path: Path) -> None:
+    fixtures = Path(__file__).resolve().parents[1] / "gpt_work_dir/tests/golden_v1"
+    actual_path = parse_project(fixtures / "source", tmp_path / "graph.json")
+
+    actual = json.loads(actual_path.read_text(encoding="utf-8"))
+    expected = json.loads((fixtures / "graph.json").read_text(encoding="utf-8"))
+
+    assert actual == expected
+
+
 def test_parse_project_is_atomic_deterministic_and_keeps_starter_semantics(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
