@@ -18,6 +18,66 @@ def test_committed_source_matches_complete_graph_v1_golden(tmp_path: Path) -> No
     assert actual == expected
 
 
+def test_package_calls_source_matches_complete_graph_v1_golden(tmp_path: Path) -> None:
+    fixtures = (
+        Path(__file__).resolve().parents[1]
+        / "gpt_work_dir/tests/golden_v1/package_calls"
+    )
+    actual_path = parse_project(fixtures / "source", tmp_path / "graph.json")
+
+    actual = json.loads(actual_path.read_text(encoding="utf-8"))
+    expected = json.loads((fixtures / "graph.json").read_text(encoding="utf-8"))
+
+    assert actual == expected
+
+    file_ids = {node["id"] for node in actual["nodes"] if node["kind"] == "file"}
+    assert file_ids == {
+        "file:pkg.py",
+        "file:pkg/__init__.py",
+        "file:consumer.py",
+    }
+    import_edges = [edge for edge in actual["edges"] if edge["kind"] == "imports"]
+    assert [(edge["source_id"], edge["target_id"]) for edge in import_edges] == [
+        ("file:consumer.py", "file:pkg/__init__.py")
+    ]
+    assert not any(
+        edge["source_id"] == "file:pkg/__init__.py"
+        and edge["target_id"] == "file:consumer.py"
+        for edge in import_edges
+    )
+    assert any(
+        diagnostic["kind"] == "shadowed_module"
+        and diagnostic["path"] == "pkg.py"
+        for diagnostic in actual["diagnostics"]
+    )
+
+    callsites = actual["callsites"]
+    assert len(callsites) == 4
+    assert len({callsite["caller_id"] for callsite in callsites}) == 1
+    assert sorted(callsite["syntactic_depth"] for callsite in callsites) == [0, 0, 0, 1]
+    nodes = {node["id"]: node for node in actual["nodes"]}
+    run_id = next(
+        node_id
+        for node_id, node in nodes.items()
+        if node["qualified_name"] == "consumer.run"
+    )
+    assert any(
+        edge["kind"] == "contains"
+        and edge["source_id"] == "file:consumer.py"
+        and edge["target_id"] == run_id
+        for edge in actual["edges"]
+    )
+    call_edges = [edge for edge in actual["edges"] if edge["kind"] == "calls"]
+    weights = {
+        nodes[edge["target_id"]]["qualified_name"]: edge["weight"]
+        for edge in call_edges
+    }
+    caller_id = callsites[0]["caller_id"]
+    assert all(edge["source_id"] == caller_id for edge in call_edges)
+    assert weights == {"pkg.outer": 3, "pkg.inner": 1}
+    assert sum(edge["weight"] for edge in call_edges) == 4
+
+
 def test_parse_project_is_atomic_deterministic_and_keeps_starter_semantics(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()

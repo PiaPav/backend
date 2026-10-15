@@ -20,6 +20,59 @@ def test_committed_graph_matches_complete_metrics_v2_golden(tmp_path: Path) -> N
     assert actual == expected
 
 
+def test_package_calls_graph_matches_complete_metrics_v2_golden(tmp_path: Path) -> None:
+    fixtures = (
+        Path(__file__).resolve().parents[1]
+        / "gpt_work_dir/tests/golden_v1/package_calls"
+    )
+    actual_path = calculate_metrics(fixtures / "graph.json", tmp_path / "metrics.json")
+
+    actual = json.loads(actual_path.read_text(encoding="utf-8"))
+    expected = json.loads((fixtures / "metrics.json").read_text(encoding="utf-8"))
+
+    assert actual == expected
+
+    metrics = actual["metrics"]
+    assert metrics["size"]["files"] == 3
+    assert metrics["size"]["directories"] == 1
+    assert metrics["size"]["functions"] == 4
+    assert metrics["activity"]["calls"] == 4
+    assert metrics["activity"]["local_imports"] == 1
+    assert metrics["activity"]["average_calls_per_callable"] == 1.0
+    assert metrics["activity"]["average_calls_per_call_owner"] == 1.0
+
+    dependencies = metrics["dependency_graph"]
+    assert dependencies["nodes"] == 3
+    assert dependencies["edges"] == 1
+    assert dependencies["density"] == 0.1667
+    assert dependencies["average_fan_in"] == 0.3333
+    assert dependencies["average_fan_out"] == 0.3333
+    assert dependencies["isolated_files"] == ["file:pkg.py"]
+    assert dependencies["highest_fan_in"] == {
+        "degree": 1,
+        "files": ["file:pkg/__init__.py"],
+    }
+    assert dependencies["highest_fan_out"] == {
+        "degree": 1,
+        "files": ["consumer"],
+    }
+
+    call_graph = metrics["call_graph"]
+    assert call_graph["nodes"] == 4
+    assert call_graph["edges"] == 2
+    assert call_graph["callsites_in_local_edges"] == 4
+    assert call_graph["maximum_syntactic_call_nesting"] == 2
+    assert call_graph["local_resolution_rate"] == 1.0
+    assert call_graph["classified_callsite_rate"] == 1.0
+    assert {
+        (edge["caller"], edge["target"], edge["callsites"])
+        for edge in call_graph["heaviest_edges"]
+    } >= {
+        ("consumer.run", "file:pkg/__init__.py.outer", 3),
+        ("consumer.run", "file:pkg/__init__.py.inner", 1),
+    }
+
+
 def _graph() -> dict:
     return {
         "body": [

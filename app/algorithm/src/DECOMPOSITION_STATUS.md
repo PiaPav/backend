@@ -1,12 +1,12 @@
 # Статус декомпозиции
 
-Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. После последних исправлений независимый tester выполнил через `app/algorithm/.venv/Scripts/python.exe` совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 112 passed, 0 failed, 0 skipped.
+Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. После последних исправлений независимый tester выполнил через `app/algorithm/.venv/Scripts/python.exe` совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 114 passed, 0 failed, 0 skipped.
 
 ## Общий итог
 
 | Этап | Итог |
 |---|---|
-| 1. Фиксация текущей семантики | **частично** |
+| 1. Фиксация текущей семантики | **выполнен** |
 | 2. Независимый файловый API Parser | **выполнен** |
 | 3. Независимый файловый API Metrics | **частично / почти выполнен в переходных границах**: не переиспользуется существующая serialization; Graph DTO v1 пока обязан содержать legacy `body` |
 | 4. Версионированный Graph DTO | **частично** |
@@ -15,9 +15,9 @@
 
 ## Этап 1. Зафиксировать текущую семантику
 
-1. **Частично.** Legacy-формат и его потребители видны в `gpt_work_dir/tests/project1/graph/graph.json`, `metrics/core.py::_validate_legacy_graph` и модулях `metrics/logic/*`, но единого явного описания полей и потребностей каждого расчёта нет. Остаток: оформить контракт и матрицу потребителей.
+1. **Выполнен.** `metrics/LEGACY_GRAPH_CONTRACT.md` содержит единую матрицу фактических legacy-полей, валидации, потребителей и migration status, включая поля, которые влияют только на fingerprint. `metrics/CONTRACT.md` связывает её с compatibility projection. Остатка нет.
 2. **Выполнен.** Legacy graph golden целиком сравнивается в `gpt_work_dir/tests/test_parser.py::ParserGoldenTests.test_project1_matches_the_complete_golden_graph`. Компактные versioned fixtures `gpt_work_dir/tests/golden_v1/graph.json` и `metrics.json` полностью сравниваются в независимых тестах Parser и Metrics; Metrics использует сохранённый Graph DTO без запуска Parser. Остатка нет.
-3. **Частично.** Направление import проверяется в `parser/test_core.py::test_package_wins_module_name_collision_and_file_ids_do_not_collide`; правила package/`__init__.py` — там же и в `metrics/test_core.py::test_package_initializer_wins_module_collision_in_v1_metrics`; вложенные и повторные вызовы — в `ParserEdgeCaseTests.test_nested_and_repeated_calls_are_not_lost` и `test_semantic_call_targets_disambiguate_aliases_and_nested_repeated_calls`. Остаток: свести правила и текущие численные результаты в versioned golden-контракт.
+3. **Выполнен.** `gpt_work_dir/tests/golden_v1/CONTRACT.md` сводит направления containment/import/call, правило package/`__init__.py`, multiplicity и различие глубин. Сценарий `package_calls` целиком фиксирует Graph DTO v1 и Metrics DTO semantics v2, import `consumer -> pkg/__init__.py`, shadowed `pkg.py`, четыре exact callsite с глубинами `0/1`, веса `3/1` и текущие численные результаты; full-equality и focused assertions выполняются независимо для Parser и Metrics. Остатка нет.
 4. **Выполнен для semantics v1/v2.** Текущая hybrid-формула `call_owner_count` (все callable плюс модули с calls) явно зафиксирована в `metrics/CONTRACT.md` и legacy-документации и защищена различающим regression test. Переход к active-owner формуле оставлен для отдельной новой версии семантики.
 
 ## Этап 2. Ввести независимый файловый API Parser
@@ -67,11 +67,10 @@
 
 ## Вывод относительно ожидаемого состояния
 
-Ожидание о полном закрытии этапов 1–3 не подтверждено: этап 1 остаётся частичным из-за отсутствия единой матрицы legacy-полей и потребителей, а также сводного versioned golden-контракта для всех правил подпункта 3; full-equality DTO regression tests и semantics v1/v2 для `call_owner_count` уже зафиксированы. Этап 2 подтверждён. Этап 3 частично / почти выполнен в переходных границах: файловый API, loader/validation, identity и runtime independence готовы, но существующая serialization не переиспользуется; отдельно сохраняется ограничение обязательного legacy `body`. Частичность этапов 4–6 подтверждена; этап 5 находится ближе к началу, чем к завершению.
+Этапы 1 и 2 подтверждены полностью. Этап 3 частично / почти выполнен в переходных границах: файловый API, loader/validation, identity и runtime independence готовы, но существующая serialization не переиспользуется; отдельно сохраняется ограничение обязательного legacy `body`. Частичность этапов 4–6 подтверждена; этап 5 находится ближе к началу, чем к завершению.
 
 ## Приоритет доработок
 
-1. Оформить единую матрицу legacy-полей и потребителей Metrics и свести правила подпункта 3 в versioned golden-контракт, чтобы завершить этап 1.
-2. Перенести в Parser разрешение inheritance, field types и coupling; перевести object metrics на typed ID edges.
-3. Разделить complexity facts/formulas и перенести формулы в Metrics через dual golden transition.
-4. Ввести единую read-only projection-модель Metrics и удалить дублирование и topology heuristics.
+1. Перенести в Parser разрешение inheritance, field types и coupling; перевести object metrics на typed ID edges.
+2. Разделить complexity facts/formulas и перенести формулы в Metrics через dual golden transition.
+3. Ввести единую read-only projection-модель Metrics и удалить дублирование и topology heuristics.
