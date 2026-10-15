@@ -15,19 +15,22 @@ permission:
     "git log *": allow
     "git show *": allow
 
-    # Запрет Python inline scripts
-    '*python.exe" -c *': deny
-    '*python.exe -c *': deny
-
     # Pytest через виртуальное окружение
-    '"*\.venv\Scripts\python.exe" -m pytest *': allow
-    '& "*\.venv\Scripts\python.exe" -m pytest *': allow
+    '*\.venv\Scripts\python.exe" -m pytest *': allow
+    '*\.venv\Scripts\python.exe -m pytest *': allow
+        
+    # Powershell
+    "Test-Path *": allow
 
     # Составные команды
     "*;*": ask
     "*&&*": ask
     "*||*": ask
     "*|*": ask
+
+    # Запрет Python inline scripts
+    '*python.exe" -c *': deny
+    '*python.exe -c *': deny
 ---
 
 ## Обязательный Python-интерпретатор
