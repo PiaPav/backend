@@ -1,6 +1,6 @@
 # Статус декомпозиции
 
-Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. После последних исправлений независимый tester выполнил через `app/algorithm/.venv/Scripts/python.exe` совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 114 passed, 0 failed, 0 skipped.
+Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. После последних исправлений независимый tester выполнил через `app/algorithm/.venv/Scripts/python.exe` совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 140 passed, 0 failed, 0 skipped.
 
 ## Общий итог
 
@@ -9,7 +9,7 @@
 | 1. Фиксация текущей семантики | **выполнен** |
 | 2. Независимый файловый API Parser | **выполнен** |
 | 3. Независимый файловый API Metrics | **частично / почти выполнен в переходных границах**: не переиспользуется существующая serialization; Graph DTO v1 пока обязан содержать legacy `body` |
-| 4. Версионированный Graph DTO | **частично** |
+| 4. Версионированный Graph DTO | **частично / основной object-relations scope выполнен** |
 | 5. Формулы сложности в Metrics | **частично, в основном не выполнен** |
 | 6. Аналитические проекции | **частично** |
 
@@ -17,8 +17,8 @@
 
 1. **Выполнен.** `metrics/LEGACY_GRAPH_CONTRACT.md` содержит единую матрицу фактических legacy-полей, валидации, потребителей и migration status, включая поля, которые влияют только на fingerprint. `metrics/CONTRACT.md` связывает её с compatibility projection. Остатка нет.
 2. **Выполнен.** Legacy graph golden целиком сравнивается в `gpt_work_dir/tests/test_parser.py::ParserGoldenTests.test_project1_matches_the_complete_golden_graph`. Компактные versioned fixtures `gpt_work_dir/tests/golden_v1/graph.json` и `metrics.json` полностью сравниваются в независимых тестах Parser и Metrics; Metrics использует сохранённый Graph DTO без запуска Parser. Остатка нет.
-3. **Выполнен.** `gpt_work_dir/tests/golden_v1/CONTRACT.md` сводит направления containment/import/call, правило package/`__init__.py`, multiplicity и различие глубин. Сценарий `package_calls` целиком фиксирует Graph DTO v1 и Metrics DTO semantics v2, import `consumer -> pkg/__init__.py`, shadowed `pkg.py`, четыре exact callsite с глубинами `0/1`, веса `3/1` и текущие численные результаты; full-equality и focused assertions выполняются независимо для Parser и Metrics. Остатка нет.
-4. **Выполнен для semantics v1/v2.** Текущая hybrid-формула `call_owner_count` (все callable плюс модули с calls) явно зафиксирована в `metrics/CONTRACT.md` и legacy-документации и защищена различающим regression test. Переход к active-owner формуле оставлен для отдельной новой версии семантики.
+3. **Выполнен.** `gpt_work_dir/tests/golden_v1/CONTRACT.md` сводит направления containment/import/call, правило package/`__init__.py`, multiplicity и различие глубин. Сценарий `package_calls` целиком фиксирует Graph DTO v1 / parser semantics v2 и Metrics DTO semantics v3, import `consumer -> pkg/__init__.py`, shadowed `pkg.py`, четыре exact callsite с глубинами `0/1`, веса `3/1` и текущие численные результаты; full-equality и focused assertions выполняются независимо для Parser и Metrics. Остатка нет.
+4. **Выполнен для semantics v1-v3.** Текущая hybrid-формула `call_owner_count` (все callable плюс модули с calls) явно зафиксирована в `metrics/CONTRACT.md` и legacy-документации и защищена различающим regression test. Переход к active-owner формуле оставлен для отдельной новой версии семантики.
 
 ## Этап 2. Ввести независимый файловый API Parser
 
@@ -36,17 +36,17 @@
 4. **Выполнен.** Legacy-чтение сосредоточено в `metrics/core.py`, а идентичность файлов — в `metrics/logic/identity.py` (`legacy_file_id`, `graph_files`, `effective_module_ids`). Остатка в переходном scope нет.
 5. **Выполнен.** Runtime-код `metrics` не импортирует Parser и читает только graph-файл; ограничение проверяет `metrics/test_core.py::test_no_runtime_cross_package_or_legacy_imports`. Остатка нет.
 
-Файловый API, loader/validation, identity и runtime independence готовы, но буквально этап закрыт лишь частично / почти выполнен в переходных границах: существующая serialization не переиспользуется. Отдельно сохраняется переходное ограничение: `metrics/core.py::_load_graph_bytes` требует от v1 legacy `body`, а canonical metrics pipeline по `nodes`/`edges`/`callsites` ещё не завершён.
+Файловый API, loader/validation, identity и runtime independence готовы, но буквально этап закрыт лишь частично / почти выполнен в переходных границах: существующая serialization не переиспользуется. `metrics/core.py::_load_graph_bytes` пока требует от v1 legacy `body`, однако semantics-v3 object metrics и call graph уже используют canonical nodes/edges/callsites без строкового разрешения.
 
 ## Этап 4. Ввести версионированный Graph DTO
 
 1. **Выполнен.** Envelope с `schema_version`, `parser_semantics_version` и fingerprint строится в `parser/graph_v1.py::build_graph_v1`; контракт проверяет `graph_dto/contract.py::validate_graph_v1`. Остатка нет.
-2. **Выполнен для callsite scope.** Canonical file/class/function/method IDs, `parent_id` и caller identity создаются в `build_graph_v1`; module-level calls принадлежат file node. Остаток этапа относится к другим типизированным отношениям.
+2. **Выполнен.** Canonical file/class/field/function/method IDs, `parent_id` и caller identity создаются в `build_graph_v1`; module-level calls принадлежат file node. Остатка нет.
 3. **Частично.** Локальные import edges сериализуются как `dependent -> dependency` с ID, включая package collision (`parser/test_core.py`), но внешний/неразрешённый импорт остаётся в legacy `body`, а canonical import-модель неполна. Остаток: представить все исходы импорта типизированно.
 4. **Выполнен для вызовов.** Parser сохраняет legacy `semantic_target`, отдельно собирает canonical callsites и испускает exact `calls`/`awaits` edges по ID; переходный diagnostic удалён.
-5. **Не выполнен.** Canonical inheritance, field-type и coupling target edges по ID не испускаются; `metrics/logic/object_metrics.py` всё ещё разрешает имена эвристически. Остаток: перенести разрешение в Parser.
+5. **Выполнен.** Parser semantics v2 разрешает local/import-bound inheritance и field types, испускает `inherits`, `field_type`, field nodes, `accesses_field` и статусные `type_references`. CBO выводится в Metrics из первичных typed relations и exact calls без дублирующего `couples` edge. Остатка нет.
 6. **Выполнен.** Parser сериализует location, expression, syntactic depth, await/resolution и агрегирует exact edges с multiplicity; validator допускает file/module caller и сохраняет callable-only target.
-7. **Не выполнен.** `metrics/logic/object_metrics.py::calculate_object_metrics` работает по строкам legacy `body`, а не только по типизированным ID-рёбрам. Остаток: переключить DIT/NOC/CBO/RFC и связанные расчёты на canonical edges.
+7. **Выполнен для parser semantics v2.** Metrics semantics v3 вычисляет DIT/NOC/CBO/RFC/LCOM по canonical IDs и typed edges; mutation/permutation tests запрещают влияние legacy имён на topology. Parser semantics v1 и unversioned input сохраняют versioned legacy fallback. Остатка нет.
 8. **Выполнен.** Общий пакет `graph_dto` содержит декларативные константы, canonicalization/fingerprint и чистую валидацию без бизнес-логики Parser/Metrics. Остатка нет.
 9. **Выполнен.** `build_graph_v1` сохраняет transitional `body`, а `metrics/core.py` валидирует и использует его как compatibility projection. Остаток плановый: удалить адаптер только отдельным версионированным изменением.
 
@@ -63,14 +63,14 @@
 1. **Частично.** `metrics/logic/identity.py::graph_files` централизует compatibility projection идентичности, но единой внутренней read-only модели Graph DTO нет. Остаток: создать общий неизменяемый model/view для всех расчётов.
 2. **Частично.** File identity делегируется в `identity.py`, однако wrappers `_file_id` остаются в `calculator.py`, `call_graph.py`, `quality.py`, `object_metrics.py`, а обход nested calls дублируется (`calculator.py::_count_call`, `call_graph.py::_nested_calls`). Остаток: единые helpers/projection.
 3. **Частично.** Отдельные проекции именованы локально в модулях architecture/call graph, но централизованного набора directed import/call/package и undirected projections нет. Остаток: объявить их в единой модели с направлением каждого ребра.
-4. **Не выполнен.** `metrics/logic/call_graph.py::resolve` и `metrics/logic/object_metrics.py::resolve` всё ещё выполняют строковые эвристики и меняют topology. Остаток: Metrics должен использовать только готовые canonical IDs и typed edges.
+4. **Выполнен для parser semantics v2.** Canonical object/call branches используют только готовые IDs, typed edges и resolution statuses. Строковые `resolve`-эвристики сохранены исключительно внутри versioned legacy compatibility path. Остаток полного этапа связан с общей projection-моделью и последующим удалением legacy adapter.
 
 ## Вывод относительно ожидаемого состояния
 
-Этапы 1 и 2 подтверждены полностью. Этап 3 частично / почти выполнен в переходных границах: файловый API, loader/validation, identity и runtime independence готовы, но существующая serialization не переиспользуется; отдельно сохраняется ограничение обязательного legacy `body`. Частичность этапов 4–6 подтверждена; этап 5 находится ближе к началу, чем к завершению.
+Этапы 1 и 2 подтверждены полностью. Этап 3 частично / почти выполнен в переходных границах: файловый API, loader/validation, identity и runtime independence готовы, но существующая serialization не переиспользуется и legacy `body` ещё обязателен для немигрированных формул. В этапе 4 завершён основной scope inheritance/field types/object metrics; неполной остаётся canonical модель внешних и неразрешённых импортов. Этап 5 находится ближе к началу, чем к завершению; этап 6 частичен, хотя topology heuristics уже изолированы от semantics v3.
 
 ## Приоритет доработок
 
-1. Перенести в Parser разрешение inheritance, field types и coupling; перевести object metrics на typed ID edges.
-2. Разделить complexity facts/formulas и перенести формулы в Metrics через dual golden transition.
-3. Ввести единую read-only projection-модель Metrics и удалить дублирование и topology heuristics.
+1. Разделить complexity facts/formulas и перенести формулы в Metrics через dual golden transition.
+2. Ввести единую read-only projection-модель Metrics и удалить дублирование compatibility-обходов.
+3. Представить external/unresolved import outcomes в canonical Graph DTO и завершить import-модель этапа 4.

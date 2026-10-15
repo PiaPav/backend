@@ -10,6 +10,7 @@ from .classifiers import classify_classes
 from .definitions import collect_definitions
 from .imports import collect_imports
 from .project_index import ProjectIndex
+from .relations import RelationResolver
 from .serializer import GraphSerializer
 from .validation import validate_graph
 
@@ -44,6 +45,7 @@ class ProjectAnalyzer:
                 else None
             )
             collect_definitions(module, on_node)
+        RelationResolver(modules, self.index).resolve_all()
         classify_classes(modules)
         calls = CallResolver(modules, self.index)
         calls.resolve_all()

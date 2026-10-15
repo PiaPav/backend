@@ -95,6 +95,8 @@ def _class_fields(node: ast.ClassDef, module: ModuleInfo) -> list[FieldInfo]:
                     annotation=annotation_value(statement.annotation),
                     value=simple_value(statement.value),
                     value_node=statement.value,
+                    annotation_node=statement.annotation,
+                    annotation_source=ast.unparse(statement.annotation),
                     file=module.file,
                     line=statement.lineno,
                     column=statement.col_offset,
@@ -131,7 +133,34 @@ def _class_fields(node: ast.ClassDef, module: ModuleInfo) -> list[FieldInfo]:
         None,
     )
     if init:
-        for statement in ast.walk(init):
+        class ConstructorStatementVisitor(ast.NodeVisitor):
+            def __init__(self) -> None:
+                self.statements: list[ast.Assign | ast.AnnAssign] = []
+
+            def visit_Assign(self, statement: ast.Assign) -> None:
+                self.statements.append(statement)
+                self.generic_visit(statement)
+
+            def visit_AnnAssign(self, statement: ast.AnnAssign) -> None:
+                self.statements.append(statement)
+                self.generic_visit(statement)
+
+            def _skip_scope(self, scope: ast.AST) -> None:
+                return
+
+            visit_FunctionDef = _skip_scope
+            visit_AsyncFunctionDef = _skip_scope
+            visit_ClassDef = _skip_scope
+            visit_Lambda = _skip_scope
+            visit_ListComp = _skip_scope
+            visit_SetComp = _skip_scope
+            visit_DictComp = _skip_scope
+            visit_GeneratorExp = _skip_scope
+
+        visitor = ConstructorStatementVisitor()
+        for constructor_statement in init.body:
+            visitor.visit(constructor_statement)
+        for statement in visitor.statements:
             target: ast.expr | None = None
             annotation = None
             value = None
@@ -154,6 +183,8 @@ def _class_fields(node: ast.ClassDef, module: ModuleInfo) -> list[FieldInfo]:
                         annotation=annotation or _called_name(value),
                         value=simple_value(value),
                         value_node=value,
+                        annotation_node=(statement.annotation if isinstance(statement, ast.AnnAssign) else None),
+                        annotation_source=(ast.unparse(statement.annotation) if isinstance(statement, ast.AnnAssign) else None),
                         file=module.file,
                         line=statement.lineno,
                         column=statement.col_offset,
@@ -206,6 +237,7 @@ def collect_definitions(
             info = ClassInfo(
                 name=node.name,
                 parents=[dotted_name(item) for item in node.bases],
+                parent_nodes=list(node.bases),
                 fields=_class_fields(node, module),
                 decorators=_decorators(node),
                 node=node,

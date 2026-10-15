@@ -38,9 +38,11 @@ def _nested_calls(call: Mapping[str, Any], depth: int = 1):
             yield from _nested_calls(value, depth + 1)
 
 
-def _longest_component_path(
-    components: list[set[str]], edges: set[tuple[str, str]]
-) -> list[str]:
+def _longest_component_indices(
+    components: list[set[str]],
+    edges: set[tuple[str, str]],
+    display_key: Mapping[str, str] | None = None,
+) -> list[int]:
     if not components:
         return []
     component_of = {
@@ -59,8 +61,13 @@ def _longest_component_path(
             return next(iter(component))
         return "{" + " ↔ ".join(sorted(component)) + "}"
 
-    def path_key(path: list[int]) -> tuple[str, ...]:
-        return tuple(component_label(index) for index in path)
+    def component_key(index: int) -> str | tuple[str, ...]:
+        if display_key is None:
+            return component_label(index)
+        return tuple(sorted(display_key[node] for node in components[index]))
+
+    def path_key(path: list[int]) -> tuple[str | tuple[str, ...], ...]:
+        return tuple(component_key(index) for index in path)
 
     remaining = set(adjacency)
     while remaining:
@@ -72,10 +79,24 @@ def _longest_component_path(
             cache[start] = [start, *best_tail]
             remaining.remove(start)
 
-    path = min(
+    return min(
         cache.values(),
         key=lambda candidate: (-len(candidate), path_key(candidate)),
     )
+
+
+def _longest_component_path(
+    components: list[set[str]], edges: set[tuple[str, str]]
+) -> list[str]:
+    """Return the legacy string representation of the selected SCC path."""
+    path = _longest_component_indices(components, edges)
+
+    def component_label(index: int) -> str:
+        component = components[index]
+        if len(component) == 1:
+            return next(iter(component))
+        return "{" + " ↔ ".join(sorted(component)) + "}"
+
     return [
         component_label(index)
         for index in path
@@ -150,9 +171,12 @@ def _top(values: Mapping[str, float], limit: int = 5) -> list[dict[str, Any]]:
 
 
 def calculate_call_graph_metrics(
-    graph: Mapping[str, Any], *, legacy_resolution: bool | None = None
+    graph: Mapping[str, Any], *, legacy_resolution: bool | None = None,
+    canonical: bool = False,
 ) -> dict[str, Any]:
     """Build a qualified call graph and calculate vertex-oriented metrics."""
+    if canonical:
+        return _calculate_canonical_call_graph_metrics(graph)
     files = _graph_files(graph)
     module_ids = effective_module_ids(files)
     use_legacy_resolution = (
@@ -435,4 +459,136 @@ def calculate_call_graph_metrics(
         "betweenness_top": _top(betweenness),
         "risk_top": risks[:10],
         "node_kinds": dict(sorted(Counter(kinds.values()).items())),
+    }
+
+
+def _calculate_canonical_call_graph_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
+    """Build v3 topology from IDs and classify only canonical callsites."""
+    all_nodes = {str(item["id"]): item for item in graph.get("nodes", []) if isinstance(item, Mapping)}
+    callable_ids = {identifier for identifier, item in all_nodes.items() if item.get("kind") in {"function", "method"}}
+    file_nodes = {
+        identifier: item for identifier, item in all_nodes.items()
+        if item.get("kind") in {"file", "module"}
+    }
+    module_paths: dict[str, set[str]] = {}
+    for item in file_nodes.values():
+        module_paths.setdefault(str(item.get("qualified_name") or ""), set()).add(str(item.get("path") or ""))
+    active_modules = {
+        str(callsite.get("caller_id"))
+        for callsite in graph.get("callsites", [])
+        if isinstance(callsite, Mapping) and callsite.get("caller_id") in file_nodes
+    }
+    active_modules.update(
+        str(edge.get("source_id"))
+        for edge in graph.get("edges", [])
+        if isinstance(edge, Mapping)
+        and edge.get("kind") in {"calls", "awaits"}
+        and edge.get("source_id") in file_nodes
+    )
+    call_owner_ids = callable_ids | active_modules
+
+    def ancestor_file(identifier: str) -> Mapping[str, Any] | None:
+        current = all_nodes[identifier]
+        seen: set[str] = set()
+        while current.get("parent_id") in all_nodes:
+            parent_id = str(current["parent_id"])
+            if parent_id in seen:
+                return None
+            seen.add(parent_id); current = all_nodes[parent_id]
+        return current if current.get("kind") in {"file", "module"} else None
+
+    def label(identifier: str) -> str:
+        item = all_nodes[identifier]; qualified = str(item.get("qualified_name") or identifier)
+        file_node = ancestor_file(identifier)
+        path = str((file_node or item).get("path") or "")
+        module = str(file_node.get("qualified_name") or "") if file_node else qualified.rsplit(".", 1)[0]
+        if identifier in file_nodes:
+            return (
+                f"file:{path}.__module__"
+                if len(module_paths.get(qualified, ())) > 1
+                else f"{qualified}.__module__"
+            )
+        # Preserve the established collision-safe file provenance spelling.
+        if len(module_paths.get(module, ())) > 1:
+            suffix = qualified[len(module):].lstrip(".")
+            return f"file:{path}.{suffix}" if suffix else f"file:{path}"
+        return qualified
+
+    base_labels = {identifier: label(identifier) for identifier in call_owner_ids}
+    label_counts = Counter(base_labels.values())
+    labels = {
+        identifier: (
+            value if label_counts[value] == 1 else f"{value} [{identifier}]"
+        )
+        for identifier, value in base_labels.items()
+    }
+    edge_weights: Counter[tuple[str, str]] = Counter()
+    for edge in graph.get("edges", []):
+        if not isinstance(edge, Mapping) or edge.get("kind") not in {"calls", "awaits"}: continue
+        source, target = edge.get("source_id"), edge.get("target_id")
+        if source in call_owner_ids and target in callable_ids:
+            edge_weights[(source, target)] += int(edge.get("weight", 1))
+    edges = set(edge_weights)
+    external = unresolved = 0; maximum_nesting = 0; deepest: set[str] = set()
+    for callsite in graph.get("callsites", []):
+        if not isinstance(callsite, Mapping): continue
+        caller = callsite.get("caller_id"); status = callsite.get("resolution")
+        if caller not in call_owner_ids:
+            continue
+        depth = int(callsite.get("syntactic_depth", 0)) + 1
+        if depth > maximum_nesting: maximum_nesting = depth; deepest = {caller}
+        elif depth == maximum_nesting: deepest.add(caller)
+        if status == "external": external += 1
+        elif status != "exact": unresolved += 1
+
+    incoming = dict.fromkeys(call_owner_ids, 0); outgoing = dict.fromkeys(call_owner_ids, 0)
+    adjacency = {node: set() for node in call_owner_ids}
+    for source, target in edges:
+        outgoing[source] += 1; incoming[target] += 1; adjacency[source].add(target)
+    components = _strong_components(call_owner_ids, edges)
+    recursive_ids = [sorted(component) for component in components if len(component) > 1 or any((node, node) in edges for node in component)]
+    longest_component_indices = _longest_component_indices(
+        components, edges, display_key=labels
+    )
+    longest = []
+    for index in longest_component_indices:
+        component_labels = sorted(labels[identifier] for identifier in components[index])
+        longest.append(
+            component_labels[0]
+            if len(component_labels) == 1
+            else "{" + " ↔ ".join(component_labels) + "}"
+        )
+    reach: dict[str, int] = {}
+    for start in call_owner_ids:
+        visited: set[str] = set(); pending = list(adjacency[start])
+        while pending:
+            node = pending.pop()
+            if node in visited: continue
+            visited.add(node); pending.extend(adjacency[node] - visited)
+        visited.discard(start); reach[start] = len(visited)
+    peak_in = max(incoming.values(), default=0); peak_out = max(outgoing.values(), default=0)
+    peak_reach = max(reach.values(), default=0)
+    pagerank = _pagerank(call_owner_ids, edges); betweenness = _betweenness(call_owner_ids, edges)
+    local = sum(edge_weights.values()); total = local + external + unresolved
+    return {
+        "nodes": len(call_owner_ids), "edges": len(edges), "callsites_in_local_edges": local,
+        "external_or_builtin_callsites": external, "unresolved_callsites": unresolved,
+        "unresolved_or_external_callsites": external + unresolved,
+        "local_resolution_rate": round(local / total, 4) if total else 0.0,
+        "classified_callsite_rate": round((local + external) / total, 4) if total else 0.0,
+        "heaviest_edges": [{"caller": labels[s], "target": labels[t], "callsites": weight} for (s, t), weight in sorted(edge_weights.items(), key=lambda item: (-item[1], labels[item[0][0]], labels[item[0][1]]))[:10]],
+        "entrypoints": sorted(labels[node] for node in call_owner_ids if incoming[node] == 0 and outgoing[node] > 0),
+        "leaf_callables": sorted(labels[node] for node in call_owner_ids if incoming[node] > 0 and outgoing[node] == 0),
+        "isolated_callables": sorted(labels[node] for node in call_owner_ids if incoming[node] == outgoing[node] == 0),
+        "highest_fan_in": {"degree": peak_in, "nodes": sorted(labels[node] for node, degree in incoming.items() if degree == peak_in)},
+        "highest_fan_out": {"degree": peak_out, "nodes": sorted(labels[node] for node, degree in outgoing.items() if degree == peak_out)},
+        "maximum_transitive_reach": {"reachable_nodes": peak_reach, "nodes": sorted(labels[node] for node, count in reach.items() if count == peak_reach)},
+        "maximum_call_chain_depth": max(0, len(longest) - 1), "longest_call_chain": longest,
+        "maximum_syntactic_call_nesting": maximum_nesting,
+        "deepest_nested_call_owners": sorted(labels[node] for node in deepest),
+        "recursive_components": sorted([sorted(labels[node] for node in component) for component in recursive_ids]),
+        "pagerank_top": _top({labels[node]: score for node, score in pagerank.items()}),
+        "betweenness_top": _top({labels[node]: score for node, score in betweenness.items()}),
+        "risk_top": [],
+        "node_kinds": dict(sorted(Counter(str(all_nodes[node].get("kind")) for node in call_owner_ids).items())),
     }

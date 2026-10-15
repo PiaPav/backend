@@ -506,7 +506,7 @@ JSON перед вставкой в `<script type="application/json">` экра�
 | `local_imports` | Импорты объектов из анализируемого проекта |
 | `external_imports` | Импорты стандартной библиотеки и сторонних пакетов |
 | `average_calls_per_callable` | Вызовы внутри функций и методов / число функций и методов |
-| `average_calls_per_call_owner` | Все вызовы / (все функции + все методы + модули с вызовами); это историческая hybrid-формула semantics v1/v2 |
+| `average_calls_per_call_owner` | Все вызовы / (все функции + все методы + модули с вызовами); это историческая hybrid-формула semantics v1-v3 |
 | `average_methods_per_class` | Методы / классы |
 
 Высокие средние значения обозначают насыщенность взаимодействиями, но не являются ошибкой сами по себе: orchestration/service-код закономерно вызывает больше объектов, чем модели данных.
@@ -591,6 +591,12 @@ JSON перед вставкой в `<script type="application/json">` экра�
 
 #### `object_oriented` — метрики классов
 
+Для unversioned/semantics-v1 входа Metrics сохраняет legacy-разрешение типов и
+вызовов по строковым именам. Для parser semantics v2 (metrics semantics v3)
+DIT/NOC/CBO/RFC/LCOM строятся по canonical ID и typed edges; неоднозначные,
+внешние, динамические и неразрешённые факты не создают topology. WMC пока
+остаётся compatibility-расчётом из `body`, пока complexity facts не перенесены.
+
 Каждая рейтинговая запись содержит полный набор показателей класса:
 
 | Метрика | Расчёт | Интерпретация высокого значения |
@@ -608,7 +614,7 @@ JSON перед вставкой в `<script type="application/json">` экра�
 
 #### `call_graph` — граф вызовов
 
-Вершины имеют квалифицированные имена `package.module.Class.method`. В граф входят функции, методы, неявные конструкторы и код модулей (`__module__`). Ребро `A → B` означает, что тело `A` содержит статически разрешённый вызов `B`.
+Вершины имеют квалифицированные имена `package.module.Class.method`. В граф входят функции, методы, неявные конструкторы и активный код модулей (`__module__`), владеющий callsite или исходящим canonical call edge. Ребро `A → B` означает статически разрешённый локальный вызов. В metrics semantics v3 topology строится только по canonical ID, `calls`/`awaits` и callsite statuses; строковое и suffix-разрешение применяется лишь в legacy semantics v1/v2.
 
 | Поле | Значение |
 |---|---|
@@ -637,6 +643,10 @@ JSON перед вставкой в `<script type="application/json">` экра�
 `entrypoints` и `isolated_callables` — кандидаты, а не доказательство публичности или мёртвого кода. Framework, dependency injection, декораторы и динамические вызовы могут находиться за пределами статического графа. Достоверность центральностей следует оценивать вместе с `local_resolution_rate` и `classified_callsite_rate`.
 
 ##### Рейтинг риска
+
+В legacy semantics v1/v2 `risk_top` рассчитывается по формуле ниже. В metrics
+semantics v3 список намеренно пуст: complexity facts ещё находятся только в
+compatibility `body` и не связываются с canonical callable ID по именам.
 
 `risk_top` объединяет четыре нормализованных внутри текущего проекта фактора:
 

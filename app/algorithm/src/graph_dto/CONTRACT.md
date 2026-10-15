@@ -1,7 +1,9 @@
 # Graph DTO v1
 
-The envelope requires `schema_version: 1`, `parser_semantics_version: 1`,
-`project.fingerprint`, and arrays `nodes`, `edges`, `callsites`, `diagnostics`.
+The envelope requires `schema_version: 1`, a supported
+`parser_semantics_version`, `project.fingerprint`, and arrays `nodes`, `edges`,
+`callsites`, `diagnostics`. Parser semantics 1 remains readable for compatibility.
+Parser semantics 2 additionally requires `type_references`.
 Canonical collections are sorted before serialization. The SHA-256 fingerprint
 is calculated over the envelope without `project.fingerprint` and without the
 transitional `body` mirror; it is therefore independent of collection order.
@@ -17,7 +19,21 @@ corresponding aggregated `calls`/`awaits` weight (and vice versa); such edges
 always carry a positive integer weight. File/module nodes may own module-level
 callsites and be call-edge sources; targets remain function/method nodes.
 
-The current parser output includes file/class/callable nodes, containment,
-resolved local import edges, canonical callsites and aggregated exact call/await
-edges. Canonical inheritance and type resolution remain incomplete; legacy facts
-are available through the temporary top-level `body` mirror.
+Current parser output uses semantics 2. In addition to file/class/callable nodes,
+it emits field nodes and the following typed relations:
+
+- `inherits`: child class -> exact internal parent class;
+- `field_type`: field -> exact internal class referenced by its annotation or
+  constructor assignment;
+- `accesses_field`: method -> declared field occurrence;
+- `calls` / `awaits`: call owner -> exact internal callable.
+
+Every base and field-type occurrence is represented by `type_references` with
+role, source expression, location and `exact`, `ambiguous`, `external`, or
+`unresolved` resolution. Exact references and `inherits`/`field_type` edges are
+mutually consistent. Non-exact references never create topology edges.
+
+Semantics 2 validates endpoint kinds, requires both `imports` endpoints to be
+file/module nodes, requires fields and methods to belong to classes, and
+requires `accesses_field` endpoints to have the same class owner.
+The temporary top-level `body` mirror remains outside the canonical fingerprint.

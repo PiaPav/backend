@@ -721,3 +721,387 @@ def test_attribute_rebinding_invalidates_import_root_and_inferred_receiver(tmp_p
     ]
     assert len(calls) == 4
     assert all(item["resolution"] != "exact" and item["target_id"] is None for item in calls)
+
+
+def test_semantics2_object_relations_cover_imports_types_and_field_accesses(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "pkg").mkdir(parents=True)
+    (source / "pkg.py").write_text("class Wrong: pass\n", encoding="utf-8")
+    (source / "pkg" / "__init__.py").write_text("class Base: pass\n", encoding="utf-8")
+    (source / "types.py").write_text("class Item: pass\n", encoding="utf-8")
+    (source / "duplicate.py").write_text("class Item: pass\n", encoding="utf-8")
+    (source / "model.py").write_text(
+        "from pkg import Base as Parent\nimport types as t\nimport missing as ext\n"
+        "class Local: pass\n"
+        "class Model(Parent):\n"
+        "    items: list[t.Item | 'Local']\n"
+        "    external: ext.Value\n"
+        "    unknown: Missing\n"
+        "    inferred = t.Item()\n"
+        "    def read(self):\n"
+        "        first = self.items\n"
+        "        second = lambda: self.items\n"
+        "        def nested(): return self.items\n"
+        "        return self.inferred\n",
+        encoding="utf-8",
+    )
+    dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    assert dto["parser_semantics_version"] == 2
+    nodes = {node["id"]: node for node in dto["nodes"]}
+    fields = [node for node in nodes.values() if node["kind"] == "field"]
+    assert {node["qualified_name"] for node in fields} >= {
+        "model.Model.items", "model.Model.external", "model.Model.unknown", "model.Model.inferred"
+    }
+    references = dto["type_references"]
+    assert next(item for item in references if item["role"] == "base")["resolution"] == "exact"
+    item_refs = [item for item in references if item["expression"] == "t.Item"]
+    assert item_refs and all(nodes[item["target_id"]]["path"] == "types.py" for item in item_refs)
+    assert next(item for item in references if item["expression"] == "ext.Value")["resolution"] == "external"
+    assert next(item for item in references if item["expression"] == "Missing")["resolution"] == "unresolved"
+    assert not any(item["resolution"] == "ambiguous" for item in references)
+    access_edges = sorted(
+        (edge for edge in dto["edges"] if edge["kind"] == "accesses_field"),
+        key=lambda edge: (edge["location"]["line"], edge["location"]["column"]),
+    )
+    assert [(nodes[edge["target_id"]]["qualified_name"], edge["location"]["line"])
+            for edge in access_edges] == [
+        ("model.Model.items", 11), ("model.Model.inferred", 14)
+    ]
+
+
+def test_semantics2_infers_instance_field_type_from_constructor_assignment(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "model.py").write_text(
+        "class Item:\n    pass\n\n"
+        "class Owner:\n"
+        "    def __init__(self):\n        self.item = Item()\n\n"
+        "    def read(self):\n        return self.item\n",
+        encoding="utf-8",
+    )
+
+    dto = json.loads(
+        parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8")
+    )
+    nodes = {node["id"]: node for node in dto["nodes"]}
+    field = next(
+        node for node in nodes.values()
+        if node["kind"] == "field" and node["qualified_name"] == "model.Owner.item"
+    )
+    item_class = next(
+        node for node in nodes.values()
+        if node["kind"] == "class" and node["qualified_name"] == "model.Item"
+    )
+    assert any(
+        edge["kind"] == "field_type"
+        and edge["source_id"] == field["id"]
+        and edge["target_id"] == item_class["id"]
+        for edge in dto["edges"]
+    )
+    assert any(
+        edge["kind"] == "accesses_field"
+        and nodes[edge["source_id"]]["qualified_name"] == "model.Owner.read"
+        and edge["target_id"] == field["id"]
+        for edge in dto["edges"]
+    )
+
+
+def test_semantics2_constructor_bindings_shadow_inferred_field_types(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "provider.py").write_text("class Item: pass\n", encoding="utf-8")
+    (source / "model.py").write_text(
+        "from provider import Item\n"
+        "class ParameterShadow:\n"
+        "    def __init__(self, Item):\n        self.value = Item()\n"
+        "class LocalShadow:\n"
+        "    def __init__(self):\n"
+        "        self.value = Item()\n"
+        "        Item = replacement\n",
+        encoding="utf-8",
+    )
+
+    dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    nodes = {node["id"]: node for node in dto["nodes"]}
+    fields = {
+        node["qualified_name"]: node for node in nodes.values()
+        if node["kind"] == "field"
+    }
+    shadow_fields = {
+        fields["model.ParameterShadow.value"]["id"],
+        fields["model.LocalShadow.value"]["id"],
+    }
+    references = [
+        item for item in dto["type_references"]
+        if item["role"] == "field_type" and item["owner_id"] in shadow_fields
+    ]
+    assert len(references) == 2
+    assert all(
+        item["resolution"] == "unresolved" and item["target_id"] is None
+        for item in references
+    )
+    assert not any(
+        edge["kind"] == "field_type" and edge["source_id"] in shadow_fields
+        for edge in dto["edges"]
+    )
+
+
+def test_semantics2_generic_type_parameters_shadow_imported_types(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "provider.py").write_text(
+        "class Item:\n    def __init__(self): pass\n", encoding="utf-8"
+    )
+    (source / "model.py").write_text(
+        "from provider import Item\n"
+        "class Owner[Item](Item):\n"
+        "    annotated: Item\n"
+        "    initialized = Item()\n"
+        "    def __init__(self):\n        self.constructed = Item()\n"
+        "class MethodOwner:\n"
+        "    def __init__[Item](self):\n        self.value = Item()\n",
+        encoding="utf-8",
+    )
+
+    dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    nodes = {node["id"]: node for node in dto["nodes"]}
+    owners = {
+        node["qualified_name"]: node for node in nodes.values()
+        if node["kind"] in {"class", "field"}
+    }
+    affected = {
+        owners["model.Owner"]["id"],
+        owners["model.Owner.annotated"]["id"],
+        owners["model.Owner.initialized"]["id"],
+        owners["model.Owner.constructed"]["id"],
+        owners["model.MethodOwner.value"]["id"],
+    }
+    references = [
+        item for item in dto["type_references"] if item["owner_id"] in affected
+    ]
+    assert len(references) == 5
+    assert all(
+        item["resolution"] == "unresolved" and item["target_id"] is None
+        for item in references
+    )
+    assert not any(
+        edge["kind"] in {"inherits", "field_type"}
+        and edge["source_id"] in affected
+        for edge in dto["edges"]
+    )
+    item_initializer = next(
+        node for node in nodes.values()
+        if node["qualified_name"] == "provider.Item.__init__"
+    )
+    item_calls = [
+        item for item in dto["callsites"]
+        if item["location"]["path"] == "model.py" and item["expression"] == "Item()"
+    ]
+    assert len(item_calls) == 3
+    assert all(
+        item["resolution"] != "exact" and item["target_id"] is None
+        for item in item_calls
+    )
+    assert not any(
+        edge["kind"] in {"calls", "awaits"}
+        and edge["target_id"] == item_initializer["id"]
+        for edge in dto["edges"]
+    )
+
+
+def test_canonical_receiver_type_parameters_shadow_same_module_classes(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "model.py").write_text(
+        "class Item:\n"
+        "    def run(self): pass\n"
+        "def consume[Item](value: Item):\n"
+        "    value.run()\n"
+        "class Owner[Item]:\n"
+        "    def consume(self, value: Item):\n"
+        "        value.run()\n"
+        "class MethodOwner:\n"
+        "    def consume[Item](self, value: Item):\n"
+        "        value.run()\n",
+        encoding="utf-8",
+    )
+
+    dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    item_run = next(
+        node for node in dto["nodes"]
+        if node["qualified_name"] == "model.Item.run"
+    )
+    calls = [
+        item for item in dto["callsites"]
+        if item["location"]["path"] == "model.py" and item["expression"] == "value.run()"
+    ]
+    assert len(calls) == 3
+    assert all(
+        item["resolution"] != "exact" and item["target_id"] is None
+        for item in calls
+    )
+    assert not any(
+        edge["kind"] in {"calls", "awaits"}
+        and edge["target_id"] == item_run["id"]
+        for edge in dto["edges"]
+    )
+
+
+def test_semantics2_nested_declaration_bindings_and_fields_follow_lexical_scope(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "provider.py").write_text("class Item: pass\n", encoding="utf-8")
+    (source / "model.py").write_text(
+        "from provider import Item\n"
+        "class Owner:\n"
+        "    def __init__(self):\n"
+        "        self.direct = Item()\n"
+        "        self.value = Item()\n"
+        "        def shadow(value=(Item := factory)):\n            pass\n"
+        "        def nested():\n            self.nested = Item()\n",
+        encoding="utf-8",
+    )
+
+    dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    nodes = {node["id"]: node for node in dto["nodes"]}
+    fields = {
+        node["qualified_name"]: node for node in nodes.values() if node["kind"] == "field"
+    }
+    assert set(fields) == {"model.Owner.direct", "model.Owner.value"}
+    references = [
+        item for item in dto["type_references"]
+        if item["owner_id"] in {fields["model.Owner.direct"]["id"], fields["model.Owner.value"]["id"]}
+    ]
+    assert len(references) == 2
+    assert all(item["resolution"] == "unresolved" for item in references)
+    assert not any(
+        edge["kind"] == "field_type"
+        and edge["source_id"] in {fields["model.Owner.direct"]["id"], fields["model.Owner.value"]["id"]}
+        for edge in dto["edges"]
+    )
+
+
+def test_semantics2_local_class_types_follow_declaration_order(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "model.py").write_text(
+        "class C(C):\n    self_ref: C\n\nclass C:\n    pass\n\n"
+        "class C(C):\n    previous: C\n    future: Future\n\n"
+        "class Owner:\n    current: Owner\n    future: Future\n"
+        "    def __init__(self):\n        self.inferred = Future()\n\n"
+        "class Future:\n    pass\n", encoding="utf-8",
+    )
+    dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    nodes = {node["id"]: node for node in dto["nodes"]}
+    references = dto["type_references"]
+    c_classes = sorted(
+        (node for node in nodes.values() if node["kind"] == "class" and node["qualified_name"] == "model.C"),
+        key=lambda node: node["location"]["line"],
+    )
+    bases = sorted((item for item in references if item["role"] == "base"), key=lambda item: item["location"]["line"])
+    assert (bases[0]["resolution"], bases[0]["target_id"]) == ("unresolved", None)
+    assert bases[1]["target_id"] == c_classes[1]["id"]
+    field_refs = {
+        (nodes[item["owner_id"]]["qualified_name"], item["expression"]): item
+        for item in references if item["role"] == "field_type"
+    }
+    assert field_refs[("model.C.self_ref", "C")]["resolution"] == "unresolved"
+    assert field_refs[("model.C.previous", "C")]["target_id"] == c_classes[1]["id"]
+    for key in (("model.C.future", "Future"), ("model.Owner.current", "Owner"),
+                ("model.Owner.future", "Future"), ("model.Owner.inferred", "Future")):
+        assert field_refs[key]["resolution"] == "unresolved"
+
+
+def test_semantics2_type_resolution_uses_latest_proven_preceding_binding(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "provider.py").write_text("class Base: pass\n", encoding="utf-8")
+    (source / "model.py").write_text(
+        "class Before(Late): pass\n"
+        "from provider import Base as Late\n"
+        "import provider as assigned\nassigned = object()\nclass Assigned(assigned.Base): pass\n"
+        "from provider import Base as defined\ndef defined(): pass\nclass Defined(defined): pass\n"
+        "from provider import Base as local\nclass local: pass\nclass Local(local): pass\n"
+        "from provider import Base as restored\nrestored = object()\n"
+        "from provider import Base as restored\nclass Restored(restored): pass\n"
+        "from provider import Base as conditional\n"
+        "if flag:\n    conditional = object()\nclass Conditional(conditional): pass\n"
+        "if flag:\n    from provider import Base as branch_only\n"
+        "class BranchOnly(branch_only): pass\n",
+        encoding="utf-8",
+    )
+
+    dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    nodes = {node["id"]: node for node in dto["nodes"]}
+    bases = {
+        nodes[item["owner_id"]]["qualified_name"]: item
+        for item in dto["type_references"] if item["role"] == "base"
+    }
+    assert bases["model.Before"]["resolution"] == "unresolved"
+    assert bases["model.Assigned"]["resolution"] == "unresolved"
+    assert bases["model.Defined"]["resolution"] == "unresolved"
+    assert bases["model.Conditional"]["resolution"] == "unresolved"
+    assert bases["model.BranchOnly"]["resolution"] == "unresolved"
+    assert nodes[bases["model.Local"]["target_id"]]["qualified_name"] == "model.local"
+    assert nodes[bases["model.Restored"]["target_id"]]["qualified_name"] == "provider.Base"
+
+
+def test_semantics2_field_types_follow_preceding_class_namespace_bindings(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "provider.py").write_text("class Item: pass\n", encoding="utf-8")
+    (source / "model.py").write_text(
+        "from provider import Item\n"
+        "class AnnotatedShadow:\n    Item = object\n    value: Item\n"
+        "class ConstructorShadow:\n    Item = object\n"
+        "    def __init__(self):\n        self.value = Item()\n"
+        "class EarlierField:\n    value: Item\n    Item = object\n"
+        "class ConditionalShadow:\n"
+        "    if flag:\n        Item = object\n"
+        "    value: Item\n",
+        encoding="utf-8",
+    )
+
+    dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    nodes = {node["id"]: node for node in dto["nodes"]}
+    references = {
+        nodes[item["owner_id"]]["qualified_name"]: item
+        for item in dto["type_references"] if item["role"] == "field_type"
+    }
+    assert references["model.AnnotatedShadow.value"]["resolution"] == "unresolved"
+    assert references["model.ConstructorShadow.value"]["resolution"] == "unresolved"
+    assert references["model.ConditionalShadow.value"]["resolution"] == "unresolved"
+    earlier = references["model.EarlierField.value"]
+    assert earlier["resolution"] == "exact"
+    assert nodes[earlier["target_id"]]["qualified_name"] == "provider.Item"
+
+
+def test_semantics2_type_wrappers_only_follow_type_arguments(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "model.py").write_text(
+        "from typing import Annotated, Literal, Optional\nclass A: pass\nclass B: pass\n"
+        "class Owner:\n    annotated: Annotated[A, B]\n    literal: Literal[B]\n"
+        "    optional: Optional[A]\n    either: A | B\n", encoding="utf-8",
+    )
+    dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    nodes = {node["id"]: node for node in dto["nodes"]}
+    topology = [
+        (nodes[item["owner_id"]]["qualified_name"], item["expression"],
+         nodes[item["target_id"]]["qualified_name"] if item["target_id"] else None)
+        for item in dto["type_references"] if item["role"] == "field_type"
+    ]
+    assert topology == [
+        ("model.Owner.annotated", "A", "model.A"),
+        ("model.Owner.optional", "A", "model.A"),
+        ("model.Owner.either", "A", "model.A"),
+        ("model.Owner.either", "B", "model.B"),
+    ]

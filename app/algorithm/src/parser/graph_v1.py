@@ -22,6 +22,7 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
     callsites: list[dict[str, Any]] = []
+    type_references: list[dict[str, Any]] = []
     declaration_ids: dict[int, str] = {}
     target_ids: dict[tuple[str, int], str] = {}
     module_files = {id(module): _file_id(module) for module in index.modules}
@@ -47,6 +48,15 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
                           "parent_id": file_id, "path": path, "location": _location(module, class_info.line, class_info.column)})
             edges.append({"id": f"contains:{file_id}->{class_id}", "kind": "contains", "source_id": file_id, "target_id": class_id})
             declaration_ids[id(class_info)] = class_id
+            for field in class_info.fields:
+                field_id = f"field:{path}:{field.line or 1}:{field.column or 0}:{class_info.name}.{field.name}"
+                nodes.append({"id": field_id, "kind": "field",
+                              "qualified_name": f"{module.module}.{class_info.name}.{field.name}".strip("."),
+                              "parent_id": class_id, "path": path,
+                              "location": _location(module, field.line, field.column)})
+                edges.append({"id": f"contains:{class_id}->{field_id}", "kind": "contains",
+                              "source_id": class_id, "target_id": field_id})
+                declaration_ids[id(field)] = field_id
             for method in class_info.methods:
                 method_id = f"method:{path}:{method.line or 1}:{method.column or 0}:{class_info.name}.{method.name}"
                 nodes.append({"id": method_id, "kind": "method", "qualified_name": f"{module.module}.{class_info.name}.{method.name}".strip("."),
@@ -79,7 +89,35 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
             if target is not None:
                 edges.append({"id": f"imports:{file_id}->{target}:{position}", "kind": "imports",
                               "source_id": file_id, "target_id": target,
-                              "location": _location(module, imported.line, imported.column)})
+                               "location": _location(module, imported.line, imported.column)})
+    reference_ordinal = 0
+    for module in index.modules:
+        for fact in module.type_references:
+            reference_ordinal += 1
+            owner_id = declaration_ids[id(fact.owner)]
+            target_id = declaration_ids.get(id(fact.target)) if fact.target is not None else None
+            resolution = "exact" if fact.resolution == "exact" and target_id else fact.resolution
+            if fact.resolution == "exact" and target_id is None:
+                resolution = "unresolved"
+            reference = {
+                "id": f"type_reference:{module.relative_path.as_posix()}:{fact.line or 1}:{fact.column or 0}:{reference_ordinal}",
+                "owner_id": owner_id, "role": fact.role, "expression": fact.expression,
+                "location": _location(module, fact.line, fact.column), "resolution": resolution,
+                "target_id": target_id if resolution == "exact" else None,
+                "candidate_ids": sorted({declaration_ids[id(item)] for item in fact.candidates
+                                         if id(item) in declaration_ids}),
+            }
+            type_references.append(reference)
+            if resolution == "exact":
+                kind = "inherits" if fact.role == "base" else "field_type"
+                edges.append({"id": f"{kind}:{owner_id}->{target_id}:{reference_ordinal}",
+                              "kind": kind, "source_id": owner_id, "target_id": target_id})
+        for ordinal, access in enumerate(module.field_accesses, 1):
+            source_id = declaration_ids[id(access.method)]
+            target_id = declaration_ids[id(access.field)]
+            edges.append({"id": f"accesses_field:{source_id}->{target_id}:{access.line or 1}:{access.column or 0}:{ordinal}",
+                          "kind": "accesses_field", "source_id": source_id, "target_id": target_id,
+                          "location": _location(module, access.line, access.column)})
     aggregates: Counter[tuple[str, str, str]] = Counter()
     ordinal = 0
     for module in index.modules:
@@ -122,11 +160,12 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
          "path": shadowed.relative_path.as_posix(), "effective_path": effective.relative_path.as_posix()}
         for name, shadowed, effective in index.shadowed_modules
     ]
-    graph: dict[str, Any] = {"schema_version": 1, "parser_semantics_version": 1,
+    graph: dict[str, Any] = {"schema_version": 1, "parser_semantics_version": 2,
                              "project": {"fingerprint": ""}, "nodes": nodes, "edges": edges,
-                             "callsites": callsites, "diagnostics": diagnostics, "body": body}
+                             "callsites": callsites, "type_references": type_references,
+                             "diagnostics": diagnostics, "body": body}
     sort_key = lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    for collection in ("nodes", "edges", "callsites", "diagnostics"):
+    for collection in ("nodes", "edges", "callsites", "type_references", "diagnostics"):
         graph[collection].sort(key=sort_key)
     graph["project"]["fingerprint"] = graph_fingerprint(graph)
     validate_graph_v1(graph)

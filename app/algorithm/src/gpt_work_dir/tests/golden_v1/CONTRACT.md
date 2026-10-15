@@ -1,8 +1,9 @@
 # Golden Graph/Metrics contract v1
 
 This directory contains immutable full-equality regression oracles for Graph
-DTO schema v1 / parser semantics v1 and Metrics DTO schema v1 / metrics
-semantics v2.
+DTO schema v1 / parser semantics v2 and Metrics DTO schema v1 / metrics
+semantics v3. Focused tests separately retain parser-semantics-v1 / metrics-v2
+compatibility coverage.
 
 ## Scenarios
 
@@ -43,7 +44,7 @@ The scenario fixes these semantics in addition to the complete JSON snapshots:
 - dependency density `0.1667`, average fan-in/out `0.3333`;
 - call graph has four nodes, two edges, four locally resolved callsites and
   maximum legacy syntactic nesting `2`;
-- semantics-v2 activity averages are both `1.0`, preserving the historical
+- metrics-semantics-v3 activity averages are both `1.0`, preserving the historical
   hybrid call-owner denominator.
 
 Fingerprints, rounding, deterministic ordering and all remaining metrics in

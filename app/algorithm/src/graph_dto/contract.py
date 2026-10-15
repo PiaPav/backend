@@ -6,10 +6,10 @@ import json
 from pathlib import PurePosixPath
 from typing import Any, Mapping
 
-NODE_KINDS = frozenset({"file", "module", "class", "function", "method"})
-EDGE_KINDS = frozenset({"contains", "imports", "inherits", "calls", "awaits"})
+NODE_KINDS = frozenset({"file", "module", "class", "field", "function", "method"})
+EDGE_KINDS = frozenset({"contains", "imports", "inherits", "field_type", "accesses_field", "calls", "awaits"})
 RESOLUTION_STATUSES = frozenset({"exact", "ambiguous", "external", "dynamic", "unresolved"})
-_COLLECTIONS = ("nodes", "edges", "callsites", "diagnostics")
+_COLLECTIONS = ("nodes", "edges", "callsites", "type_references", "diagnostics")
 
 
 def _key(value: Any) -> str:
@@ -23,7 +23,8 @@ def canonicalize_graph(graph: Mapping[str, Any]) -> dict[str, Any]:
     project.pop("fingerprint", None)
     result["project"] = project
     for name in _COLLECTIONS:
-        result[name] = sorted((dict(item) for item in result.get(name, [])), key=_key)
+        if name in result:
+            result[name] = sorted((dict(item) for item in result[name]), key=_key)
     return result
 
 
@@ -60,12 +61,16 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         _error("root must be an object")
     if type(graph.get("schema_version")) is not int or graph["schema_version"] != 1:
         _error(f"Unsupported schema_version {graph.get('schema_version')!r}")
-    if type(graph.get("parser_semantics_version")) is not int or graph["parser_semantics_version"] != 1:
+    if type(graph.get("parser_semantics_version")) is not int or graph["parser_semantics_version"] not in {1, 2}:
         _error(f"Unsupported parser_semantics_version {graph.get('parser_semantics_version')!r}")
+    semantics = graph["parser_semantics_version"]
     project = graph.get("project")
     if not isinstance(project, Mapping) or not isinstance(project.get("fingerprint"), str):
         _error("project.fingerprint is required")
-    for name in _COLLECTIONS:
+    required_collections = _COLLECTIONS if semantics == 2 else tuple(
+        name for name in _COLLECTIONS if name != "type_references"
+    )
+    for name in required_collections:
         if not isinstance(graph.get(name), list):
             _error(f"{name} must be an array")
     nodes: dict[str, Mapping[str, Any]] = {}
@@ -96,6 +101,26 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         if kind == "contains":
             if target in contains: _error(f"node {target!r} has multiple containers")
             contains[target] = source
+        if semantics == 2:
+            source_kind, target_kind = nodes[source]["kind"], nodes[target]["kind"]
+            expected = {
+                "inherits": ("class", "class"),
+                "field_type": ("field", "class"),
+                "accesses_field": ("method", "field"),
+            }.get(kind)
+            if expected is not None and (source_kind, target_kind) != expected:
+                _error(f"edges[{index}] {kind} endpoints are invalid")
+            if kind == "contains" and (source_kind, target_kind) not in {
+                ("file", "class"), ("file", "function"), ("file", "module"),
+                ("module", "class"), ("module", "function"),
+                ("class", "method"), ("class", "field"),
+            }:
+                _error(f"edges[{index}] contains endpoints are invalid")
+            if kind == "imports" and (
+                source_kind not in {"file", "module"}
+                or target_kind not in {"file", "module"}
+            ):
+                _error(f"edges[{index}] imports endpoints are invalid")
         if "location" in edge:
             _location(edge["location"], f"edges[{index}].location")
         if kind in {"calls", "awaits"}:
@@ -124,6 +149,12 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
             _error(f"node {node!r} parent_id is inconsistent with contains edges")
         if nodes[node]["kind"] in {"function", "method"} and parent is None:
             _error(f"callable node {node!r} must have exactly one owner")
+        if semantics == 2 and nodes[node]["kind"] == "field":
+            if parent is None or nodes[parent]["kind"] != "class":
+                _error(f"field node {node!r} must belong to a class")
+        if semantics == 2 and nodes[node]["kind"] == "method":
+            if parent is None or nodes[parent]["kind"] != "class":
+                _error(f"method node {node!r} must belong to a class")
     observed: dict[tuple[str, str, str], int] = {}
     seen_callsites: set[str] = set()
     for index, callsite in enumerate(graph["callsites"]):
@@ -161,6 +192,54 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
             _error(f"callsites[{index}] non-internal resolution cannot have targets")
     if call_weights != observed:
         _error("aggregated call edge weights do not match exact callsites")
+    if semantics == 2:
+        relation_edges = {
+            (edge["kind"], edge["source_id"], edge["target_id"])
+            for edge in graph["edges"] if edge["kind"] in {"inherits", "field_type"}
+        }
+        referenced_edges: set[tuple[str, str, str]] = set()
+        reference_ids: set[str] = set()
+        for index, reference in enumerate(graph["type_references"]):
+            if not isinstance(reference, Mapping):
+                _error(f"type_references[{index}] must be an object")
+            identifier = reference.get("id")
+            if not isinstance(identifier, str) or not identifier or identifier in reference_ids:
+                _error(f"type_references[{index}].id is missing or duplicate")
+            reference_ids.add(identifier)
+            owner, role, status = reference.get("owner_id"), reference.get("role"), reference.get("resolution")
+            if owner not in nodes or role not in {"base", "field_type"}:
+                _error(f"type_references[{index}] owner or role is invalid")
+            expected_owner = "class" if role == "base" else "field"
+            if nodes[owner]["kind"] != expected_owner:
+                _error(f"type_references[{index}].owner_id has invalid kind")
+            if not isinstance(reference.get("expression"), str) or not reference["expression"]:
+                _error(f"type_references[{index}].expression is required")
+            _location(reference.get("location"), f"type_references[{index}].location")
+            if status not in {"exact", "ambiguous", "external", "unresolved"}:
+                _error(f"type_references[{index}].resolution is invalid")
+            target, candidates = reference.get("target_id"), reference.get("candidate_ids", [])
+            if not isinstance(candidates, list) or candidates != sorted(candidates) or len(candidates) != len(set(candidates)):
+                _error(f"type_references[{index}].candidate_ids must be unique and sorted")
+            if any(item not in nodes or nodes[item]["kind"] != "class" for item in candidates):
+                _error(f"type_references[{index}].candidate_ids must reference classes")
+            if status == "exact":
+                if target not in nodes or nodes[target]["kind"] != "class" or candidates:
+                    _error(f"type_references[{index}] exact resolution requires one class target")
+                edge_kind = "inherits" if role == "base" else "field_type"
+                referenced_edges.add((edge_kind, owner, target))
+            elif status == "ambiguous":
+                if target is not None or len(candidates) < 2:
+                    _error(f"type_references[{index}] ambiguous resolution requires >=2 candidates")
+            elif target is not None or candidates:
+                _error(f"type_references[{index}] non-exact resolution cannot have targets")
+        if relation_edges != referenced_edges:
+            _error("typed relation edges do not match exact type references")
+        for index, edge in enumerate(graph["edges"]):
+            if edge["kind"] == "accesses_field":
+                method_parent = nodes[edge["source_id"]].get("parent_id")
+                field_parent = nodes[edge["target_id"]].get("parent_id")
+                if method_parent != field_parent:
+                    _error(f"edges[{index}] accesses_field endpoints must share an owning class")
     diagnostic_ids: set[str] = set()
     for index, diagnostic in enumerate(graph["diagnostics"]):
         if not isinstance(diagnostic, Mapping): _error(f"diagnostics[{index}] must be an object")

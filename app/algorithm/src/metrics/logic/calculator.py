@@ -8,7 +8,7 @@ from typing import Any
 
 from .architecture import calculate_architecture_metrics
 from .call_graph import calculate_call_graph_metrics
-from .object_metrics import calculate_object_metrics
+from .object_metrics import calculate_canonical_object_metrics, calculate_object_metrics
 from .quality import calculate_quality_metrics
 from .identity import effective_module_ids, graph_files, legacy_file_id
 from .graph_algorithms import strong_components as _strong_components
@@ -98,7 +98,8 @@ def _directory_count(files: list[dict[str, Any]]) -> int:
 
 def calculate_graph_metrics(
     graph: Mapping[str, Any], *, canonical_mode: bool = False,
-    legacy_resolution: bool | None = None,
+    legacy_resolution: bool | None = None, canonical_objects: bool = False,
+    canonical_calls: bool = False,
 ) -> dict[str, Any]:
     """Return deterministic size, coupling, density and connectivity metrics."""
     files = _files(graph)
@@ -212,9 +213,9 @@ def calculate_graph_metrics(
         },
         "architecture": calculate_architecture_metrics(files, nodes, edges, _file_id),
         "code_quality": calculate_quality_metrics(graph),
-        "object_oriented": calculate_object_metrics(graph, cyclic_dit_is_none=canonical_mode),
+        "object_oriented": calculate_canonical_object_metrics(graph) if canonical_objects else calculate_object_metrics(graph, cyclic_dit_is_none=canonical_mode),
         "call_graph": calculate_call_graph_metrics(
-            graph, legacy_resolution=legacy_resolution
+            graph, legacy_resolution=legacy_resolution, canonical=canonical_calls
         ),
     }
 

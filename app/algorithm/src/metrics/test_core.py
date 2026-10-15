@@ -1,4 +1,5 @@
 import json
+import ast
 from copy import deepcopy
 from collections.abc import Callable
 from pathlib import Path
@@ -8,6 +9,7 @@ import pytest
 
 from metrics import calculate_graph_metrics, calculate_metrics, load_graph
 from graph_dto import graph_fingerprint
+from parser import parse_project
 
 
 def test_committed_graph_matches_complete_metrics_v2_golden(tmp_path: Path) -> None:
@@ -90,6 +92,172 @@ def _v1(body: list[dict]) -> dict:
     }
     graph["project"]["fingerprint"] = graph_fingerprint(graph)
     return graph
+
+
+def _canonical_metrics_graph() -> dict:
+    nodes = [
+        {"id": "c:A", "kind": "class", "qualified_name": "m.A"},
+        {"id": "c:B", "kind": "class", "qualified_name": "m.B"},
+        {"id": "c:C", "kind": "class", "qualified_name": "m.C"},
+        {"id": "f:A.x", "kind": "field", "qualified_name": "m.A.x", "parent_id": "c:A"},
+        {"id": "m:A.one", "kind": "method", "qualified_name": "m.A.one", "parent_id": "c:A"},
+        {"id": "m:A.two", "kind": "method", "qualified_name": "m.A.two", "parent_id": "c:A"},
+        {"id": "m:B.work", "kind": "method", "qualified_name": "m.B.work", "parent_id": "c:B"},
+        {"id": "fn:free", "kind": "function", "qualified_name": "m.free", "parent_id": "file:m.py"},
+    ]
+    edges = [
+        {"kind": "inherits", "source_id": "c:B", "target_id": "c:A"},
+        {"kind": "inherits", "source_id": "c:C", "target_id": "c:B"},
+        {"kind": "field_type", "source_id": "f:A.x", "target_id": "c:B"},
+        {"kind": "accesses_field", "source_id": "m:A.one", "target_id": "f:A.x"},
+        {"kind": "accesses_field", "source_id": "m:A.two", "target_id": "f:A.x"},
+        {"kind": "calls", "source_id": "m:A.one", "target_id": "m:B.work", "weight": 2},
+        {"kind": "calls", "source_id": "m:A.one", "target_id": "m:A.one", "weight": 1},
+        {"kind": "awaits", "source_id": "m:A.two", "target_id": "fn:free", "weight": 1},
+    ]
+    callsites = [
+        {"caller_id": "m:A.one", "resolution": "exact", "target_id": "m:B.work", "syntactic_depth": 0},
+        {"caller_id": "m:A.one", "resolution": "exact", "target_id": "m:B.work", "syntactic_depth": 1},
+        {"caller_id": "m:A.one", "resolution": "exact", "target_id": "m:A.one", "syntactic_depth": 0},
+        {"caller_id": "m:A.two", "resolution": "exact", "target_id": "fn:free", "syntactic_depth": 0},
+        {"caller_id": "m:A.two", "resolution": "external", "syntactic_depth": 0},
+        {"caller_id": "m:A.two", "resolution": "ambiguous", "syntactic_depth": 0},
+        {"caller_id": "m:A.two", "resolution": "unresolved", "syntactic_depth": 0},
+    ]
+    body = [{"file": {"name": "m", "path": "", "path_parts": [], "imports": [], "classes": [
+        {"name": name, "type": "class", "parent": "WRONG", "fields": [], "methods": []}
+        for name in ("A", "B", "C")
+    ]}}]
+    return {"nodes": nodes, "edges": edges, "callsites": callsites, "body": body}
+
+
+def test_canonical_v3_object_and_call_metrics_use_only_id_topology() -> None:
+    graph = _canonical_metrics_graph()
+    metrics = calculate_graph_metrics(graph, canonical_objects=True, canonical_calls=True)
+    rows = {row["class"]: row for row in metrics["object_oriented"]["classes"]}
+    assert (rows["m.A"]["dit"], rows["m.B"]["dit"], rows["m.C"]["dit"]) == (0, 1, 2)
+    assert (rows["m.A"]["noc"], rows["m.B"]["noc"]) == (1, 1)
+    assert (rows["m.A"]["cbo"], rows["m.A"]["rfc"], rows["m.A"]["lcom"]) == (1, 4, 0.0)
+    call_graph = metrics["call_graph"]
+    assert call_graph["nodes"] == 4
+    assert call_graph["edges"] == 3
+    assert call_graph["callsites_in_local_edges"] == 4
+    assert call_graph["external_or_builtin_callsites"] == 1
+    assert call_graph["unresolved_callsites"] == 2
+    assert call_graph["maximum_syntactic_call_nesting"] == 2
+
+
+def test_canonical_v3_module_calls_are_full_call_graph_owners(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "pkg").mkdir(parents=True)
+    (source / "provider.py").write_text("def available(): pass\n", encoding="utf-8")
+    (source / "consumer.py").write_text(
+        "from provider import available, missing\nimport external_package as ext\n"
+        "available()\nmissing()\next.run()\n",
+        encoding="utf-8",
+    )
+    (source / "pkg.py").write_text("unknown_file()\n", encoding="utf-8")
+    (source / "pkg" / "__init__.py").write_text("unknown_package()\n", encoding="utf-8")
+    graph_path = parse_project(source, tmp_path / "graph.json")
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+
+    missing = next(item for item in graph["callsites"] if item["expression"] == "missing()")
+    assert (missing["resolution"], missing["target_id"]) == ("unresolved", None)
+    call_graph = calculate_graph_metrics(graph, canonical_calls=True)["call_graph"]
+    assert (call_graph["external_or_builtin_callsites"], call_graph["unresolved_callsites"]) == (1, 3)
+    assert call_graph["callsites_in_local_edges"] == 1
+    assert call_graph["local_resolution_rate"] == 0.2
+    assert call_graph["classified_callsite_rate"] == 0.4
+    assert call_graph["node_kinds"] == {"file": 3, "function": 1}
+    assert call_graph["nodes"] == 4
+    assert call_graph["edges"] == 1
+    assert "consumer.__module__" in call_graph["entrypoints"]
+    assert call_graph["longest_call_chain"] == ["consumer.__module__", "provider.available"]
+    assert call_graph["heaviest_edges"] == [{
+        "caller": "consumer.__module__", "target": "provider.available", "callsites": 1,
+    }]
+    assert "file:pkg.py.__module__" in call_graph["isolated_callables"]
+    assert "file:pkg/__init__.py.__module__" in call_graph["isolated_callables"]
+    assert call_graph["maximum_syntactic_call_nesting"] == 1
+
+
+def test_canonical_v3_cycles_and_legacy_name_mutations_do_not_change_topology() -> None:
+    graph = _canonical_metrics_graph()
+    graph["edges"].extend([
+        {"kind": "inherits", "source_id": "c:A", "target_id": "c:C"},
+        {"kind": "inherits", "source_id": "c:A", "target_id": "c:A"},
+    ])
+    first = calculate_graph_metrics(graph, canonical_objects=True, canonical_calls=True)
+    changed = deepcopy(graph)
+    changed["body"][0]["file"]["classes"][0].update({"parent": "OTHER", "fields": [{"name": "renamed", "type": "Nope"}]})
+    second = calculate_graph_metrics(changed, canonical_objects=True, canonical_calls=True)
+    assert first["object_oriented"] == second["object_oriented"]
+    assert first["call_graph"] == second["call_graph"]
+    assert all(row["dit"] is None for row in first["object_oriented"]["classes"])
+
+
+def test_canonical_v3_object_invariants_and_permutation_are_exact() -> None:
+    graph = _canonical_metrics_graph()
+    graph["nodes"].extend([
+        {"id": "c:D", "kind": "class", "qualified_name": "m.D"},
+        {"id": "f:A.y", "kind": "field", "qualified_name": "m.A.y", "parent_id": "c:A"},
+        {"id": "m:A.three", "kind": "method", "qualified_name": "m.A.three", "parent_id": "c:A"},
+    ])
+    graph["edges"].extend([
+        {"kind": "inherits", "source_id": "c:D", "target_id": "c:C"},
+        {"kind": "accesses_field", "source_id": "m:A.three", "target_id": "f:A.y"},
+    ])
+
+    first = calculate_graph_metrics(
+        graph, canonical_objects=True, canonical_calls=True
+    )
+    permuted = deepcopy(graph)
+    permuted["nodes"].reverse()
+    permuted["edges"].reverse()
+    permuted["callsites"].reverse()
+    second = calculate_graph_metrics(
+        permuted, canonical_objects=True, canonical_calls=True
+    )
+
+    assert first["object_oriented"] == second["object_oriented"]
+    assert first["call_graph"] == second["call_graph"]
+    rows = {row["class"]: row for row in first["object_oriented"]["classes"]}
+    assert (rows["m.A"]["dit"], rows["m.B"]["dit"], rows["m.C"]["dit"], rows["m.D"]["dit"]) == (0, 1, 2, 3)
+    assert (rows["m.A"]["noc"], rows["m.B"]["noc"], rows["m.C"]["noc"], rows["m.D"]["noc"]) == (1, 1, 1, 0)
+    assert (rows["m.A"]["cbo"], rows["m.A"]["rfc"], rows["m.A"]["lcom"]) == (1, 5, 0.6667)
+    assert all(
+        row["lcom"] is None or 0.0 <= row["lcom"] <= 1.0
+        for row in rows.values()
+    )
+
+
+def test_canonical_v3_reachable_cycle_marks_descendant_dit_unknown() -> None:
+    graph = _canonical_metrics_graph()
+    graph["nodes"].append(
+        {"id": "c:D", "kind": "class", "qualified_name": "m.D"}
+    )
+    graph["edges"].extend([
+        {"kind": "inherits", "source_id": "c:A", "target_id": "c:C"},
+        {"kind": "inherits", "source_id": "c:D", "target_id": "c:C"},
+    ])
+    rows = {
+        row["class"]: row
+        for row in calculate_graph_metrics(
+            graph, canonical_objects=True, canonical_calls=True
+        )["object_oriented"]["classes"]
+    }
+    assert all(rows[name]["dit"] is None for name in ("m.A", "m.B", "m.C", "m.D"))
+    assert (rows["m.A"]["noc"], rows["m.B"]["noc"], rows["m.C"]["noc"]) == (1, 1, 2)
+
+
+def test_metrics_production_has_no_parser_import_ast() -> None:
+    root = Path(__file__).parent
+    for path in root.rglob("*.py"):
+        if path.name.startswith("test_"): continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        imported = [alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names]
+        imported += [node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
+        assert not any(name == "parser" or name.startswith("parser.") for name in imported)
 
 
 def test_full_metrics_and_file_api_are_deterministic(tmp_path: Path) -> None:
@@ -759,3 +927,135 @@ def test_global_write_does_not_keep_import_provenance(tmp_path: Path) -> None:
         edge["target"] == "provider.f" for edge in call_graph["heaviest_edges"]
     )
     assert call_graph["unresolved_callsites"] == 1
+
+
+def test_canonical_self_inheritance_and_cycle_descendants_are_permutation_safe() -> None:
+    graph = _canonical_metrics_graph()
+    graph["nodes"].append({"id": "c:D", "kind": "class", "qualified_name": "m.D"})
+    graph["edges"] = [
+        {"kind": "inherits", "source_id": "c:A", "target_id": "c:A"},
+        {"kind": "inherits", "source_id": "c:B", "target_id": "c:A"},
+        {"kind": "inherits", "source_id": "c:B", "target_id": "c:C"},
+        {"kind": "inherits", "source_id": "c:C", "target_id": "c:B"},
+        {"kind": "inherits", "source_id": "c:D", "target_id": "c:B"},
+    ]
+    first = calculate_graph_metrics(graph, canonical_objects=True)["object_oriented"]
+    permuted = deepcopy(graph)
+    permuted["nodes"].reverse()
+    permuted["edges"].reverse()
+    second = calculate_graph_metrics(permuted, canonical_objects=True)["object_oriented"]
+    assert first == second
+    rows = {row["class"]: row for row in first["classes"]}
+    assert (rows["m.A"]["dit"], rows["m.A"]["noc"]) == (None, 1)
+    assert all(rows[name]["dit"] is None for name in ("m.B", "m.C", "m.D"))
+
+
+def test_canonical_single_self_inheritance_has_unknown_dit_and_no_child() -> None:
+    graph = {
+        "nodes": [{"id": "c:self", "kind": "class", "qualified_name": "m.C"}],
+        "edges": [{"kind": "inherits", "source_id": "c:self", "target_id": "c:self"}],
+        "body": [],
+    }
+    row = calculate_graph_metrics(
+        graph, canonical_objects=True
+    )["object_oriented"]["classes"][0]
+    assert (row["dit"], row["noc"]) == (None, 0)
+
+
+def test_canonical_duplicate_labels_keep_all_callables_and_classes_distinct() -> None:
+    graph = {
+        "nodes": [
+            {"id": "file:pkg.py", "kind": "file", "qualified_name": "pkg", "path": "pkg.py"},
+            {"id": "file:pkg/__init__.py", "kind": "file", "qualified_name": "pkg", "path": "pkg/__init__.py"},
+            {"id": "c:one", "kind": "class", "qualified_name": "pkg.C", "parent_id": "file:pkg.py", "path": "pkg.py"},
+            {"id": "c:two", "kind": "class", "qualified_name": "pkg.C", "parent_id": "file:pkg/__init__.py", "path": "pkg/__init__.py"},
+            {"id": "m:one", "kind": "method", "qualified_name": "pkg.C.work", "parent_id": "c:one", "path": "pkg.py"},
+            {"id": "m:two", "kind": "method", "qualified_name": "pkg.C.work", "parent_id": "c:two", "path": "pkg/__init__.py"},
+            {"id": "m:duplicate", "kind": "method", "qualified_name": "pkg.C.work", "parent_id": "c:two", "path": "pkg/__init__.py"},
+        ],
+        "edges": [
+            {"kind": "calls", "source_id": "m:one", "target_id": "m:two"},
+            {"kind": "calls", "source_id": "m:two", "target_id": "m:duplicate"},
+            {"kind": "calls", "source_id": "m:duplicate", "target_id": "m:two"},
+        ], "callsites": [], "body": [],
+    }
+    first = calculate_graph_metrics(graph, canonical_objects=True, canonical_calls=True)
+    permuted = deepcopy(graph)
+    permuted["nodes"].reverse()
+    permuted["edges"].reverse()
+    second = calculate_graph_metrics(permuted, canonical_objects=True, canonical_calls=True)
+    assert first == second
+    calls = first["call_graph"]
+    assert (calls["nodes"], calls["edges"], calls["maximum_call_chain_depth"]) == (3, 3, 1)
+    assert len(calls["recursive_components"]) == 1
+    assert len({row["node"] for row in calls["pagerank_top"]}) == 3
+    assert len({row["node"] for row in calls["betweenness_top"]}) == 3
+    assert any("file:pkg.py" in row["caller"] for row in calls["heaviest_edges"])
+    assert any("file:pkg/__init__.py" in row["target"] for row in calls["heaviest_edges"])
+    classes = first["object_oriented"]["classes"]
+    assert len(classes) == len({row["class"] for row in classes}) == 2
+
+
+def test_canonical_longest_chain_uses_unique_labels_not_weights_or_order() -> None:
+    graph = {
+        "nodes": [
+            {"id": "file:consumer.py", "kind": "file", "qualified_name": "consumer", "path": "consumer.py"},
+            {"id": "file:pkg.py", "kind": "file", "qualified_name": "pkg", "path": "pkg.py"},
+            {"id": "file:pkg/__init__.py", "kind": "file", "qualified_name": "pkg", "path": "pkg/__init__.py"},
+            {"id": "fn:run", "kind": "function", "qualified_name": "consumer.run", "parent_id": "file:consumer.py"},
+            {"id": "fn:outer", "kind": "function", "qualified_name": "pkg.outer", "parent_id": "file:pkg/__init__.py"},
+            {"id": "fn:inner", "kind": "function", "qualified_name": "pkg.inner", "parent_id": "file:pkg/__init__.py"},
+            {"id": "fn:duplicate-a", "kind": "function", "qualified_name": "pkg.same", "parent_id": "file:pkg.py"},
+            {"id": "fn:duplicate-b", "kind": "function", "qualified_name": "pkg.same", "parent_id": "file:pkg.py"},
+        ],
+        "edges": [
+            {"kind": "calls", "source_id": "fn:run", "target_id": "fn:outer", "weight": 100},
+            {"kind": "calls", "source_id": "fn:run", "target_id": "fn:inner", "weight": 1},
+        ],
+        "callsites": [],
+        "body": [],
+    }
+
+    first = calculate_graph_metrics(graph, canonical_calls=True)["call_graph"]
+    permuted = deepcopy(graph)
+    permuted["nodes"].reverse()
+    permuted["edges"].reverse()
+    second = calculate_graph_metrics(permuted, canonical_calls=True)["call_graph"]
+
+    assert first == second
+    assert first["longest_call_chain"] == [
+        "consumer.run", "file:pkg/__init__.py.inner"
+    ]
+    duplicate_labels = {
+        label for label in first["isolated_callables"]
+        if label.startswith("file:pkg.py.same [")
+    }
+    assert duplicate_labels == {
+        "file:pkg.py.same [fn:duplicate-a]",
+        "file:pkg.py.same [fn:duplicate-b]",
+    }
+
+
+def test_canonical_lcom_boundaries_and_rfc_synthetic_targets() -> None:
+    graph = {
+        "nodes": [
+            {"id": "c:none", "kind": "class", "qualified_name": "m.None"},
+            {"id": "c:one", "kind": "class", "qualified_name": "m.One"},
+            {"id": "c:empty", "kind": "class", "qualified_name": "m.Empty"},
+            {"id": "f:one", "kind": "field", "qualified_name": "m.One.value", "parent_id": "c:one"},
+            {"id": "f:empty", "kind": "field", "qualified_name": "m.Empty.value", "parent_id": "c:empty"},
+            {"id": "m:one", "kind": "method", "qualified_name": "m.One.work", "parent_id": "c:one"},
+            {"id": "m:first", "kind": "method", "qualified_name": "m.Empty.first", "parent_id": "c:empty"},
+            {"id": "m:second", "kind": "method", "qualified_name": "m.Empty.second", "parent_id": "c:empty"},
+            {"id": "m:synthetic", "kind": "method", "qualified_name": "m.Empty.__init__", "parent_id": "c:empty", "synthetic": True},
+        ],
+        "edges": [
+            {"kind": "calls", "source_id": "m:first", "target_id": "m:synthetic"},
+            {"kind": "calls", "source_id": "m:synthetic", "target_id": "m:second"},
+        ], "body": [],
+    }
+    rows = {row["class"]: row for row in calculate_graph_metrics(graph, canonical_objects=True)["object_oriented"]["classes"]}
+    assert rows["m.None"]["lcom"] is None
+    assert rows["m.One"]["lcom"] is None
+    assert rows["m.Empty"]["lcom"] == 1.0
+    assert rows["m.Empty"]["rfc"] == 3

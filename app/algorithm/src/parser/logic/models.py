@@ -65,6 +65,8 @@ class FieldInfo:
     annotation: Any = None
     value: Any = None
     value_node: ast.expr | None = None
+    annotation_node: ast.expr | None = None
+    annotation_source: str | None = None
     file: Path | None = None
     line: int | None = None
     column: int | None = None
@@ -107,6 +109,8 @@ class FunctionInfo:
 class ClassInfo:
     name: str
     parents: list[str] = field(default_factory=list)
+    parent_nodes: list[ast.expr] = field(default_factory=list)
+    resolved_parents: list[ClassInfo] = field(default_factory=list)
     kind: str = "class"
     fields: list[FieldInfo] = field(default_factory=list)
     methods: list[FunctionInfo] = field(default_factory=list)
@@ -143,6 +147,28 @@ class ImportInfo:
 
 
 @dataclass(slots=True)
+class TypeReferenceInfo:
+    owner: ClassInfo | FieldInfo
+    role: str
+    expression: str
+    resolution: str
+    target: ClassInfo | None = None
+    candidates: list[ClassInfo] = field(default_factory=list)
+    file: Path | None = None
+    line: int | None = None
+    column: int | None = None
+
+
+@dataclass(slots=True)
+class FieldAccessInfo:
+    method: FunctionInfo
+    field: FieldInfo
+    file: Path | None = None
+    line: int | None = None
+    column: int | None = None
+
+
+@dataclass(slots=True)
 class ModuleInfo:
     name: str
     module: str
@@ -159,6 +185,8 @@ class ModuleInfo:
     functions: list[FunctionInfo] = field(default_factory=list)
     calls: list[CallInfo] = field(default_factory=list)
     canonical_callsites: list[CanonicalCallsiteInfo] = field(default_factory=list)
+    type_references: list[TypeReferenceInfo] = field(default_factory=list)
+    field_accesses: list[FieldAccessInfo] = field(default_factory=list)
 
     @property
     def import_aliases(self) -> dict[str, ImportInfo]:

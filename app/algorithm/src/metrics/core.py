@@ -182,6 +182,8 @@ def calculate_metrics(graph_path: Path, output_path: Path) -> Path:
     raw = source.read_bytes()
     graph = _load_graph_bytes(raw)
     is_v1 = graph.get("schema_version") == 1
+    parser_semantics = graph.get("parser_semantics_version") if is_v1 else None
+    is_canonical_v2 = parser_semantics == 2
     legacy_body = {"body": graph["body"]} if is_v1 else graph
     legacy_projection = (
         {
@@ -192,7 +194,7 @@ def calculate_metrics(graph_path: Path, output_path: Path) -> Path:
     )
     envelope = {
         "schema_version": 1,
-        "metrics_semantics_version": 2 if is_v1 else 1,
+        "metrics_semantics_version": 3 if is_canonical_v2 else (2 if is_v1 else 1),
         "input": {
             "graph_schema_version": 1 if is_v1 else None,
             "graph_fingerprint": graph_fingerprint(graph) if is_v1 else _legacy_graph_fingerprint(graph),
@@ -200,9 +202,11 @@ def calculate_metrics(graph_path: Path, output_path: Path) -> Path:
         },
         # v1 formulas are temporarily isolated on the documented body adapter.
         "metrics": calculate_graph_metrics(
-            legacy_projection,
+            graph if is_canonical_v2 else legacy_projection,
             canonical_mode=is_v1,
             legacy_resolution=not is_v1,
+            canonical_objects=is_canonical_v2,
+            canonical_calls=is_canonical_v2,
         ),
     }
     target = output_path.expanduser().resolve()

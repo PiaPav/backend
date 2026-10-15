@@ -341,12 +341,18 @@ class CallResolver:
         owner: ClassInfo | None = None,
         fields: dict[str, str] | None = None,
     ) -> list[CallInfo]:
-        def make_scope(parent: Scope) -> Scope:
+        def make_scope(parent: Scope, *, canonical: bool = False) -> Scope:
             scope = Scope(parent=parent, owner_class=owner)
             scope.lexical_bindings.update(
                 (parameter_names | binding_visitor.bindings)
                 - binding_visitor.declared_external
             )
+            if canonical:
+                type_parameters = self._type_parameter_names(function.node)
+                if owner is not None and owner.node is not None:
+                    type_parameters.update(self._type_parameter_names(owner.node))
+                scope.lexical_bindings.update(type_parameters)
+                scope.canonical_type_parameters.update(type_parameters)
             self._prepare_expression_bindings(function.node.body, scope)
             for argument in function.args:
                 if isinstance(argument.annotation, str):
@@ -383,7 +389,7 @@ class CallResolver:
             legacy_scope,
             owner,
         )
-        canonical_scope = make_scope(canonical_parent)
+        canonical_scope = make_scope(canonical_parent, canonical=True)
         self._analyze_body(
             function.node.body, module, canonical_scope, owner,
             canonical=function.canonical_callsites, collect_legacy=False,
@@ -393,6 +399,9 @@ class CallResolver:
     def _class_target_for_type(
         self, type_name: str, module: ModuleInfo, scope: Scope
     ) -> TargetRef | None:
+        root = type_name.strip("'\"").split("[", 1)[0].split(".", 1)[0]
+        if scope.is_canonical_type_parameter(root):
+            return None
         local_matches = [item for item in module.classes if item.name == type_name]
         if len(local_matches) == 1:
             return self._class_ref(local_matches[0])
@@ -496,8 +505,13 @@ class CallResolver:
                 scope.merge_flows(branches)
                 continue
             if isinstance(statement, ast.ClassDef):
+                class_scope = Scope(parent=scope)
+                type_parameters = self._type_parameter_names(statement)
+                class_scope.lexical_bindings.update(type_parameters)
+                if canonical is not None:
+                    class_scope.canonical_type_parameters.update(type_parameters)
                 result.extend(self._analyze_body(
-                    statement.body, module, Scope(parent=scope), None, canonical, False
+                    statement.body, module, class_scope, None, canonical, False
                 ))
                 self._bind_statement(statement, module, scope, owner)
             else:
@@ -547,7 +561,60 @@ class CallResolver:
         if isinstance(statement, (ast.Try, ast.TryStar)):
             type_ids = {id(handler.type) for handler in statement.handlers if handler.type is not None}
             expressions = [item for item in expressions if id(item) not in type_ids]
-        return self._canonical_calls_in_expressions(expressions, module, scope, owner)
+        type_parameter_names = self._type_parameter_names(statement)
+        scoped_expressions: list[ast.expr] = []
+        if type_parameter_names:
+            for parameter in getattr(statement, "type_params", ()):
+                bound = getattr(parameter, "bound", None)
+                if bound is not None:
+                    scoped_expressions.append(bound)
+                default = getattr(parameter, "default_value", None)
+                if default is not None:
+                    scoped_expressions.append(default)
+            if isinstance(statement, ast.ClassDef):
+                scoped_expressions.extend(statement.bases)
+                scoped_expressions.extend(keyword.value for keyword in statement.keywords)
+            elif isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                arguments = statement.args
+                parameters = [
+                    *arguments.posonlyargs,
+                    *arguments.args,
+                    *arguments.kwonlyargs,
+                ]
+                if arguments.vararg is not None:
+                    parameters.append(arguments.vararg)
+                if arguments.kwarg is not None:
+                    parameters.append(arguments.kwarg)
+                scoped_expressions.extend(
+                    parameter.annotation
+                    for parameter in parameters
+                    if parameter.annotation is not None
+                )
+                if statement.returns is not None:
+                    scoped_expressions.append(statement.returns)
+
+        scoped_ids = {id(expression) for expression in scoped_expressions}
+        result = self._canonical_calls_in_expressions(
+            (expression for expression in expressions if id(expression) not in scoped_ids),
+            module,
+            scope,
+            owner,
+        )
+        if scoped_expressions:
+            type_scope = scope.fork()
+            for name in type_parameter_names:
+                type_scope.bind_name(name)
+            result.extend(self._canonical_calls_in_expressions(
+                scoped_expressions, module, type_scope, owner
+            ))
+        return result
+
+    @staticmethod
+    def _type_parameter_names(node: ast.AST) -> set[str]:
+        return {
+            parameter.name
+            for parameter in getattr(node, "type_params", ())
+        }
 
     def _canonical_calls_in_expression(
         self, expression: ast.expr, module: ModuleInfo, scope: Scope,
@@ -949,8 +1016,10 @@ class CallResolver:
         if exact is not None:
             return "exact"
         root = self._root_name(target)
-        if root is not None and scope.canonical_import_for(root.id) is not None:
-            return "external"
+        if root is not None:
+            imported = scope.canonical_import_for(root.id)
+            if imported is not None:
+                return "external" if imported.from_lib is True else "unresolved"
         if isinstance(target, ast.Name):
             if scope.shadows_import(target.id, target):
                 return "dynamic"

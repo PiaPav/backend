@@ -32,13 +32,79 @@ def test_fingerprint_ignores_body_fingerprint_and_collection_permutations():
 
 def test_unknown_version_and_invalid_contains_are_rejected():
     graph = _graph()
-    graph["parser_semantics_version"] = 2
+    graph["parser_semantics_version"] = 3
     with pytest.raises(ValueError, match="Unsupported"):
         validate_graph_v1(graph)
     graph = _graph()
     graph["edges"].append({"id": "cycle", "kind": "contains", "source_id": "function:a.py:1:0:f", "target_id": "file:a.py"})
     graph["nodes"][0]["parent_id"] = "function:a.py:1:0:f"
     with pytest.raises(ValueError, match="acyclic"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+def _semantics2_graph():
+    graph = _graph()
+    graph["parser_semantics_version"] = 2
+    graph["type_references"] = []
+    class_id = "class:a.py:2:0:C"
+    field_id = "field:a.py:3:4:C.value"
+    method_id = "method:a.py:4:4:C.read"
+    graph["nodes"].extend([
+        {"id": class_id, "kind": "class", "qualified_name": "a.C", "parent_id": "file:a.py", "path": "a.py", "location": {"path": "a.py", "line": 2, "column": 0}},
+        {"id": field_id, "kind": "field", "qualified_name": "a.C.value", "parent_id": class_id, "path": "a.py", "location": {"path": "a.py", "line": 3, "column": 4}},
+        {"id": method_id, "kind": "method", "qualified_name": "a.C.read", "parent_id": class_id, "path": "a.py", "location": {"path": "a.py", "line": 4, "column": 4}},
+    ])
+    graph["edges"].extend([
+        {"id": "contains:C", "kind": "contains", "source_id": "file:a.py", "target_id": class_id},
+        {"id": "contains:value", "kind": "contains", "source_id": class_id, "target_id": field_id},
+        {"id": "contains:read", "kind": "contains", "source_id": class_id, "target_id": method_id},
+    ])
+    return graph
+
+
+def test_semantics1_remains_compatible_without_type_references():
+    validate_graph_v1(_graph(), verify_fingerprint=False)
+
+
+def test_semantics2_requires_type_references_collection():
+    graph = _graph()
+    graph["parser_semantics_version"] = 2
+    with pytest.raises(ValueError, match="type_references"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+@pytest.mark.parametrize("source_id,target_id", [
+    ("file:a.py", "function:a.py:1:0:f"),
+    ("function:a.py:1:0:f", "file:a.py"),
+])
+def test_semantics2_imports_require_module_endpoints(source_id, target_id):
+    graph = _semantics2_graph()
+    graph["edges"].append({
+        "id": "imports:invalid", "kind": "imports",
+        "source_id": source_id, "target_id": target_id,
+    })
+    with pytest.raises(ValueError, match="imports endpoints"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+def test_semantics2_validates_typed_reference_edge_correspondence_and_access_endpoints():
+    graph = _semantics2_graph()
+    class_id = "class:a.py:2:0:C"
+    field_id = "field:a.py:3:4:C.value"
+    method_id = "method:a.py:4:4:C.read"
+    graph["type_references"] = [{
+        "id": "type:1", "owner_id": field_id, "role": "field_type", "expression": "C",
+        "location": {"path": "a.py", "line": 3, "column": 11}, "resolution": "exact",
+        "target_id": class_id, "candidate_ids": [],
+    }]
+    graph["edges"].extend([
+        {"id": "field_type:1", "kind": "field_type", "source_id": field_id, "target_id": class_id},
+        {"id": "access:1", "kind": "accesses_field", "source_id": method_id, "target_id": field_id,
+         "location": {"path": "a.py", "line": 5, "column": 15}},
+    ])
+    validate_graph_v1(graph, verify_fingerprint=False)
+    graph["type_references"].clear()
+    with pytest.raises(ValueError, match="typed relation"):
         validate_graph_v1(graph, verify_fingerprint=False)
 
 
