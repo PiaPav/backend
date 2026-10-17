@@ -1,6 +1,6 @@
 # Статус декомпозиции
 
-Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 154 passed, 0 failed, 0 skipped.
+Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 158 passed, 0 failed, 0 skipped.
 
 ## Общий итог
 
@@ -11,7 +11,7 @@
 | 3. Независимый файловый API Metrics | **частично / почти выполнен в переходных границах**: не переиспользуется существующая serialization; Graph DTO v1 пока обязан содержать legacy `body` |
 | 4. Версионированный Graph DTO | **частично / основной object-relations scope выполнен** |
 | 5. Формулы сложности в Metrics | **выполнен dual transition для quality, WMC и risk; legacy body сохранён** |
-| 6. Аналитические проекции | **частично** |
+| 6. Аналитические проекции | **частично / единая внутренняя read-only модель введена** |
 
 ## Этап 1. Зафиксировать текущую семантику
 
@@ -60,17 +60,16 @@
 
 ## Этап 6. Централизовать аналитические проекции
 
-1. **Частично.** `metrics/logic/identity.py::graph_files` централизует compatibility projection идентичности, но единой внутренней read-only модели Graph DTO нет. Остаток: создать общий неизменяемый model/view для всех расчётов.
-2. **Частично.** File identity делегируется в `identity.py`, однако wrappers `_file_id` остаются в `calculator.py`, `call_graph.py`, `quality.py`, `object_metrics.py`, а обход nested calls дублируется (`calculator.py::_count_call`, `call_graph.py::_nested_calls`). Остаток: единые helpers/projection.
-3. **Частично.** Отдельные проекции именованы локально в модулях architecture/call graph, но централизованного набора directed import/call/package и undirected projections нет. Остаток: объявить их в единой модели с направлением каждого ребра.
+1. **Выполнен текущий инкремент.** `metrics/logic/projections.py::MetricsGraphProjection` один раз строится фасадом расчёта и предоставляет frozen/slots DTO, immutable topology collections, legacy files/effective modules, canonical nodes и callsites. Прямые вызовы внутренних consumers сохраняют fallback с самостоятельным построением или прежними аргументами.
+2. **Выполнен текущий инкремент.** Локальные wrappers `_file_id` удалены; единый `iter_legacy_calls` обслуживает activity, syntactic call nesting и legacy RFC. `identity.py` и legacy adapters сохранены.
+3. **Выполнен текущий инкремент.** Именованы и централизованы directed file/package imports (`dependent -> dependency`), normalized undirected file imports и weighted ID-only canonical `calls`/`awaits`. Calculator, architecture, canonical call graph и canonical object call topology переведены на эти views.
 4. **Выполнен для parser semantics v2.** Canonical object/call branches используют только готовые IDs, typed edges и resolution statuses. Строковые `resolve`-эвристики сохранены исключительно внутри versioned legacy compatibility path. Остаток полного этапа связан с общей projection-моделью и последующим удалением legacy adapter.
 
 ## Вывод относительно ожидаемого состояния
 
-Этапы 1 и 2 подтверждены полностью. Этап 3 частично / почти выполнен в переходных границах: файловый API, loader/validation, identity и runtime independence готовы, но существующая serialization не переиспользуется и legacy `body` ещё обязателен для немигрированных формул. В этапе 4 завершён основной scope inheritance/field types/object metrics; неполной остаётся canonical модель внешних и неразрешённых импортов. Текущий transitional scope этапа 5 выполнен: complexity facts и migrated consumers работают в dual transition, однако пункт 5.5 — удаление обязательности `body` и оставшихся legacy metrics — остаётся будущим этапом. Этап 6 частичен, хотя topology heuristics уже изолированы от semantics v3.
+Этапы 1 и 2 подтверждены полностью. Этап 3 частично / почти выполнен в переходных границах: файловый API, loader/validation, identity и runtime independence готовы, но существующая serialization не переиспользуется и legacy `body` ещё обязателен для немигрированных формул. В этапе 4 завершён основной scope inheritance/field types/object metrics; неполной остаётся canonical модель внешних и неразрешённых импортов. Текущий transitional scope этапа 5 выполнен: complexity facts и migrated consumers работают в dual transition, однако пункт 5.5 — удаление обязательности `body` и оставшихся legacy metrics — остаётся будущим этапом. В этапе 6 введена единая внутренняя read-only projection-модель и централизованы topology/traversal views; весь этап не объявляется завершённым, поскольку legacy `body` и adapters пока остаются частью переходного контракта.
 
 ## Приоритет доработок
 
-1. Ввести единую read-only projection-модель Metrics и удалить дублирование compatibility-обходов.
-2. Представить external/unresolved import outcomes в canonical Graph DTO и завершить import-модель этапа 4.
-3. Мигрировать оставшихся потребителей с legacy `body` и затем снять его обязательность новой версией контракта.
+1. Представить external/unresolved import outcomes в canonical Graph DTO и завершить import-модель этапа 4.
+2. Мигрировать оставшихся потребителей с legacy `body` и затем снять его обязательность новой версией контракта.

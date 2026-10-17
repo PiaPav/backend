@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from .graph_algorithms import strong_components
+from .projections import MetricsGraphProjection
 
 
 def _package(file: Mapping[str, Any]) -> str:
@@ -82,14 +83,24 @@ def calculate_architecture_metrics(
     nodes: set[str],
     edges: set[tuple[str, str]],
     file_id,
+    *,
+    projection: MetricsGraphProjection | None = None,
 ) -> dict[str, Any]:
-    package_of = {_file_id: _package(file) for file in files if (_file_id := file_id(file))}
+    package_of = (
+        {file.file_id: file.package for file in projection.legacy_files}
+        if projection is not None
+        else {_file_id: _package(file) for file in files if (_file_id := file_id(file))}
+    )
     packages = set(package_of.values())
-    package_edges = {
-        (package_of[source], package_of[target])
-        for source, target in edges
-        if package_of[source] != package_of[target]
-    }
+    package_edges = (
+        set(projection.directed_package_import_graph.edges)
+        if projection is not None
+        else {
+            (package_of[source], package_of[target])
+            for source, target in edges
+            if package_of[source] != package_of[target]
+        }
+    )
     incoming = {package: set() for package in packages}
     outgoing = {package: set() for package in packages}
     for source, target in package_edges:
@@ -133,7 +144,11 @@ def calculate_architecture_metrics(
             }
         )
 
-    articulation, bridges = _critical_topology(nodes, edges)
+    undirected_edges = (
+        set(projection.undirected_file_import_graph.edges)
+        if projection is not None else edges
+    )
+    articulation, bridges = _critical_topology(nodes, undirected_edges)
     return {
         "packages": package_metrics,
         "package_edges": len(package_edges),

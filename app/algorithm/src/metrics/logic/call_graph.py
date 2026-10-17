@@ -9,6 +9,7 @@ from typing import Any
 from .quality import callable_metrics
 from .identity import effective_module_ids, graph_files, legacy_file_id
 from .graph_algorithms import strong_components as _strong_components
+from .projections import MetricsGraphProjection, iter_legacy_calls
 
 
 BUILTIN_CALLS = {
@@ -20,22 +21,8 @@ BUILTIN_CALLS = {
 }
 
 
-def _file_id(file: Mapping[str, Any]) -> str:
-    return legacy_file_id(file)
-
-
 def _graph_files(graph: Mapping[str, Any]) -> list[dict[str, Any]]:
     return graph_files(graph)
-
-
-def _nested_calls(call: Mapping[str, Any], depth: int = 1):
-    yield call, depth
-    for argument in call.get("args", []):
-        if not isinstance(argument, Mapping):
-            continue
-        value = argument.get("value")
-        if isinstance(value, Mapping) and value.get("type") == "call":
-            yield from _nested_calls(value, depth + 1)
 
 
 def _longest_component_indices(
@@ -172,13 +159,13 @@ def _top(values: Mapping[str, float], limit: int = 5) -> list[dict[str, Any]]:
 
 def calculate_call_graph_metrics(
     graph: Mapping[str, Any], *, legacy_resolution: bool | None = None,
-    canonical: bool = False,
+    canonical: bool = False, projection: MetricsGraphProjection | None = None,
 ) -> dict[str, Any]:
     """Build a qualified call graph and calculate vertex-oriented metrics."""
     if canonical:
-        return _calculate_canonical_call_graph_metrics(graph)
-    files = _graph_files(graph)
-    module_ids = effective_module_ids(files)
+        return _calculate_canonical_call_graph_metrics(graph, projection=projection)
+    files = [file.data for file in projection.legacy_files] if projection else _graph_files(graph)
+    module_ids = projection.effective_module_ids if projection else effective_module_ids(files)
     use_legacy_resolution = (
         graph.get("parser_semantics_version") is None
         if legacy_resolution is None
@@ -192,7 +179,7 @@ def calculate_call_graph_metrics(
     owners: list[tuple[str, str, str | None, list[Any]]] = []
 
     for file in files:
-        module = _file_id(file)
+        module = legacy_file_id(file)
         imports[module] = {}
         external_roots[module] = set()
         for imported in file.get("imports", []):
@@ -316,7 +303,8 @@ def calculate_call_graph_metrics(
         for raw_call in calls:
             if not isinstance(raw_call, Mapping):
                 continue
-            for call, depth in _nested_calls(raw_call):
+            for nested in iter_legacy_calls((raw_call,)):
+                call, depth = nested.call, nested.depth
                 if depth > maximum_nesting:
                     maximum_nesting = depth
                     deepest_owners = {caller}
@@ -372,7 +360,7 @@ def calculate_call_graph_metrics(
     peak_reach = max(reach.values(), default=0)
     pagerank = _pagerank(nodes, edges)
     betweenness = _betweenness(nodes, edges)
-    complexity = callable_metrics(graph)
+    complexity = callable_metrics(graph, projection=projection)
     complexity_raw = {
         node: max(0, int(item.get("cyclomatic_complexity", 1)) - 1)
         + int(item.get("cognitive_complexity", 0))
@@ -462,9 +450,12 @@ def calculate_call_graph_metrics(
     }
 
 
-def _calculate_canonical_call_graph_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
+def _calculate_canonical_call_graph_metrics(
+    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None
+) -> dict[str, Any]:
     """Build v3 topology from IDs and classify only canonical callsites."""
-    all_nodes = {str(item["id"]): item for item in graph.get("nodes", []) if isinstance(item, Mapping)}
+    projection = projection or MetricsGraphProjection.from_graph(graph)
+    all_nodes = projection.nodes_by_id
     callable_ids = {identifier for identifier, item in all_nodes.items() if item.get("kind") in {"function", "method"}}
     file_nodes = {
         identifier: item for identifier, item in all_nodes.items()
@@ -475,15 +466,13 @@ def _calculate_canonical_call_graph_metrics(graph: Mapping[str, Any]) -> dict[st
         module_paths.setdefault(str(item.get("qualified_name") or ""), set()).add(str(item.get("path") or ""))
     active_modules = {
         str(callsite.get("caller_id"))
-        for callsite in graph.get("callsites", [])
-        if isinstance(callsite, Mapping) and callsite.get("caller_id") in file_nodes
+        for callsite in projection.callsites
+        if callsite.get("caller_id") in file_nodes
     }
     active_modules.update(
-        str(edge.get("source_id"))
-        for edge in graph.get("edges", [])
-        if isinstance(edge, Mapping)
-        and edge.get("kind") in {"calls", "awaits"}
-        and edge.get("source_id") in file_nodes
+        source
+        for source, _ in projection.directed_canonical_call_graph.edges
+        if source in file_nodes
     )
     call_owner_ids = callable_ids | active_modules
 
@@ -523,15 +512,12 @@ def _calculate_canonical_call_graph_metrics(graph: Mapping[str, Any]) -> dict[st
         for identifier, value in base_labels.items()
     }
     edge_weights: Counter[tuple[str, str]] = Counter()
-    for edge in graph.get("edges", []):
-        if not isinstance(edge, Mapping) or edge.get("kind") not in {"calls", "awaits"}: continue
-        source, target = edge.get("source_id"), edge.get("target_id")
+    for (source, target), weight in projection.directed_canonical_call_graph.edge_weights.items():
         if source in call_owner_ids and target in callable_ids:
-            edge_weights[(source, target)] += int(edge.get("weight", 1))
+            edge_weights[(source, target)] += weight
     edges = set(edge_weights)
     external = unresolved = 0; maximum_nesting = 0; deepest: set[str] = set()
-    for callsite in graph.get("callsites", []):
-        if not isinstance(callsite, Mapping): continue
+    for callsite in projection.callsites:
         caller = callsite.get("caller_id"); status = callsite.get("resolution")
         if caller not in call_owner_ids:
             continue
@@ -570,7 +556,7 @@ def _calculate_canonical_call_graph_metrics(graph: Mapping[str, Any]) -> dict[st
     peak_reach = max(reach.values(), default=0)
     pagerank = _pagerank(call_owner_ids, edges); betweenness = _betweenness(call_owner_ids, edges)
     semantics_v3 = graph.get("parser_semantics_version") == 3
-    complexity = callable_metrics(graph) if semantics_v3 else {}
+    complexity = callable_metrics(graph, projection=projection) if semantics_v3 else {}
     # ID-keyed complexity and its risk projection belong to parser semantics
     # v3.  Semantics v2 keeps its established empty canonical risk list.
     risk_nodes = {

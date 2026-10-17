@@ -7,18 +7,18 @@ from collections.abc import Mapping
 from typing import Any
 from .identity import graph_files, legacy_file_id
 from .complexity import canonical_callable_metrics
+from .projections import MetricsGraphProjection
 
 
-def _file_id(file: Mapping[str, Any]) -> str:
-    return legacy_file_id(file)
-
-
-def callable_metrics(graph: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+def callable_metrics(
+    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None
+) -> dict[str, dict[str, Any]]:
     if graph.get("parser_semantics_version") == 3:
         return canonical_callable_metrics(graph)
     result: dict[str, dict[str, Any]] = {}
-    for file in graph_files(graph):
-        module = _file_id(file)
+    files = [file.data for file in projection.legacy_files] if projection else graph_files(graph)
+    for file in files:
+        module = legacy_file_id(file)
         for function in file.get("functions", []):
             if isinstance(function, Mapping) and isinstance(function.get("metrics"), Mapping):
                 result[f"{module}.{function.get('name')}"] = dict(function["metrics"])
@@ -36,8 +36,10 @@ def _average(items: list[float]) -> float:
     return round(sum(items) / len(items), 4) if items else 0.0
 
 
-def calculate_quality_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
-    metrics = callable_metrics(graph)
+def calculate_quality_metrics(
+    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None
+) -> dict[str, Any]:
+    metrics = callable_metrics(graph, projection=projection)
     raised: Counter[str] = Counter()
     caught: Counter[str] = Counter()
     broad_handlers: list[dict[str, Any]] = []

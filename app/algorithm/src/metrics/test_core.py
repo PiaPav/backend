@@ -4,18 +4,122 @@ from copy import deepcopy
 from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
+from dataclasses import FrozenInstanceError
 
 import pytest
 
 from metrics import calculate_graph_metrics, calculate_metrics, load_graph
 from graph_dto import graph_fingerprint
 from parser import parse_project
+from metrics.logic.projections import MetricsGraphProjection, iter_legacy_calls
 
 
 def _v3_metrics(graph: dict) -> dict:
     return calculate_graph_metrics(
         graph, canonical_mode=True, legacy_resolution=False,
         canonical_objects=True, canonical_calls=True,
+    )
+
+
+def test_metrics_projection_is_immutable_and_preserves_named_topologies() -> None:
+    files = [
+        {"name": "pkg", "path": "", "path_parts": [], "imports": []},
+        {"name": "__init__", "path": "pkg", "path_parts": ["pkg"], "imports": []},
+        {"name": "consumer", "path": "app", "path_parts": ["app"], "imports": [
+            {"object": "pkg", "path": "pkg", "from_lib": False},
+            {"object": "consumer", "path": "app.consumer", "from_lib": False},
+            {"object": "unknown", "path": "unknown", "from_lib": False},
+        ]},
+    ]
+    graph = {
+        "body": [{"file": file} for file in files],
+        "nodes": [
+            {"id": "file", "kind": "file", "qualified_name": "app.consumer"},
+            {"id": "fn", "kind": "function", "qualified_name": "app.consumer.run"},
+        ],
+        "edges": [
+            {"kind": "calls", "source_id": "file", "target_id": "fn", "weight": 2},
+            {"kind": "awaits", "source_id": "file", "target_id": "fn"},
+        ],
+        "callsites": [{"caller_id": "file", "resolution": "exact"}],
+    }
+
+    projection = MetricsGraphProjection.from_graph(graph)
+    assert projection.effective_module_ids["pkg"] == "file:pkg/__init__.py"
+    assert projection.directed_file_import_graph.edges == frozenset({
+        ("app.consumer", "file:pkg/__init__.py")
+    })
+    assert projection.directed_package_import_graph.edges == frozenset({("app", "pkg")})
+    assert projection.undirected_file_import_graph.edges == frozenset({
+        ("app.consumer", "file:pkg/__init__.py")
+    })
+    assert projection.directed_canonical_call_graph.edge_weights[("file", "fn")] == 3
+    with pytest.raises(TypeError):
+        projection.nodes_by_id["other"] = {}  # type: ignore[index]
+    with pytest.raises(TypeError):
+        projection.directed_canonical_call_graph.edge_weights[("fn", "file")] = 1  # type: ignore[index]
+    with pytest.raises(FrozenInstanceError):
+        projection.legacy_files[0].file_id = "changed"  # type: ignore[misc]
+
+
+def test_metrics_projection_is_a_deeply_immutable_snapshot() -> None:
+    graph = {
+        "body": [{"file": {
+            "name": "module", "path": "", "path_parts": [],
+            "imports": [{"object": "dependency", "path": "dependency", "from_lib": False}],
+        }}],
+        "nodes": [{"id": "fn", "kind": "function", "metadata": {"tags": ["original"]}}],
+        "edges": [],
+        "callsites": [{"caller_id": "fn", "location": {"line": 1}}],
+    }
+    projection = MetricsGraphProjection.from_graph(graph)
+
+    graph["body"][0]["file"]["imports"][0]["path"] = "changed"
+    graph["nodes"][0]["metadata"]["tags"].append("changed")
+    graph["callsites"][0]["location"]["line"] = 2
+
+    assert projection.legacy_files[0].data["imports"][0]["path"] == "dependency"
+    assert projection.nodes_by_id["fn"]["metadata"]["tags"] == ("original",)
+    assert projection.callsites[0]["location"]["line"] == 1
+    with pytest.raises(TypeError):
+        projection.nodes_by_id["fn"]["metadata"]["tags"][0] = "changed"  # type: ignore[index]
+
+
+def test_shared_legacy_call_traversal_keeps_order_depth_and_consumers_equal() -> None:
+    calls = [{"object": "outer", "args": [
+        {"value": {"type": "call", "object": "left", "args": [
+            {"value": {"type": "call", "object": "deep", "args": []}}
+        ]}},
+        {"value": {"type": "name", "object": "ignored"}},
+        {"value": {"type": "call", "object": "right", "args": []}},
+    ]}, "not-a-call"]
+    traversed = list(iter_legacy_calls(calls))
+    assert [(item.call["object"], item.depth) for item in traversed] == [
+        ("outer", 1), ("left", 2), ("deep", 3), ("right", 2)
+    ]
+
+    from metrics.logic.calculator import _calls_in
+    from metrics.logic.object_metrics import _call_names
+
+    assert _calls_in(calls) == 4
+    assert _call_names(calls) == {"outer", "left", "deep", "right"}
+
+
+def test_internal_metric_consumers_keep_projection_compatibility_fallback() -> None:
+    from metrics.logic.call_graph import calculate_call_graph_metrics
+    from metrics.logic.object_metrics import calculate_object_metrics
+    from metrics.logic.quality import calculate_quality_metrics
+
+    graph = _graph()
+    projection = MetricsGraphProjection.from_graph(graph)
+    assert calculate_call_graph_metrics(graph) == calculate_call_graph_metrics(
+        graph, projection=projection
+    )
+    assert calculate_object_metrics(graph) == calculate_object_metrics(
+        graph, projection=projection
+    )
+    assert calculate_quality_metrics(graph) == calculate_quality_metrics(
+        graph, projection=projection
     )
 
 

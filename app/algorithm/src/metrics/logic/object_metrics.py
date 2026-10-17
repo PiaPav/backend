@@ -8,16 +8,13 @@ from itertools import combinations
 from typing import Any
 from .identity import graph_files, legacy_file_id
 from .complexity import canonical_callable_metrics
+from .projections import MetricsGraphProjection, iter_legacy_calls
 
 
 BUILTIN_TYPES = {
     "Any", "None", "bool", "bytes", "dict", "float", "int", "list",
     "object", "set", "str", "tuple", "Optional", "Union", "Literal",
 }
-
-
-def _file_id(file: Mapping[str, Any]) -> str:
-    return legacy_file_id(file)
 
 
 def _type_names(value: Any) -> set[str]:
@@ -35,25 +32,17 @@ def _type_names(value: Any) -> set[str]:
         return {name.rsplit(".", 1)[-1] for name in result} - BUILTIN_TYPES
     if isinstance(value, Mapping):
         return set().union(*(_type_names(item) for item in value.values()))
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return set().union(*(_type_names(item) for item in value))
     return set()
 
 
 def _call_names(calls: Any) -> set[str]:
-    result: set[str] = set()
-    for call in calls if isinstance(calls, list) else []:
-        if not isinstance(call, Mapping):
-            continue
-        name = str(call.get("object") or "")
-        if name:
-            result.add(name)
-        for argument in call.get("args", []):
-            if isinstance(argument, Mapping):
-                value = argument.get("value")
-                if isinstance(value, Mapping) and value.get("type") == "call":
-                    result |= _call_names([value])
-    return result
+    return {
+        name
+        for item in iter_legacy_calls(calls if isinstance(calls, (list, tuple)) else ())
+        if (name := str(item.call.get("object") or ""))
+    }
 
 
 def _top(rows: list[dict[str, Any]], key: str, *, reverse: bool = True) -> list[dict[str, Any]]:
@@ -64,10 +53,14 @@ def _top(rows: list[dict[str, Any]], key: str, *, reverse: bool = True) -> list[
     )[:10]
 
 
-def calculate_object_metrics(graph: Mapping[str, Any], *, cyclic_dit_is_none: bool = False) -> dict[str, Any]:
+def calculate_object_metrics(
+    graph: Mapping[str, Any], *, cyclic_dit_is_none: bool = False,
+    projection: MetricsGraphProjection | None = None,
+) -> dict[str, Any]:
     classes: list[tuple[str, str, Mapping[str, Any]]] = []
-    for file in graph_files(graph):
-        module = _file_id(file)
+    files = [file.data for file in projection.legacy_files] if projection else graph_files(graph)
+    for file in files:
+        module = legacy_file_id(file)
         for class_info in file.get("classes", []):
             if isinstance(class_info, Mapping):
                 name = str(class_info.get("name"))
@@ -94,7 +87,7 @@ def calculate_object_metrics(graph: Mapping[str, Any], *, cyclic_dit_is_none: bo
     children: Counter[str] = Counter()
     for qualified, module, class_info in classes:
         raw = class_info.get("parent")
-        parent_names = raw if isinstance(raw, list) else ([raw] if raw else [])
+        parent_names = raw if isinstance(raw, (list, tuple)) else ([raw] if raw else [])
         parents[qualified] = {
             resolved
             for name in parent_names
@@ -197,12 +190,12 @@ def calculate_object_metrics(graph: Mapping[str, Any], *, cyclic_dit_is_none: bo
     return result
 
 
-def calculate_canonical_object_metrics(graph: Mapping[str, Any]) -> dict[str, Any]:
+def calculate_canonical_object_metrics(
+    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None
+) -> dict[str, Any]:
     """Calculate v3 object metrics exclusively from canonical ID relations."""
-    nodes = {
-        str(node["id"]): node for node in graph.get("nodes", [])
-        if isinstance(node, Mapping)
-    }
+    projection = projection or MetricsGraphProjection.from_graph(graph)
+    nodes = projection.nodes_by_id
     class_ids = {identifier for identifier, node in nodes.items() if node.get("kind") == "class"}
     method_ids = {identifier for identifier, node in nodes.items() if node.get("kind") == "method"}
     field_ids = {identifier for identifier, node in nodes.items() if node.get("kind") == "field"}
@@ -243,7 +236,8 @@ def calculate_canonical_object_metrics(graph: Mapping[str, Any]) -> dict[str, An
             field_types[source].add(target)
         elif kind == "accesses_field" and source in method_ids and target in field_ids:
             accesses[source].add(target)
-        elif kind in {"calls", "awaits"} and source in method_ids and target in nodes and nodes[target].get("kind") in {"function", "method"}:
+    for source, target in projection.directed_canonical_call_graph.edges:
+        if source in method_ids and target in nodes and nodes[target].get("kind") in {"function", "method"}:
             calls[source].add(target)
 
     depths: dict[str, int | None] = {}
@@ -271,8 +265,9 @@ def calculate_canonical_object_metrics(graph: Mapping[str, Any]) -> dict[str, An
     )
     # Semantics v2 retains the transitional body-derived WMC path.
     legacy_wmc: dict[tuple[str, str], int] = {}
-    for file in graph_files(graph):
-        module = _file_id(file)
+    files = [file.data for file in projection.legacy_files] if projection else graph_files(graph)
+    for file in files:
+        module = legacy_file_id(file)
         directory = str(file.get("path") or "").replace(".", "/")
         source_path = "/".join(filter(None, (directory, f"{file.get('name')}.py")))
         for class_info in file.get("classes", []):

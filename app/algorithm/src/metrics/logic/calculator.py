@@ -12,31 +12,15 @@ from .object_metrics import calculate_canonical_object_metrics, calculate_object
 from .quality import calculate_quality_metrics
 from .identity import effective_module_ids, graph_files, legacy_file_id
 from .graph_algorithms import strong_components as _strong_components
-
-
-def _file_id(file: Mapping[str, Any]) -> str:
-    return legacy_file_id(file)
+from .projections import MetricsGraphProjection, iter_legacy_calls
 
 
 def _files(graph: Mapping[str, Any]) -> list[dict[str, Any]]:
     return graph_files(graph)
 
 
-def _count_call(call: Mapping[str, Any]) -> int:
-    count = 1
-    for argument in call.get("args", []):
-        if not isinstance(argument, Mapping):
-            continue
-        value = argument.get("value")
-        if isinstance(value, Mapping) and value.get("type") == "call":
-            count += _count_call(value)
-    return count
-
-
 def _calls_in(items: Iterable[Any]) -> int:
-    return sum(
-        _count_call(item) for item in items if isinstance(item, Mapping)
-    )
+    return sum(1 for _ in iter_legacy_calls(items))
 
 
 def _dependency_edges(
@@ -45,7 +29,7 @@ def _dependency_edges(
     edges: set[tuple[str, str]] = set()
     modules = effective_module_ids(files)
     for file in files:
-        source = _file_id(file)
+        source = legacy_file_id(file)
         for imported in file.get("imports", []):
             if not isinstance(imported, Mapping) or imported.get("from_lib") is not False:
                 continue
@@ -89,7 +73,7 @@ def _directory_count(files: list[dict[str, Any]]) -> int:
     directories: set[tuple[str, ...]] = set()
     for file in files:
         parts = file.get("path_parts")
-        if not isinstance(parts, list):
+        if not isinstance(parts, (list, tuple)):
             parts = str(file.get("path") or "").split(".")
         clean = tuple(str(part) for part in parts if part)
         directories.update(clean[:index] for index in range(1, len(clean) + 1))
@@ -102,9 +86,11 @@ def calculate_graph_metrics(
     canonical_calls: bool = False,
 ) -> dict[str, Any]:
     """Return deterministic size, coupling, density and connectivity metrics."""
-    files = _files(graph)
-    nodes = {_file_id(file) for file in files}
-    edges = _dependency_edges(files, nodes)
+    projection = MetricsGraphProjection.from_graph(graph)
+    files = [file.data for file in projection.legacy_files]
+    file_graph = projection.directed_file_import_graph
+    nodes = set(file_graph.nodes)
+    edges = set(file_graph.edges)
 
     classes = [item for file in files for item in file.get("classes", [])]
     functions = [item for file in files for item in file.get("functions", [])]
@@ -211,11 +197,14 @@ def calculate_graph_metrics(
             "highest_fan_in": _degree_peak(fan_in),
             "highest_fan_out": _degree_peak(fan_out),
         },
-        "architecture": calculate_architecture_metrics(files, nodes, edges, _file_id),
-        "code_quality": calculate_quality_metrics(graph),
-        "object_oriented": calculate_canonical_object_metrics(graph) if canonical_objects else calculate_object_metrics(graph, cyclic_dit_is_none=canonical_mode),
+        "architecture": calculate_architecture_metrics(
+            files, nodes, edges, legacy_file_id, projection=projection
+        ),
+        "code_quality": calculate_quality_metrics(graph, projection=projection),
+        "object_oriented": calculate_canonical_object_metrics(graph, projection=projection) if canonical_objects else calculate_object_metrics(graph, cyclic_dit_is_none=canonical_mode, projection=projection),
         "call_graph": calculate_call_graph_metrics(
-            graph, legacy_resolution=legacy_resolution, canonical=canonical_calls
+            graph, legacy_resolution=legacy_resolution, canonical=canonical_calls,
+            projection=projection,
         ),
     }
 

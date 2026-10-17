@@ -59,6 +59,20 @@ node ID. Semantics v1-v3 retain their prior compatibility behavior.
 String, import-suffix and annotation-name resolution is confined to legacy v1/v2
 compatibility branches.
 
+Metric calculation constructs one internal read-only `MetricsGraphProjection`.
+It exposes collision-safe legacy file identity and effective semantic modules,
+canonical nodes/callsites, directed file and package imports in the explicit
+`dependent -> dependency` direction, normalized undirected file pairs, and an
+ID-only weighted `calls`/`awaits` graph. Its DTOs are frozen and its topology
+collections are immutable. This is an internal data/topology view: it does not
+change formulas, perform legacy string resolution, or remove the required
+transitional `body` adapter.
+
+Legacy nested calls have one compatibility traversal. A root mapping call has
+depth 1; recursion follows only `args[*].value` mappings whose `type` is
+`call`, preserving argument order. Activity, legacy call nesting, and RFC call
+name collection consume that same traversal.
+
 When a legacy call record contains the parser's transitional `semantic_target`,
 local call resolution uses it exclusively. Records without it retain the legacy
 short-name fallback.
