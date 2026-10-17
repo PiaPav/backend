@@ -2,7 +2,9 @@
 
 from .contract import (
     EDGE_KINDS,
+    CONTROL_KINDS,
     NODE_KINDS,
+    OCCURRENCE_KINDS,
     RESOLUTION_STATUSES,
     canonicalize_graph,
     graph_fingerprint,
@@ -10,10 +12,10 @@ from .contract import (
 )
 
 SCHEMA_VERSION = 1
-PARSER_SEMANTICS_VERSION = 2
+PARSER_SEMANTICS_VERSION = 3
 
 __all__ = [
-    "EDGE_KINDS", "NODE_KINDS", "PARSER_SEMANTICS_VERSION",
+    "CONTROL_KINDS", "EDGE_KINDS", "NODE_KINDS", "OCCURRENCE_KINDS", "PARSER_SEMANTICS_VERSION",
     "RESOLUTION_STATUSES", "SCHEMA_VERSION", "canonicalize_graph",
     "graph_fingerprint", "validate_graph_v1",
 ]

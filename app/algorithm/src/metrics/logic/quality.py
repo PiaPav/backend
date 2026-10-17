@@ -6,6 +6,7 @@ from collections import Counter
 from collections.abc import Mapping
 from typing import Any
 from .identity import graph_files, legacy_file_id
+from .complexity import canonical_callable_metrics
 
 
 def _file_id(file: Mapping[str, Any]) -> str:
@@ -13,6 +14,8 @@ def _file_id(file: Mapping[str, Any]) -> str:
 
 
 def callable_metrics(graph: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    if graph.get("parser_semantics_version") == 3:
+        return canonical_callable_metrics(graph)
     result: dict[str, dict[str, Any]] = {}
     for file in graph_files(graph):
         module = _file_id(file)

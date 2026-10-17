@@ -569,6 +569,40 @@ def _calculate_canonical_call_graph_metrics(graph: Mapping[str, Any]) -> dict[st
     peak_in = max(incoming.values(), default=0); peak_out = max(outgoing.values(), default=0)
     peak_reach = max(reach.values(), default=0)
     pagerank = _pagerank(call_owner_ids, edges); betweenness = _betweenness(call_owner_ids, edges)
+    semantics_v3 = graph.get("parser_semantics_version") == 3
+    complexity = callable_metrics(graph) if semantics_v3 else {}
+    # ID-keyed complexity and its risk projection belong to parser semantics
+    # v3.  Semantics v2 keeps its established empty canonical risk list.
+    risk_nodes = {
+        node for node in call_owner_ids
+        if all_nodes[node].get("synthetic") is not True
+    } if semantics_v3 else set()
+    complexity_raw = {
+        node: max(0, int(complexity.get(node, {}).get("cyclomatic_complexity", 1)) - 1)
+        + int(complexity.get(node, {}).get("cognitive_complexity", 0))
+        for node in risk_nodes
+    }
+    peak_complexity = max(complexity_raw.values(), default=0)
+    risk_peak_in = max((incoming[node] for node in risk_nodes), default=0)
+    peak_betweenness = max((betweenness[node] for node in risk_nodes), default=0.0)
+    risk_peak_reach = max((reach[node] for node in risk_nodes), default=0)
+    risks = []
+    for node in risk_nodes:
+        score = 100 * (
+            0.35 * (complexity_raw[node] / peak_complexity if peak_complexity else 0.0)
+            + 0.25 * (incoming[node] / risk_peak_in if risk_peak_in else 0.0)
+            + 0.20 * (betweenness[node] / peak_betweenness if peak_betweenness else 0.0)
+            + 0.20 * (reach[node] / risk_peak_reach if risk_peak_reach else 0.0)
+        )
+        if score:
+            risks.append({
+                "node": labels[node], "score": round(score, 2),
+                "cyclomatic": int(complexity.get(node, {}).get("cyclomatic_complexity", 0)),
+                "cognitive": int(complexity.get(node, {}).get("cognitive_complexity", 0)),
+                "fan_in": incoming[node], "betweenness": round(betweenness[node], 6),
+                "transitive_reach": reach[node],
+            })
+    risks.sort(key=lambda item: (-item["score"], item["node"]))
     local = sum(edge_weights.values()); total = local + external + unresolved
     return {
         "nodes": len(call_owner_ids), "edges": len(edges), "callsites_in_local_edges": local,
@@ -589,6 +623,6 @@ def _calculate_canonical_call_graph_metrics(graph: Mapping[str, Any]) -> dict[st
         "recursive_components": sorted([sorted(labels[node] for node in component) for component in recursive_ids]),
         "pagerank_top": _top({labels[node]: score for node, score in pagerank.items()}),
         "betweenness_top": _top({labels[node]: score for node, score in betweenness.items()}),
-        "risk_top": [],
+        "risk_top": risks[:10],
         "node_kinds": dict(sorted(Counter(str(all_nodes[node].get("kind")) for node in call_owner_ids).items())),
     }

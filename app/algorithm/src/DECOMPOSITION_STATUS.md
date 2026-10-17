@@ -1,6 +1,6 @@
 # Статус декомпозиции
 
-Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. После последних исправлений независимый tester выполнил через `app/algorithm/.venv/Scripts/python.exe` совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 140 passed, 0 failed, 0 skipped.
+Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 154 passed, 0 failed, 0 skipped.
 
 ## Общий итог
 
@@ -10,7 +10,7 @@
 | 2. Независимый файловый API Parser | **выполнен** |
 | 3. Независимый файловый API Metrics | **частично / почти выполнен в переходных границах**: не переиспользуется существующая serialization; Graph DTO v1 пока обязан содержать legacy `body` |
 | 4. Версионированный Graph DTO | **частично / основной object-relations scope выполнен** |
-| 5. Формулы сложности в Metrics | **частично, в основном не выполнен** |
+| 5. Формулы сложности в Metrics | **выполнен dual transition для quality, WMC и risk; legacy body сохранён** |
 | 6. Аналитические проекции | **частично** |
 
 ## Этап 1. Зафиксировать текущую семантику
@@ -52,11 +52,11 @@
 
 ## Этап 5. Перенести формулы сложности в Metrics
 
-1. **Не выполнен.** `parser/logic/complexity.py::_MetricsVisitor` одновременно извлекает факты и рассчитывает cyclomatic/cognitive complexity и nesting. Остаток: разделить нейтральный сбор фактов и формулы.
-2. **Частично.** Legacy callable `metrics` содержит часть фактов (statements, return/raise/await, exceptions, self attributes), но canonical nodes из `parser/graph_v1.py` structured control facts не содержат. Остаток: определить и сериализовать достаточную canonical facts-схему.
-3. **Не выполнен.** `metrics/logic/quality.py` агрегирует уже готовые значения Parser; эквивалентные формулы сложности по сырым фактам в Metrics не реализованы. Остаток: перенести формулы с сохранением чисел.
-4. **Частично.** Переход поддерживает только старые готовые значения через `body`; параллельного расчёта по новым facts нет. Остаток: dual path и сравнение результатов.
-5. **Не выполнен.** Производные function metrics остаются обязательными для legacy validation (`metrics/core.py::_validate_callable`) и потребляются pipeline. Остаток: после golden-эквивалентности удалить их из нового Graph DTO.
+1. **Выполнен.** Parser отдельно собирает нейтральные complexity facts, а legacy projection воспроизводит прежние формулы из тех же фактов.
+2. **Выполнен для parser semantics v3.** Реальные callable nodes содержат span/async, ordered controls с parent/cardinality и scoped occurrences; synthetic constructors фактов не имеют. Контракт строго валидирует структуру и ссылки.
+3. **Выполнен для migrated consumers.** `metrics/logic/complexity.py` без импорта Parser/AST вычисляет legacy-shaped значения и ID-based map; quality, WMC и risk используют его при parser semantics v3.
+4. **Выполнен dual transition.** Parser semantics v1/v2 и unversioned inputs сохраняют прежний путь; v3 выдаёт metrics semantics v4. Transitional body остаётся для немигрированных consumers.
+5. **Частично.** Производные metrics остаются обязательными в legacy `body`. Остаток: после миграции остальных consumers удалить обязательность body отдельной версией контракта.
 
 ## Этап 6. Централизовать аналитические проекции
 
@@ -67,10 +67,10 @@
 
 ## Вывод относительно ожидаемого состояния
 
-Этапы 1 и 2 подтверждены полностью. Этап 3 частично / почти выполнен в переходных границах: файловый API, loader/validation, identity и runtime independence готовы, но существующая serialization не переиспользуется и legacy `body` ещё обязателен для немигрированных формул. В этапе 4 завершён основной scope inheritance/field types/object metrics; неполной остаётся canonical модель внешних и неразрешённых импортов. Этап 5 находится ближе к началу, чем к завершению; этап 6 частичен, хотя topology heuristics уже изолированы от semantics v3.
+Этапы 1 и 2 подтверждены полностью. Этап 3 частично / почти выполнен в переходных границах: файловый API, loader/validation, identity и runtime independence готовы, но существующая serialization не переиспользуется и legacy `body` ещё обязателен для немигрированных формул. В этапе 4 завершён основной scope inheritance/field types/object metrics; неполной остаётся canonical модель внешних и неразрешённых импортов. Текущий transitional scope этапа 5 выполнен: complexity facts и migrated consumers работают в dual transition, однако пункт 5.5 — удаление обязательности `body` и оставшихся legacy metrics — остаётся будущим этапом. Этап 6 частичен, хотя topology heuristics уже изолированы от semantics v3.
 
 ## Приоритет доработок
 
-1. Разделить complexity facts/formulas и перенести формулы в Metrics через dual golden transition.
-2. Ввести единую read-only projection-модель Metrics и удалить дублирование compatibility-обходов.
-3. Представить external/unresolved import outcomes в canonical Graph DTO и завершить import-модель этапа 4.
+1. Ввести единую read-only projection-модель Metrics и удалить дублирование compatibility-обходов.
+2. Представить external/unresolved import outcomes в canonical Graph DTO и завершить import-модель этапа 4.
+3. Мигрировать оставшихся потребителей с legacy `body` и затем снять его обязательность новой версией контракта.

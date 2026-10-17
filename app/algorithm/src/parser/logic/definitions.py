@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 from collections.abc import Callable, Iterable
 
-from .complexity import analyze_function_metrics
+from .complexity import collect_complexity_facts, project_legacy_metrics
 from .expressions import annotation_value, dotted_name, infer_literal_type, simple_value
 from .models import ArgumentInfo, ClassInfo, FieldInfo, FunctionInfo, ModuleInfo
 
@@ -62,6 +62,7 @@ def _function_args(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[Argumen
 def _function(
     node: ast.FunctionDef | ast.AsyncFunctionDef, module: ModuleInfo, owner: str | None
 ) -> FunctionInfo:
+    facts = collect_complexity_facts(node)
     return FunctionInfo(
         name=node.name,
         args=_function_args(node),
@@ -69,7 +70,8 @@ def _function(
         # field generics use the compact parent/child representation.
         return_type=ast.unparse(node.returns) if node.returns is not None else None,
         decorators=_decorators(node),
-        metrics=analyze_function_metrics(node),
+        metrics=project_legacy_metrics(facts),
+        complexity_facts=facts,
         node=node,
         owner=owner,
         file=module.file,

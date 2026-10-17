@@ -12,6 +12,108 @@ from graph_dto import graph_fingerprint
 from parser import parse_project
 
 
+def _v3_metrics(graph: dict) -> dict:
+    return calculate_graph_metrics(
+        graph, canonical_mode=True, legacy_resolution=False,
+        canonical_objects=True, canonical_calls=True,
+    )
+
+
+def test_semantics3_complexity_consumers_use_facts_by_node_id(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "model.py").write_text(
+        "class Worker:\n"
+        "    def run(self, flag):\n"
+        "        if flag:\n            return self.run(False)\n"
+        "        return 0\n",
+        encoding="utf-8",
+    )
+    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    envelope = json.loads(calculate_metrics(tmp_path / "graph.json", tmp_path / "metrics.json").read_text(encoding="utf-8"))
+    assert envelope["metrics_semantics_version"] == 4
+    baseline = _v3_metrics(graph)
+
+    body_mutation = deepcopy(graph)
+    body_mutation["body"][0]["file"]["classes"][0]["methods"][0]["metrics"]["cyclomatic_complexity"] = 999
+    changed_body = _v3_metrics(body_mutation)
+    for section in ("code_quality", "object_oriented", "call_graph"):
+        assert changed_body[section] == baseline[section]
+
+    facts_mutation = deepcopy(graph)
+    method = next(node for node in facts_mutation["nodes"] if node["kind"] == "method")
+    method["complexity_facts"]["controls"].append({
+        "kind": "boolean", "parent_index": None,
+        "location": deepcopy(method["location"]),
+        "operand_count": 4, "case_count": 0, "filter_count": 0,
+    })
+    changed_facts = _v3_metrics(facts_mutation)
+    assert changed_facts["code_quality"] != baseline["code_quality"]
+    assert changed_facts["object_oriented"] != baseline["object_oriented"]
+    assert changed_facts["call_graph"]["risk_top"] != baseline["call_graph"]["risk_top"]
+
+    permuted = deepcopy(graph)
+    permuted["nodes"].reverse(); permuted["edges"].reverse(); permuted["callsites"].reverse()
+    assert _v3_metrics(permuted) == baseline
+
+
+def test_semantics3_synthetic_constructor_has_no_complexity_identity(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "model.py").write_text(
+        "class Empty:\n    pass\n\ndef make():\n    return Empty()\n",
+        encoding="utf-8",
+    )
+    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    synthetic = next(node for node in graph["nodes"] if node.get("synthetic"))
+    assert "complexity_facts" not in synthetic
+    metrics = _v3_metrics(graph)
+    assert metrics["code_quality"]["analyzed_callables"] == 1
+    assert all(item["node"] != synthetic["qualified_name"] for item in metrics["call_graph"]["risk_top"])
+
+
+def test_semantics3_synthetic_fan_in_does_not_normalize_real_callable_risk() -> None:
+    def node(identifier: str, *, synthetic: bool = False) -> dict:
+        item = {
+            "id": identifier,
+            "kind": "method" if synthetic else "function",
+            "qualified_name": f"m.{identifier}",
+            "complexity_facts": {
+                "span": {
+                    "start": {"path": "m.py", "line": 1, "column": 0},
+                    "end": {"path": "m.py", "line": 1, "column": 1},
+                },
+                "is_async": False,
+                "controls": [],
+                "occurrences": [],
+            },
+        }
+        if synthetic:
+            item["synthetic"] = True
+            item.pop("complexity_facts")
+        return item
+
+    graph = {
+        "parser_semantics_version": 3,
+        "nodes": [
+            node("source_one"), node("source_two"), node("source_three"),
+            node("real_target"), node("Synthetic.__init__", synthetic=True),
+        ],
+        "edges": [
+            {"kind": "calls", "source_id": source, "target_id": "Synthetic.__init__"}
+            for source in ("source_one", "source_two", "source_three")
+        ] + [{"kind": "calls", "source_id": "source_one", "target_id": "real_target"}],
+        "callsites": [],
+    }
+
+    call_graph = _v3_metrics(graph)["call_graph"]
+    risks = {item["node"]: item for item in call_graph["risk_top"]}
+    assert call_graph["highest_fan_in"] == {
+        "degree": 3, "nodes": ["m.Synthetic.__init__"],
+    }
+    assert risks["m.real_target"]["score"] == 25.0
+
+
 def test_committed_graph_matches_complete_metrics_v2_golden(tmp_path: Path) -> None:
     fixtures = Path(__file__).resolve().parents[1] / "gpt_work_dir/tests/golden_v1"
     actual_path = calculate_metrics(fixtures / "graph.json", tmp_path / "metrics.json")

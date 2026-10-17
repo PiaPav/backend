@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from itertools import combinations
 from typing import Any
 from .identity import graph_files, legacy_file_id
+from .complexity import canonical_callable_metrics
 
 
 BUILTIN_TYPES = {
@@ -264,8 +265,11 @@ def calculate_canonical_object_metrics(graph: Mapping[str, Any]) -> dict[str, An
                 if parent in active: depths[parent] = None
                 elif parent not in depths: stack.append((parent, False))
 
-    # Complexity deliberately remains a body-derived metric.  Only an exact
-    # canonical qualified name is accepted; short-name guessing is forbidden.
+    canonical_complexity = (
+        canonical_callable_metrics(graph)
+        if graph.get("parser_semantics_version") == 3 else None
+    )
+    # Semantics v2 retains the transitional body-derived WMC path.
     legacy_wmc: dict[tuple[str, str], int] = {}
     for file in graph_files(graph):
         module = _file_id(file)
@@ -296,8 +300,14 @@ def calculate_canonical_object_metrics(graph: Mapping[str, Any]) -> dict[str, An
         method_fields = [accesses[method] & fields_by_class[class_id] for method in declared]
         pairs = list(combinations(method_fields, 2))
         lcom = (sum(not (left & right) for left, right in pairs) / len(pairs)) if pairs and fields_by_class[class_id] else None
+        wmc = (
+            sum(int(canonical_complexity[method]["cyclomatic_complexity"])
+                for method in declared if method in canonical_complexity)
+            if canonical_complexity is not None
+            else legacy_wmc.get((str(node.get("path") or ""), str(node.get("qualified_name") or class_id)), 0)
+        )
         rows.append({
-            "class": label, "wmc": legacy_wmc.get((str(node.get("path") or ""), str(node.get("qualified_name") or class_id)), 0), "cbo": len(dependencies),
+            "class": label, "wmc": wmc, "cbo": len(dependencies),
             "rfc": len(declared | targets), "lcom": round(lcom, 4) if lcom is not None else None,
             "dit": depths[class_id], "noc": len(children[class_id]),
         })

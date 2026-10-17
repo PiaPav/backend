@@ -6,7 +6,7 @@ import json
 from collections import Counter
 
 from graph_dto import graph_fingerprint, validate_graph_v1
-from .logic.models import ModuleInfo
+from .logic.models import FunctionComplexityFacts, ModuleInfo
 from .logic.project_index import ProjectIndex
 
 
@@ -16,6 +16,39 @@ def _file_id(module: ModuleInfo) -> str:
 
 def _location(module: ModuleInfo, line: int | None, column: int | None) -> dict[str, Any]:
     return {"path": module.relative_path.as_posix(), "line": line or 1, "column": column or 0}
+
+
+def _complexity_facts(module: ModuleInfo, facts: FunctionComplexityFacts) -> dict[str, Any]:
+    def location(line: int, column: int) -> dict[str, Any]:
+        return _location(module, line, column)
+
+    return {
+        "span": {
+            "start": location(facts.start_line, facts.start_column),
+            "end": location(facts.end_line, facts.end_column),
+        },
+        "is_async": facts.is_async,
+        "controls": [
+            {
+                "kind": item.kind,
+                "parent_index": item.parent_index,
+                "location": location(item.line, item.column),
+                "operand_count": item.operand_count,
+                "case_count": item.case_count,
+                "filter_count": item.filter_count,
+                **({"expression": item.expression} if item.expression is not None else {}),
+            }
+            for item in facts.controls
+        ],
+        "occurrences": [
+            {
+                "kind": item.kind,
+                "location": location(item.line, item.column),
+                **({"expression": item.expression} if item.expression is not None else {}),
+            }
+            for item in facts.occurrences
+        ],
+    }
 
 
 def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str, Any]:
@@ -60,7 +93,8 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
             for method in class_info.methods:
                 method_id = f"method:{path}:{method.line or 1}:{method.column or 0}:{class_info.name}.{method.name}"
                 nodes.append({"id": method_id, "kind": "method", "qualified_name": f"{module.module}.{class_info.name}.{method.name}".strip("."),
-                              "parent_id": class_id, "path": path, "location": _location(module, method.line, method.column)})
+                              "parent_id": class_id, "path": path, "location": _location(module, method.line, method.column),
+                              "complexity_facts": _complexity_facts(module, method.complexity_facts)})
                 edges.append({"id": f"contains:{class_id}->{method_id}", "kind": "contains", "source_id": class_id, "target_id": method_id})
                 declaration_ids[id(method)] = method_id
                 target_ids[("method", id(method))] = method_id
@@ -80,7 +114,8 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
         for function in module.functions:
             function_id = f"function:{path}:{function.line or 1}:{function.column or 0}:{function.name}"
             nodes.append({"id": function_id, "kind": "function", "qualified_name": f"{module.module}.{function.name}".strip("."),
-                          "parent_id": file_id, "path": path, "location": _location(module, function.line, function.column)})
+                          "parent_id": file_id, "path": path, "location": _location(module, function.line, function.column),
+                          "complexity_facts": _complexity_facts(module, function.complexity_facts)})
             edges.append({"id": f"contains:{file_id}->{function_id}", "kind": "contains", "source_id": file_id, "target_id": function_id})
             declaration_ids[id(function)] = function_id
             target_ids[("function", id(function))] = function_id
@@ -160,12 +195,15 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
          "path": shadowed.relative_path.as_posix(), "effective_path": effective.relative_path.as_posix()}
         for name, shadowed, effective in index.shadowed_modules
     ]
-    graph: dict[str, Any] = {"schema_version": 1, "parser_semantics_version": 2,
+    graph: dict[str, Any] = {"schema_version": 1, "parser_semantics_version": 3,
                              "project": {"fingerprint": ""}, "nodes": nodes, "edges": edges,
                              "callsites": callsites, "type_references": type_references,
                              "diagnostics": diagnostics, "body": body}
     sort_key = lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    for collection in ("nodes", "edges", "callsites", "type_references", "diagnostics"):
+    # Nodes are emitted in deterministic containment order (file before its
+    # declarations).  Sorting their complete JSON used to make newly added
+    # optional payloads silently alter this public order.
+    for collection in ("edges", "callsites", "type_references", "diagnostics"):
         graph[collection].sort(key=sort_key)
     graph["project"]["fingerprint"] = graph_fingerprint(graph)
     validate_graph_v1(graph)

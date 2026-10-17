@@ -15,10 +15,14 @@ Version dispatch is explicit:
 - Graph DTO v1 / parser semantics v1 uses metrics semantics v2 and the legacy
   topology adapter;
 - Graph DTO v1 / parser semantics v2 uses metrics semantics v3.
+- Graph DTO v1 / parser semantics v3 uses metrics semantics v4.
 
 Semantics v3 builds object and call topology exclusively from canonical node IDs,
 typed edges, callsites and type references. Legacy `body` is still used for
 size, activity, architecture, quality and WMC until complexity facts migrate.
+Semantics v4 derives callable complexity from canonical facts keyed by node ID.
+Quality, WMC and call-graph risk use that projection; transitional body mutation
+cannot affect them. Synthetic constructors are excluded from those populations.
 
 Semantics v1-v3 intentionally preserve the historical hybrid denominator
 of `activity.average_calls_per_call_owner`: every declared function and method
@@ -50,10 +54,8 @@ Canonical call-graph topology uses only `calls`/`awaits`; callsite resolution
 provides classification and zero-based depth is reported as one-based nesting.
 Declared functions and methods remain graph vertices; file/module vertices are
 included only when they own a canonical callsite or an outgoing canonical call
-edge. In semantics v3 `risk_top` is intentionally empty: callable complexity is
-still available only through the legacy `body` and is not joined to canonical
-callable IDs. Restoring the risk ranking requires migrated complexity facts,
-not a name-based topology fallback.
+edge. In semantics v4 `risk_top` joins canonical complexity to topology only by
+node ID. Semantics v1-v3 retain their prior compatibility behavior.
 String, import-suffix and annotation-name resolution is confined to legacy v1/v2
 compatibility branches.
 

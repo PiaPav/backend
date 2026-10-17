@@ -90,6 +90,41 @@ class FunctionMetricsInfo:
 
 
 @dataclass(slots=True)
+class ComplexityControlFact:
+    """One ordered structural event, without a complexity score."""
+
+    kind: str
+    line: int
+    column: int
+    parent_index: int | None = None
+    operand_count: int = 0
+    case_count: int = 0
+    filter_count: int = 0
+    expression: str | None = None
+
+
+@dataclass(slots=True)
+class ComplexityOccurrenceFact:
+    """One countable callable-scope occurrence."""
+
+    kind: str
+    line: int
+    column: int
+    expression: str | None = None
+
+
+@dataclass(slots=True)
+class FunctionComplexityFacts:
+    start_line: int
+    start_column: int
+    end_line: int
+    end_column: int
+    is_async: bool
+    controls: list[ComplexityControlFact] = field(default_factory=list)
+    occurrences: list[ComplexityOccurrenceFact] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class FunctionInfo:
     name: str
     args: list[ArgumentInfo] = field(default_factory=list)
@@ -98,6 +133,7 @@ class FunctionInfo:
     canonical_callsites: list[CanonicalCallsiteInfo] = field(default_factory=list)
     decorators: list[str] = field(default_factory=list)
     metrics: FunctionMetricsInfo = field(default_factory=FunctionMetricsInfo)
+    complexity_facts: FunctionComplexityFacts | None = None
     node: ast.FunctionDef | ast.AsyncFunctionDef | None = None
     owner: str | None = None
     file: Path | None = None

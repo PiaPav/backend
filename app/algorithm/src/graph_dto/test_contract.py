@@ -32,7 +32,7 @@ def test_fingerprint_ignores_body_fingerprint_and_collection_permutations():
 
 def test_unknown_version_and_invalid_contains_are_rejected():
     graph = _graph()
-    graph["parser_semantics_version"] = 3
+    graph["parser_semantics_version"] = 4
     with pytest.raises(ValueError, match="Unsupported"):
         validate_graph_v1(graph)
     graph = _graph()
@@ -70,6 +70,66 @@ def test_semantics2_requires_type_references_collection():
     graph = _graph()
     graph["parser_semantics_version"] = 2
     with pytest.raises(ValueError, match="type_references"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+def _semantics3_graph():
+    graph = _semantics2_graph()
+    graph["parser_semantics_version"] = 3
+    facts = {
+        "span": {
+            "start": {"path": "a.py", "line": 1, "column": 0},
+            "end": {"path": "a.py", "line": 2, "column": 8},
+        },
+        "is_async": False,
+        "controls": [],
+        "occurrences": [{"kind": "statement", "location": {"path": "a.py", "line": 2, "column": 4}}],
+    }
+    graph["nodes"][1]["complexity_facts"] = facts
+    method = next(node for node in graph["nodes"] if node["kind"] == "method")
+    method["complexity_facts"] = {
+        **deepcopy(facts),
+        "span": {
+            "start": deepcopy(method["location"]),
+            "end": {"path": "a.py", "line": 5, "column": 8},
+        },
+        "occurrences": [],
+        "controls": [{
+            "kind": "boolean", "parent_index": None,
+            "location": {"path": "a.py", "line": 5, "column": 8},
+            "operand_count": 2, "case_count": 0, "filter_count": 0,
+        }],
+    }
+    return graph
+
+
+def test_semantics3_requires_facts_only_on_real_callables():
+    graph = _semantics3_graph()
+    validate_graph_v1(graph, verify_fingerprint=False)
+    graph["nodes"][1].pop("complexity_facts")
+    with pytest.raises(ValueError, match="complexity_facts"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+@pytest.mark.parametrize("value", [1, 0, "true", None])
+def test_semantics3_optional_synthetic_flag_must_be_boolean(value):
+    graph = _semantics3_graph()
+    graph["nodes"][1]["synthetic"] = value
+    with pytest.raises(ValueError, match=r"nodes\[1\]\.synthetic must be a boolean"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda facts: facts["controls"][0].__setitem__("parent_index", 0),
+    lambda facts: facts["controls"][0].__setitem__("operand_count", 1),
+    lambda facts: facts["controls"][0]["location"].__setitem__("line", 99),
+    lambda facts: facts["span"]["end"].__setitem__("path", "other.py"),
+])
+def test_semantics3_strictly_validates_complexity_fact_references_cardinalities_and_spans(mutate):
+    graph = _semantics3_graph()
+    method = next(node for node in graph["nodes"] if node["kind"] == "method")
+    mutate(method["complexity_facts"])
+    with pytest.raises(ValueError, match="complexity_facts"):
         validate_graph_v1(graph, verify_fingerprint=False)
 
 

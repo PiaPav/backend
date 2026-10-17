@@ -9,6 +9,11 @@ from typing import Any, Mapping
 NODE_KINDS = frozenset({"file", "module", "class", "field", "function", "method"})
 EDGE_KINDS = frozenset({"contains", "imports", "inherits", "field_type", "accesses_field", "calls", "awaits"})
 RESOLUTION_STATUSES = frozenset({"exact", "ambiguous", "external", "dynamic", "unresolved"})
+CONTROL_KINDS = frozenset({
+    "if", "for", "async_for", "while", "try", "try_star", "match",
+    "if_expression", "boolean", "comprehension", "exception_handler",
+})
+OCCURRENCE_KINDS = frozenset({"statement", "return", "raise", "await", "self_attribute"})
 _COLLECTIONS = ("nodes", "edges", "callsites", "type_references", "diagnostics")
 
 
@@ -56,18 +61,91 @@ def _location(value: Any, where: str) -> None:
         _error(f"{where}.column is invalid")
 
 
+def _validate_complexity_facts(value: Any, where: str, path: str) -> None:
+    if not isinstance(value, Mapping):
+        _error(f"{where} must be an object")
+    if set(value) != {"span", "is_async", "controls", "occurrences"}:
+        _error(f"{where} has invalid fields")
+    if type(value.get("is_async")) is not bool:
+        _error(f"{where}.is_async must be a boolean")
+    span = value.get("span")
+    if not isinstance(span, Mapping) or set(span) != {"start", "end"}:
+        _error(f"{where}.span is invalid")
+    start, end = span.get("start"), span.get("end")
+    _location(start, f"{where}.span.start"); _location(end, f"{where}.span.end")
+    if start["path"] != path or end["path"] != path:
+        _error(f"{where}.span paths must match the callable path")
+    start_position = (start["line"], start["column"])
+    end_position = (end["line"], end["column"])
+    if end_position < start_position:
+        _error(f"{where}.span is reversed")
+    controls, occurrences = value.get("controls"), value.get("occurrences")
+    if not isinstance(controls, list) or not isinstance(occurrences, list):
+        _error(f"{where} controls and occurrences must be arrays")
+    depths: list[int] = []
+    for index, control in enumerate(controls):
+        item_where = f"{where}.controls[{index}]"
+        if not isinstance(control, Mapping): _error(f"{item_where} must be an object")
+        allowed = {"kind", "parent_index", "location", "operand_count", "case_count", "filter_count", "expression"}
+        if not set(control) <= allowed or not allowed - {"expression"} <= set(control):
+            _error(f"{item_where} has invalid fields")
+        kind, parent = control.get("kind"), control.get("parent_index")
+        if kind not in CONTROL_KINDS: _error(f"{item_where}.kind is invalid")
+        if parent is not None and (type(parent) is not int or parent < 0 or parent >= index):
+            _error(f"{item_where}.parent_index must reference an earlier control")
+        depths.append(0 if parent is None else depths[parent] + 1)
+        location = control.get("location"); _location(location, f"{item_where}.location")
+        position = (location["line"], location["column"])
+        if location["path"] != path or not start_position <= position <= end_position:
+            _error(f"{item_where}.location is outside the callable span")
+        expected = {
+            "operand_count": (kind == "boolean", 2),
+            "case_count": (kind == "match", 1),
+            "filter_count": (kind == "comprehension", 0),
+        }
+        for field, (used, minimum) in expected.items():
+            cardinality = control.get(field)
+            if (type(cardinality) is not int
+                    or (used and cardinality < minimum)
+                    or (not used and cardinality != 0)):
+                _error(f"{item_where}.{field} is invalid")
+        expression = control.get("expression")
+        if kind == "exception_handler":
+            if not isinstance(expression, str) or not expression: _error(f"{item_where}.expression is required")
+        elif "expression" in control:
+            _error(f"{item_where}.expression is not allowed")
+    for index, occurrence in enumerate(occurrences):
+        item_where = f"{where}.occurrences[{index}]"
+        if not isinstance(occurrence, Mapping): _error(f"{item_where} must be an object")
+        if not {"kind", "location"} <= set(occurrence) or not set(occurrence) <= {"kind", "location", "expression"}:
+            _error(f"{item_where} has invalid fields")
+        kind = occurrence.get("kind")
+        if kind not in OCCURRENCE_KINDS: _error(f"{item_where}.kind is invalid")
+        location = occurrence.get("location"); _location(location, f"{item_where}.location")
+        position = (location["line"], location["column"])
+        if location["path"] != path or not start_position <= position <= end_position:
+            _error(f"{item_where}.location is outside the callable span")
+        expression = occurrence.get("expression")
+        if kind == "self_attribute" and (not isinstance(expression, str) or not expression):
+            _error(f"{item_where}.expression is required")
+        if "expression" in occurrence and kind not in {"raise", "self_attribute"}:
+            _error(f"{item_where}.expression is not allowed")
+        if kind == "raise" and "expression" in occurrence and (not isinstance(expression, str) or not expression):
+            _error(f"{item_where}.expression is invalid")
+
+
 def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = True) -> None:
     if not isinstance(graph, Mapping):
         _error("root must be an object")
     if type(graph.get("schema_version")) is not int or graph["schema_version"] != 1:
         _error(f"Unsupported schema_version {graph.get('schema_version')!r}")
-    if type(graph.get("parser_semantics_version")) is not int or graph["parser_semantics_version"] not in {1, 2}:
+    if type(graph.get("parser_semantics_version")) is not int or graph["parser_semantics_version"] not in {1, 2, 3}:
         _error(f"Unsupported parser_semantics_version {graph.get('parser_semantics_version')!r}")
     semantics = graph["parser_semantics_version"]
     project = graph.get("project")
     if not isinstance(project, Mapping) or not isinstance(project.get("fingerprint"), str):
         _error("project.fingerprint is required")
-    required_collections = _COLLECTIONS if semantics == 2 else tuple(
+    required_collections = _COLLECTIONS if semantics >= 2 else tuple(
         name for name in _COLLECTIONS if name != "type_references"
     )
     for name in required_collections:
@@ -86,6 +164,17 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         if node.get("kind") == "file" and identifier != f"file:{node.get('path')}":
             _error(f"nodes[{index}] file id must equal 'file:<path>'")
         nodes[identifier] = node
+        if semantics == 3:
+            if "synthetic" in node and type(node["synthetic"]) is not bool:
+                _error(f"nodes[{index}].synthetic must be a boolean")
+            callable_node = node.get("kind") in {"function", "method"}
+            synthetic = node.get("synthetic") is True
+            if callable_node and not synthetic:
+                _validate_complexity_facts(node.get("complexity_facts"), f"nodes[{index}].complexity_facts", node["path"])
+                if node["complexity_facts"]["span"]["start"] != node["location"]:
+                    _error(f"nodes[{index}].complexity_facts span must start at node.location")
+            elif "complexity_facts" in node:
+                _error(f"nodes[{index}].complexity_facts is not allowed")
     contains: dict[str, str] = {}
     seen_edge_ids: set[str] = set()
     call_weights: dict[tuple[str, str, str], int] = {}
@@ -101,7 +190,7 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         if kind == "contains":
             if target in contains: _error(f"node {target!r} has multiple containers")
             contains[target] = source
-        if semantics == 2:
+        if semantics >= 2:
             source_kind, target_kind = nodes[source]["kind"], nodes[target]["kind"]
             expected = {
                 "inherits": ("class", "class"),
@@ -149,10 +238,10 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
             _error(f"node {node!r} parent_id is inconsistent with contains edges")
         if nodes[node]["kind"] in {"function", "method"} and parent is None:
             _error(f"callable node {node!r} must have exactly one owner")
-        if semantics == 2 and nodes[node]["kind"] == "field":
+        if semantics >= 2 and nodes[node]["kind"] == "field":
             if parent is None or nodes[parent]["kind"] != "class":
                 _error(f"field node {node!r} must belong to a class")
-        if semantics == 2 and nodes[node]["kind"] == "method":
+        if semantics >= 2 and nodes[node]["kind"] == "method":
             if parent is None or nodes[parent]["kind"] != "class":
                 _error(f"method node {node!r} must belong to a class")
     observed: dict[tuple[str, str, str], int] = {}
@@ -192,7 +281,7 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
             _error(f"callsites[{index}] non-internal resolution cannot have targets")
     if call_weights != observed:
         _error("aggregated call edge weights do not match exact callsites")
-    if semantics == 2:
+    if semantics >= 2:
         relation_edges = {
             (edge["kind"], edge["source_id"], edge["target_id"])
             for edge in graph["edges"] if edge["kind"] in {"inherits", "field_type"}

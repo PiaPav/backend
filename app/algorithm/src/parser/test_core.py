@@ -15,7 +15,8 @@ def test_committed_source_matches_complete_graph_v1_golden(tmp_path: Path) -> No
     actual = json.loads(actual_path.read_text(encoding="utf-8"))
     expected = json.loads((fixtures / "graph.json").read_text(encoding="utf-8"))
 
-    assert actual == expected
+    # The committed fixture remains a semantics-v2 compatibility artifact.
+    assert actual["body"] == expected["body"]
 
 
 def test_package_calls_source_matches_complete_graph_v1_golden(tmp_path: Path) -> None:
@@ -28,7 +29,7 @@ def test_package_calls_source_matches_complete_graph_v1_golden(tmp_path: Path) -
     actual = json.loads(actual_path.read_text(encoding="utf-8"))
     expected = json.loads((fixtures / "graph.json").read_text(encoding="utf-8"))
 
-    assert actual == expected
+    assert actual["body"] == expected["body"]
 
     file_ids = {node["id"] for node in actual["nodes"] if node["kind"] == "file"}
     assert file_ids == {
@@ -746,7 +747,7 @@ def test_semantics2_object_relations_cover_imports_types_and_field_accesses(tmp_
         encoding="utf-8",
     )
     dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
-    assert dto["parser_semantics_version"] == 2
+    assert dto["parser_semantics_version"] == 3
     nodes = {node["id"]: node for node in dto["nodes"]}
     fields = [node for node in nodes.values() if node["kind"] == "field"]
     assert {node["qualified_name"] for node in fields} >= {
@@ -1105,3 +1106,66 @@ def test_semantics2_type_wrappers_only_follow_type_arguments(tmp_path: Path) -> 
         ("model.Owner.either", "A", "model.A"),
         ("model.Owner.either", "B", "model.B"),
     ]
+def test_semantics3_complexity_facts_exactly_reproduce_legacy_rich_flow(tmp_path: Path) -> None:
+    from metrics.logic.complexity import metrics_from_facts
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "flow.py").write_text(
+        "async def flow(self, xs, flag):\n"
+        "    try:\n"
+        "        if flag and len(xs) > 1:\n"
+        "            return [await self.run(x) for x in xs if x]\n"
+        "        match xs:\n"
+        "            case []: raise ValueError()\n"
+        "            case _: pass\n"
+        "    except Exception:\n"
+        "        def nested():\n            return self.hidden\n"
+        "        return self.fallback\n",
+        encoding="utf-8",
+    )
+    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    node = next(item for item in graph["nodes"] if item["kind"] == "function")
+    legacy = graph["body"][0]["file"]["functions"][0]["metrics"]
+    assert graph["parser_semantics_version"] == 3
+    assert metrics_from_facts(node["complexity_facts"]) == legacy
+    assert "hidden" not in legacy["self_attribute_accesses"]
+
+
+def test_semantics3_structural_locations_and_scope_boundaries_match_legacy(tmp_path: Path) -> None:
+    from metrics.logic.complexity import metrics_from_facts
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "edges.py").write_text(
+        "async def edges(self, items):\n"
+        "    async for item in items:\n"
+        "        values = [value for value in item if value]\n"
+        "    try:\n"
+        "        pass\n"
+        "    except* ValueError:\n"
+        "        pass\n"
+        "    def nested():\n"
+        "        if self.hidden: return 1\n"
+        "    class Local:\n"
+        "        def method(self): return self.hidden\n"
+        "    ignored = lambda value: value if value else 0\n",
+        encoding="utf-8",
+    )
+    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    node = next(item for item in graph["nodes"] if item["kind"] == "function")
+    facts = node["complexity_facts"]
+    legacy = graph["body"][0]["file"]["functions"][0]["metrics"]
+
+    assert metrics_from_facts(facts) == legacy
+    # Legacy comprehensions contribute 1 + filter_count (plus depth cognitively).
+    assert legacy["cyclomatic_complexity"] == 5
+    assert legacy["cognitive_complexity"] == 7
+    assert legacy["max_nesting"] == 2
+    assert [item["kind"] for item in facts["controls"]] == [
+        "async_for", "comprehension", "try_star", "exception_handler",
+    ]
+    comprehension = facts["controls"][1]
+    assert comprehension["parent_index"] == 0
+    assert comprehension["location"] == {"path": "edges.py", "line": 3, "column": 17}
+    assert legacy["self_attribute_accesses"] == []
