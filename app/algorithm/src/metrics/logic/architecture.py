@@ -86,11 +86,25 @@ def calculate_architecture_metrics(
     *,
     projection: MetricsGraphProjection | None = None,
 ) -> dict[str, Any]:
-    package_of = (
-        {file.file_id: file.package for file in projection.legacy_files}
-        if projection is not None
-        else {_file_id: _package(file) for file in files if (_file_id := file_id(file))}
-    )
+    if projection is not None and projection.parser_semantics_version == 5:
+        root_ids = (
+            projection.node_ids_by_kind.get("file", frozenset())
+            | projection.node_ids_by_kind.get("module", frozenset())
+        )
+        package_of = {
+            root_id: (
+                str(projection.nodes_by_id[root_id].get("path") or "").split("/", 1)[0]
+                if "/" in str(projection.nodes_by_id[root_id].get("path") or "")
+                else "<root>"
+            )
+            for root_id in root_ids
+        }
+    else:
+        package_of = (
+            {file.file_id: file.package for file in projection.legacy_files}
+            if projection is not None
+            else {_file_id: _package(file) for file in files if (_file_id := file_id(file))}
+        )
     packages = set(package_of.values())
     package_edges = (
         set(projection.directed_package_import_graph.edges)
@@ -109,13 +123,26 @@ def calculate_architecture_metrics(
 
     class_counts = {package: 0 for package in packages}
     abstract_counts = {package: 0 for package in packages}
-    for file in files:
-        package = package_of[file_id(file)]
-        for class_info in file.get("classes", []):
-            if not isinstance(class_info, Mapping):
+    if projection is not None and projection.parser_semantics_version == 5:
+        # Constants first appear in semantics v5, whose package populations are
+        # canonical and keyed by owning root IDs rather than module names.
+        canonical_nodes = projection.nodes_by_id
+        for class_id in projection.node_ids_by_kind.get("class", frozenset()):
+            class_node = canonical_nodes[class_id]
+            owner = class_node.get("parent_id")
+            if owner not in root_ids:
                 continue
+            package = package_of[str(owner)]
             class_counts[package] += 1
-            abstract_counts[package] += class_info.get("type") == "abstract"
+            abstract_counts[package] += class_node.get("class_kind") == "abstract"
+    else:
+        for file in files:
+            package = package_of[file_id(file)]
+            for class_info in file.get("classes", []):
+                if not isinstance(class_info, Mapping):
+                    continue
+                class_counts[package] += 1
+                abstract_counts[package] += class_info.get("type") == "abstract"
 
     package_metrics = []
     for package in sorted(packages):

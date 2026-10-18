@@ -80,6 +80,31 @@ def _directory_count(files: list[dict[str, Any]]) -> int:
     return len(directories)
 
 
+def _canonical_size(graph: Mapping[str, Any]) -> dict[str, int]:
+    nodes = {
+        str(node["id"]): node for node in graph.get("nodes", [])
+        if isinstance(node, Mapping) and isinstance(node.get("id"), str)
+    }
+    by_kind = {
+        kind: {identifier for identifier, node in nodes.items() if node.get("kind") == kind}
+        for kind in ("file", "module", "class", "function", "method", "field", "constant")
+    }
+    roots = by_kind["file"] | by_kind["module"]
+    directories: set[str] = set()
+    for identifier in roots:
+        parts = str(nodes[identifier].get("path") or "").split("/")[:-1]
+        directories.update("/".join(parts[:index]) for index in range(1, len(parts) + 1))
+    classes = by_kind["class"]
+    return {
+        "directories": len(directories), "files": len(roots), "classes": len(classes),
+        "abstract_classes": sum(nodes[item].get("class_kind") == "abstract" for item in classes),
+        "dataclasses": sum(nodes[item].get("class_kind") == "dataclass" for item in classes),
+        "functions": len(by_kind["function"]),
+        "methods": sum(nodes[item].get("synthetic") is not True for item in by_kind["method"]),
+        "fields": len(by_kind["field"]), "constants": len(by_kind["constant"]),
+    }
+
+
 def calculate_graph_metrics(
     graph: Mapping[str, Any], *, canonical_mode: bool = False,
     legacy_resolution: bool | None = None, canonical_objects: bool = False,
@@ -87,6 +112,7 @@ def calculate_graph_metrics(
 ) -> dict[str, Any]:
     """Return deterministic size, coupling, density and connectivity metrics."""
     projection = MetricsGraphProjection.from_graph(graph)
+    semantics_v5 = graph.get("parser_semantics_version") == 5
     files = [file.data for file in projection.legacy_files]
     file_graph = projection.directed_file_import_graph
     nodes = set(file_graph.nodes)
@@ -146,7 +172,7 @@ def calculate_graph_metrics(
     density_denominator = node_count * (node_count - 1)
 
     return {
-        "size": {
+        "size": _canonical_size(graph) if graph.get("parser_semantics_version") == 5 else {
             "directories": _directory_count(files),
             "files": len(files),
             "classes": len(classes),
@@ -201,9 +227,10 @@ def calculate_graph_metrics(
             files, nodes, edges, legacy_file_id, projection=projection
         ),
         "code_quality": calculate_quality_metrics(graph, projection=projection),
-        "object_oriented": calculate_canonical_object_metrics(graph, projection=projection) if canonical_objects else calculate_object_metrics(graph, cyclic_dit_is_none=canonical_mode, projection=projection),
+        "object_oriented": calculate_canonical_object_metrics(graph, projection=projection) if canonical_objects or semantics_v5 else calculate_object_metrics(graph, cyclic_dit_is_none=canonical_mode, projection=projection),
         "call_graph": calculate_call_graph_metrics(
-            graph, legacy_resolution=legacy_resolution, canonical=canonical_calls,
+            graph, legacy_resolution=legacy_resolution,
+            canonical=canonical_calls or semantics_v5,
             projection=projection,
         ),
     }

@@ -13,7 +13,7 @@ from .projections import MetricsGraphProjection
 def callable_metrics(
     graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None
 ) -> dict[str, dict[str, Any]]:
-    if graph.get("parser_semantics_version") in {3, 4}:
+    if graph.get("parser_semantics_version") in {3, 4, 5}:
         return canonical_callable_metrics(graph)
     result: dict[str, dict[str, Any]] = {}
     files = [file.data for file in projection.legacy_files] if projection else graph_files(graph)

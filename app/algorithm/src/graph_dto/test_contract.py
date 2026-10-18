@@ -32,7 +32,7 @@ def test_fingerprint_ignores_body_fingerprint_and_collection_permutations():
 
 def test_unknown_version_and_invalid_contains_are_rejected():
     graph = _graph()
-    graph["parser_semantics_version"] = 5
+    graph["parser_semantics_version"] = 6
     with pytest.raises(ValueError, match="Unsupported"):
         validate_graph_v1(graph)
     graph = _graph()
@@ -121,6 +121,126 @@ def _semantics4_graph():
         "resolution": "external", "target_id": None, "candidate_ids": [],
     }]
     return graph
+
+
+def _semantics5_graph():
+    graph = _semantics4_graph()
+    graph["parser_semantics_version"] = 5
+    for node in graph["nodes"]:
+        if node["kind"] == "class":
+            node["class_kind"] = "class"
+    return graph
+
+
+def test_semantics5_requires_legacy_body_and_class_kind():
+    graph = _semantics5_graph()
+    validate_graph_v1(graph, verify_fingerprint=False)
+
+    del graph["body"]
+    with pytest.raises(ValueError, match="body must be an array"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+    graph = _semantics5_graph()
+    del next(node for node in graph["nodes"] if node["kind"] == "class")["class_kind"]
+    with pytest.raises(ValueError, match="class_kind is invalid"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+def test_semantics5_restricts_class_kind_and_synthetic_to_their_node_kinds():
+    graph = _semantics5_graph()
+    function = next(node for node in graph["nodes"] if node["kind"] == "function")
+    function["class_kind"] = "class"
+    with pytest.raises(ValueError, match="class_kind is only allowed on classes"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+    graph = _semantics5_graph()
+    function = next(node for node in graph["nodes"] if node["kind"] == "function")
+    function["synthetic"] = False
+    with pytest.raises(ValueError, match="synthetic is only allowed on methods"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+def test_semantics4_rejects_constant_nodes_from_its_legacy_vocabulary():
+    graph = _semantics4_graph()
+    graph["nodes"].append({
+        "id": "constant:a.py:1:0:A:1", "kind": "constant",
+        "qualified_name": "a.A", "parent_id": None, "path": "a.py",
+        "location": {"path": "a.py", "line": 1, "column": 0},
+    })
+    with pytest.raises(ValueError, match=r"nodes\[.*\]\.kind is invalid"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+@pytest.mark.parametrize("kind", ["constant", "class", "function"])
+def test_semantics5_rejects_orphan_owned_nodes(kind):
+    graph = _semantics5_graph()
+    if kind == "constant":
+        graph["nodes"].append({
+            "id": "constant:a.py:8:0:A:1", "kind": kind,
+            "qualified_name": "a.A", "parent_id": None, "path": "a.py",
+            "location": {"path": "a.py", "line": 8, "column": 0},
+        })
+    else:
+        node = next(item for item in graph["nodes"] if item["kind"] == kind)
+        node["parent_id"] = None
+        graph["edges"] = [edge for edge in graph["edges"] if edge["target_id"] != node["id"]]
+    with pytest.raises(ValueError, match="invalid owner|exactly one owner"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+@pytest.mark.parametrize("field,value", [("path", "other.py"), ("location", {"path": "other.py", "line": 2, "column": 0})])
+def test_semantics5_rejects_owned_node_path_or_location_mismatch(field, value):
+    graph = _semantics5_graph()
+    class_node = next(node for node in graph["nodes"] if node["kind"] == "class")
+    class_node[field] = value
+    with pytest.raises(ValueError, match="path must match|location path must match"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+def test_semantics5_rejects_owner_kind_mismatch_and_synthetic_non_method():
+    graph = _semantics5_graph()
+    function = next(node for node in graph["nodes"] if node["kind"] == "function")
+    class_node = next(node for node in graph["nodes"] if node["kind"] == "class")
+    function["parent_id"] = class_node["id"]
+    next(edge for edge in graph["edges"] if edge["target_id"] == function["id"])["source_id"] = class_node["id"]
+    with pytest.raises(ValueError, match="contains endpoints|invalid owner"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+    graph = _semantics5_graph()
+    next(node for node in graph["nodes"] if node["kind"] == "class")["synthetic"] = True
+    with pytest.raises(ValueError, match="synthetic is only allowed on methods"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+def test_semantics5_rejects_file_containing_module_with_a_different_path():
+    graph = _semantics5_graph()
+    module_id = "module:package"
+    graph["nodes"].append({
+        "id": module_id, "kind": "module", "qualified_name": "package",
+        "parent_id": "file:a.py", "path": "package/__init__.py",
+        "location": {"path": "package/__init__.py", "line": 1, "column": 0},
+    })
+    graph["edges"].append({
+        "id": "contains:module", "kind": "contains",
+        "source_id": "file:a.py", "target_id": module_id,
+    })
+    class_node = next(node for node in graph["nodes"] if node["kind"] == "class")
+    class_node["parent_id"] = module_id
+    next(edge for edge in graph["edges"] if edge["target_id"] == class_node["id"])["source_id"] = module_id
+
+    with pytest.raises(ValueError, match="canonical root"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+def test_semantics5_accepts_a_parentless_root_module():
+    graph = _semantics5_graph()
+    graph["nodes"].append({
+        "id": "module:package", "kind": "module", "qualified_name": "package",
+        "parent_id": None, "path": "package/__init__.py",
+        "location": {"path": "package/__init__.py", "line": 1, "column": 0},
+    })
+
+    validate_graph_v1(graph, verify_fingerprint=False)
 
 
 def test_semantics4_requires_and_validates_import_references():

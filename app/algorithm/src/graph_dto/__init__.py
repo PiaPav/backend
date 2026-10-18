@@ -1,6 +1,7 @@
 """Declarative Graph DTO v1 contract shared by parser and metrics."""
 
 from .contract import (
+    CLASS_KINDS,
     EDGE_KINDS,
     IMPORT_RESOLUTION_STATUSES,
     CONTROL_KINDS,
@@ -13,10 +14,10 @@ from .contract import (
 )
 
 SCHEMA_VERSION = 1
-PARSER_SEMANTICS_VERSION = 4
+PARSER_SEMANTICS_VERSION = 5
 
 __all__ = [
-    "CONTROL_KINDS", "EDGE_KINDS", "IMPORT_RESOLUTION_STATUSES", "NODE_KINDS", "OCCURRENCE_KINDS", "PARSER_SEMANTICS_VERSION",
+    "CLASS_KINDS", "CONTROL_KINDS", "EDGE_KINDS", "IMPORT_RESOLUTION_STATUSES", "NODE_KINDS", "OCCURRENCE_KINDS", "PARSER_SEMANTICS_VERSION",
     "RESOLUTION_STATUSES", "SCHEMA_VERSION", "canonicalize_graph",
     "graph_fingerprint", "validate_graph_v1",
 ]

@@ -6,7 +6,8 @@ import json
 from pathlib import PurePosixPath
 from typing import Any, Mapping
 
-NODE_KINDS = frozenset({"file", "module", "class", "field", "function", "method"})
+NODE_KINDS = frozenset({"file", "module", "class", "field", "function", "method", "constant"})
+CLASS_KINDS = frozenset({"class", "dataclass", "enum", "abstract"})
 EDGE_KINDS = frozenset({"contains", "imports", "inherits", "field_type", "accesses_field", "calls", "awaits"})
 RESOLUTION_STATUSES = frozenset({"exact", "ambiguous", "external", "dynamic", "unresolved"})
 IMPORT_RESOLUTION_STATUSES = frozenset({"exact", "external", "unresolved"})
@@ -140,9 +141,11 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         _error("root must be an object")
     if type(graph.get("schema_version")) is not int or graph["schema_version"] != 1:
         _error(f"Unsupported schema_version {graph.get('schema_version')!r}")
-    if type(graph.get("parser_semantics_version")) is not int or graph["parser_semantics_version"] not in {1, 2, 3, 4}:
+    if type(graph.get("parser_semantics_version")) is not int or graph["parser_semantics_version"] not in {1, 2, 3, 4, 5}:
         _error(f"Unsupported parser_semantics_version {graph.get('parser_semantics_version')!r}")
     semantics = graph["parser_semantics_version"]
+    if semantics >= 5 and not isinstance(graph.get("body"), list):
+        _error("body must be an array for parser semantics v5")
     project = graph.get("project")
     if not isinstance(project, Mapping) or not isinstance(project.get("fingerprint"), str):
         _error("project.fingerprint is required")
@@ -161,15 +164,25 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         if not isinstance(identifier, str) or not identifier or identifier in nodes:
             _error(f"nodes[{index}].id is missing or duplicate")
         if node.get("kind") not in NODE_KINDS: _error(f"nodes[{index}].kind is invalid")
+        if semantics < 5 and node.get("kind") == "constant":
+            _error(f"nodes[{index}].kind is invalid")
         if not isinstance(node.get("qualified_name"), str): _error(f"nodes[{index}].qualified_name is required")
         _relative_path(node.get("path"), f"nodes[{index}].path")
         _location(node.get("location"), f"nodes[{index}].location")
         if node.get("kind") == "file" and identifier != f"file:{node.get('path')}":
             _error(f"nodes[{index}] file id must equal 'file:<path>'")
         nodes[identifier] = node
+        if semantics >= 5:
+            if node.get("kind") == "class":
+                if node.get("class_kind") not in CLASS_KINDS:
+                    _error(f"nodes[{index}].class_kind is invalid")
+            elif "class_kind" in node:
+                _error(f"nodes[{index}].class_kind is only allowed on classes")
         if semantics >= 3:
             if "synthetic" in node and type(node["synthetic"]) is not bool:
                 _error(f"nodes[{index}].synthetic must be a boolean")
+            if semantics >= 5 and "synthetic" in node and node.get("kind") != "method":
+                _error(f"nodes[{index}].synthetic is only allowed on methods")
             callable_node = node.get("kind") in {"function", "method"}
             synthetic = node.get("synthetic") is True
             if callable_node and not synthetic:
@@ -191,6 +204,8 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         if kind not in EDGE_KINDS: _error(f"edges[{index}].kind is invalid")
         if source not in nodes or target not in nodes: _error(f"edges[{index}] has an unknown node reference")
         if kind == "contains":
+            if semantics >= 5 and nodes[target]["kind"] in {"file", "module"}:
+                _error(f"edges[{index}] contains target must not be a canonical root")
             if target in contains: _error(f"node {target!r} has multiple containers")
             contains[target] = source
         if semantics >= 2:
@@ -203,9 +218,11 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
             if expected is not None and (source_kind, target_kind) != expected:
                 _error(f"edges[{index}] {kind} endpoints are invalid")
             if kind == "contains" and (source_kind, target_kind) not in {
-                ("file", "class"), ("file", "function"), ("file", "module"),
+                ("file", "class"), ("file", "function"),
+                *((("file", "module"),) if semantics < 5 else ()),
                 ("module", "class"), ("module", "function"),
                 ("class", "method"), ("class", "field"),
+                *(((("file", "constant"), ("module", "constant"))) if semantics >= 5 else ()),
             }:
                 _error(f"edges[{index}] contains endpoints are invalid")
             if kind == "imports" and (
@@ -247,6 +264,26 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         if semantics >= 2 and nodes[node]["kind"] == "method":
             if parent is None or nodes[parent]["kind"] != "class":
                 _error(f"method node {node!r} must belong to a class")
+        if semantics >= 5:
+            kind = nodes[node]["kind"]
+            if nodes[node]["location"]["path"] != nodes[node]["path"]:
+                _error(f"node {node!r} location path must match node path")
+            if kind in {"file", "module"} and parent is not None:
+                _error(f"canonical root node {node!r} must not have a parent")
+            expected_owner = {"class": {"file", "module"}, "function": {"file", "module"},
+                              "constant": {"file", "module"}, "method": {"class"},
+                              "field": {"class"}}.get(kind)
+            if expected_owner is not None and (parent is None or nodes[parent]["kind"] not in expected_owner):
+                _error(f"node {node!r} has an invalid owner")
+            if kind not in {"file", "module"}:
+                root = node
+                while root in contains:
+                    root = contains[root]
+                if nodes[root]["kind"] not in {"file", "module"}:
+                    _error(f"node {node!r} has no owning root")
+                root_path = nodes[root]["path"]
+                if nodes[node]["path"] != root_path or nodes[node]["location"]["path"] != root_path:
+                    _error(f"node {node!r} path must match its owning root")
     observed: dict[tuple[str, str, str], int] = {}
     seen_callsites: set[str] = set()
     for index, callsite in enumerate(graph["callsites"]):

@@ -78,7 +78,8 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
                       "parent_id": None, "path": path, "location": _location(module, 1, 0)})
         for class_info in module.classes:
             class_id = f"class:{path}:{class_info.line or 1}:{class_info.column or 0}:{class_info.name}"
-            nodes.append({"id": class_id, "kind": "class", "qualified_name": f"{module.module}.{class_info.name}".strip("."),
+            nodes.append({"id": class_id, "kind": "class", "class_kind": class_info.kind,
+                          "qualified_name": f"{module.module}.{class_info.name}".strip("."),
                           "parent_id": file_id, "path": path, "location": _location(module, class_info.line, class_info.column)})
             edges.append({"id": f"contains:{file_id}->{class_id}", "kind": "contains", "source_id": file_id, "target_id": class_id})
             declaration_ids[id(class_info)] = class_id
@@ -120,6 +121,15 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
             edges.append({"id": f"contains:{file_id}->{function_id}", "kind": "contains", "source_id": file_id, "target_id": function_id})
             declaration_ids[id(function)] = function_id
             target_ids[("function", id(function))] = function_id
+        for constant_ordinal, constant in enumerate(module.constants, 1):
+            constant_id = (f"constant:{path}:{constant.line or 1}:{constant.column or 0}:"
+                           f"{constant.name}:{constant_ordinal}")
+            nodes.append({"id": constant_id, "kind": "constant",
+                          "qualified_name": f"{module.module}.{constant.name}".strip("."),
+                          "parent_id": file_id, "path": path,
+                          "location": _location(module, constant.line, constant.column)})
+            edges.append({"id": f"contains:{file_id}->{constant_id}", "kind": "contains",
+                          "source_id": file_id, "target_id": constant_id})
         for imported in module.canonical_imports:
             target = effective_files.get(imported.local_module or "")
             resolution = "exact" if target is not None else imported.resolution

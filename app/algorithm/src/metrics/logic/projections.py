@@ -97,6 +97,7 @@ def _canonical_package(path: Any) -> str:
 
 @dataclass(frozen=True, slots=True)
 class MetricsGraphProjection:
+    parser_semantics_version: int | None
     legacy_files: tuple[LegacyFileProjection, ...]
     effective_module_ids: Mapping[str, str]
     nodes_by_id: Mapping[str, Mapping[str, Any]]
@@ -124,7 +125,7 @@ class MetricsGraphProjection:
             for node in graph.get("nodes", [])
             if isinstance(node, Mapping) and "id" in node
         }
-        canonical_imports = graph.get("parser_semantics_version") == 4
+        canonical_imports = int(graph.get("parser_semantics_version") or 0) >= 4
         file_nodes = (
             frozenset(identifier for identifier, node in raw_nodes.items() if node.get("kind") in {"file", "module"})
             if canonical_imports else frozenset(file.file_id for file in files)
@@ -183,6 +184,7 @@ class MetricsGraphProjection:
                 weights[(str(source), str(target))] += int(edge.get("weight", 1))
 
         return cls(
+            parser_semantics_version=graph.get("parser_semantics_version"),
             legacy_files=files,
             effective_module_ids=MappingProxyType(dict(module_ids)),
             nodes_by_id=MappingProxyType(raw_nodes),

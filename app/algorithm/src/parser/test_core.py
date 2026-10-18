@@ -109,7 +109,7 @@ def test_canonical_import_references_distinguish_all_static_outcomes(tmp_path: P
     )
 
     dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
-    assert dto["parser_semantics_version"] == 4
+    assert dto["parser_semantics_version"] == 5
     references = [
         item for item in dto["import_references"]
         if item["importer_id"] == "file:pkg/consumer.py"
@@ -903,7 +903,7 @@ def test_semantics2_object_relations_cover_imports_types_and_field_accesses(tmp_
         encoding="utf-8",
     )
     dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
-    assert dto["parser_semantics_version"] == 4
+    assert dto["parser_semantics_version"] == 5
     nodes = {node["id"]: node for node in dto["nodes"]}
     fields = [node for node in nodes.values() if node["kind"] == "field"]
     assert {node["qualified_name"] for node in fields} >= {
@@ -1283,7 +1283,7 @@ def test_semantics3_complexity_facts_exactly_reproduce_legacy_rich_flow(tmp_path
     graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
     node = next(item for item in graph["nodes"] if item["kind"] == "function")
     legacy = graph["body"][0]["file"]["functions"][0]["metrics"]
-    assert graph["parser_semantics_version"] == 4
+    assert graph["parser_semantics_version"] == 5
     assert metrics_from_facts(node["complexity_facts"]) == legacy
     assert "hidden" not in legacy["self_attribute_accesses"]
 
@@ -1325,3 +1325,47 @@ def test_semantics3_structural_locations_and_scope_boundaries_match_legacy(tmp_p
     assert comprehension["parent_index"] == 0
     assert comprehension["location"] == {"path": "edges.py", "line": 3, "column": 17}
     assert legacy["self_attribute_accesses"] == []
+
+
+def test_semantics5_emits_occurrence_level_constants_with_unique_ids(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "constants.py").write_text(
+        "A = B = 1\nA = A = 2\nC: int\nD = factory()\n",
+        encoding="utf-8",
+    )
+
+    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    constants = [node for node in graph["nodes"] if node["kind"] == "constant"]
+    legacy = graph["body"][0]["file"]["constants"]
+
+    assert [item["name"] for item in legacy] == ["A", "B", "A", "A", "C"]
+    assert [item["qualified_name"].rsplit(".", 1)[-1] for item in constants] == ["A", "B", "A", "A", "C"]
+    assert len({item["id"] for item in constants}) == 5
+    assert all(item["parent_id"] == "file:constants.py" for item in constants)
+    assert [item["qualified_name"].rsplit(".", 1)[-1] for item in constants] == [
+        item["name"] for item in legacy
+    ]
+
+
+def test_semantics5_class_kind_matches_legacy_class_type(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "classes.py").write_text(
+        "from abc import ABC, abstractmethod\nfrom dataclasses import dataclass\nfrom enum import Enum\n"
+        "class Plain: pass\n@dataclass\nclass Data: pass\nclass Choice(Enum): A = 1\n"
+        "class Abstract(ABC):\n @abstractmethod\n def work(self): pass\n"
+        "class Inherited(Abstract): pass\nclass Implemented(Abstract):\n def work(self): pass\n",
+        encoding="utf-8",
+    )
+    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    canonical = {
+        node["qualified_name"].rsplit(".", 1)[-1]: node["class_kind"]
+        for node in graph["nodes"] if node["kind"] == "class"
+    }
+    legacy = {item["name"]: item["type"] for item in graph["body"][0]["file"]["classes"]}
+
+    assert canonical == legacy == {
+        "Plain": "class", "Data": "dataclass", "Choice": "enum",
+        "Abstract": "abstract", "Inherited": "abstract", "Implemented": "class",
+    }

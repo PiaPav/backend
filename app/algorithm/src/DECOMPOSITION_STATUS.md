@@ -1,6 +1,6 @@
 # Статус декомпозиции
 
-Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 170 passed, 0 failed, 0 skipped.
+Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 187 passed, 0 failed, 0 skipped.
 
 ## Общий итог
 
@@ -9,7 +9,7 @@
 | 1. Фиксация текущей семантики | **выполнен** |
 | 2. Независимый файловый API Parser | **выполнен** |
 | 3. Независимый файловый API Metrics | **частично / почти выполнен в переходных границах**: не переиспользуется существующая serialization; Graph DTO v1 пока обязан содержать legacy `body` |
-| 4. Версионированный Graph DTO | **частично / object-relations и canonical import scope выполнены** |
+| 4. Версионированный Graph DTO | **частично / object-relations, imports и structural declarations выполнены** |
 | 5. Формулы сложности в Metrics | **выполнен dual transition для quality, WMC и risk; legacy body сохранён** |
 | 6. Аналитические проекции | **частично / единая внутренняя read-only модель введена** |
 
@@ -50,6 +50,8 @@
 8. **Выполнен.** Общий пакет `graph_dto` содержит декларативные константы, canonicalization/fingerprint и чистую валидацию без бизнес-логики Parser/Metrics. Остатка нет.
 9. **Выполнен.** `build_graph_v1` сохраняет transitional `body`, а `metrics/core.py` валидирует и использует его как compatibility projection. Остаток плановый: удалить адаптер только отдельным версионированным изменением.
 
+Parser semantics v5 добавляет occurrence-level module constants и `class_kind`, закрепляет file/module как parentless canonical roots и строгую ownership/path-модель. Metrics semantics v4 теперь рассчитывает `size` и package class/abstract populations по canonical nodes; body mutations не влияют на эти секции и canonical WMC. Численная семантика сохранена, synthetic constructors исключены из structural populations.
+
 ## Этап 5. Перенести формулы сложности в Metrics
 
 1. **Выполнен.** Parser отдельно собирает нейтральные complexity facts, а legacy projection воспроизводит прежние формулы из тех же фактов.
@@ -67,9 +69,9 @@
 
 ## Вывод относительно ожидаемого состояния
 
-Этапы 1 и 2 подтверждены полностью. Этап 3 частично / почти выполнен в переходных границах: файловый API, loader/validation, identity и runtime independence готовы, но существующая serialization не переиспользуется и legacy `body` ещё обязателен для немигрированных формул. В этапе 4 завершены object-relations и canonical import scope: exact/external/unresolved исходы представлены типизированно, включая вложенные статические импорты, а Metrics строит import topology по canonical exact edges. Текущий transitional scope этапа 5 выполнен: complexity facts и migrated consumers работают в dual transition, однако пункт 5.5 — удаление обязательности `body` и оставшихся legacy metrics — остаётся будущим этапом. В этапе 6 введена единая внутренняя read-only projection-модель и централизованы topology/traversal views; весь этап не объявляется завершённым, поскольку legacy `body` и adapters пока остаются частью переходного контракта.
+Этапы 1 и 2 подтверждены полностью. Этап 3 частично / почти выполнен в переходных границах: файловый API, loader/validation, identity и runtime independence готовы, но существующая serialization не переиспользуется и legacy `body` ещё обязателен для немигрированных формул. В этапе 4 завершены object-relations, canonical imports и structural declarations; Metrics строит import topology, size и package class populations по canonical facts. Текущий transitional scope этапа 5 выполнен: complexity facts и migrated consumers работают в dual transition, однако пункт 5.5 — удаление обязательности `body` и оставшейся activity — остаётся будущим этапом. В этапе 6 введена единая внутренняя read-only projection-модель и централизованы topology/traversal views; весь этап не объявляется завершённым, поскольку legacy `body` и adapters пока остаются частью переходного контракта.
 
 ## Приоритет доработок
 
-1. Мигрировать оставшихся потребителей с legacy `body`, сохраняя golden-эквивалентность численной семантики.
-2. Снять обязательность `body` только новой версией контракта после завершения миграции потребителей.
+1. Добавить нейтральные structural facts для точного воспроизведения legacy activity и мигрировать её с `body` без изменения чисел.
+2. Снять обязательность `body` только новой версией контракта после миграции activity и compatibility validation.

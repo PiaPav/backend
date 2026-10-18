@@ -1329,3 +1329,93 @@ def test_canonical_lcom_boundaries_and_rfc_synthetic_targets() -> None:
     assert rows["m.One"]["lcom"] is None
     assert rows["m.Empty"]["lcom"] == 1.0
     assert rows["m.Empty"]["rfc"] == 3
+
+
+def test_semantics5_size_matches_legacy_and_body_mutations_do_not_change_canonical_metrics(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "model.py").write_text(
+        "VALUE = 1\nclass C:\n field: int\n def work(self):\n  return 1\ndef helper():\n return C()\n",
+        encoding="utf-8",
+    )
+    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    baseline = calculate_graph_metrics(graph)
+    file = graph["body"][0]["file"]
+    legacy_size = {
+        "directories": 0, "files": 1, "classes": len(file["classes"]),
+        "abstract_classes": sum(item["type"] == "abstract" for item in file["classes"]),
+        "dataclasses": sum(item["type"] == "dataclass" for item in file["classes"]),
+        "functions": len(file["functions"]),
+        "methods": sum(len(item["methods"]) for item in file["classes"]),
+        "fields": sum(len(item["fields"]) for item in file["classes"]),
+        "constants": len(file["constants"]),
+    }
+    assert baseline["size"] == legacy_size
+    assert any(node.get("synthetic") is True for node in graph["nodes"])
+    assert baseline["size"]["methods"] == 1
+
+    mutated = deepcopy(graph)
+    body_file = mutated["body"][0]["file"]
+    body_file.update({"path": "wrong", "path_parts": ["wrong"], "metrics": {"noise": 1}})
+    body_file["constants"] = []
+    body_file["classes"] = []
+    changed = calculate_graph_metrics(mutated)
+    assert changed["size"] == baseline["size"]
+    assert changed["architecture"] == baseline["architecture"]
+    assert changed["object_oriented"]["classes"] == baseline["object_oriented"]["classes"]
+
+
+def test_semantics5_activity_remains_legacy_body_backed(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "a.py").write_text("import os\nclass C:\n def m(self):\n  print(1)\n", encoding="utf-8")
+    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    baseline = calculate_graph_metrics(graph)["activity"]
+    changed = deepcopy(graph)
+    file = changed["body"][0]["file"]
+    file["imports"] = []
+    file["classes"][0]["methods"] = []
+    file["calls"] = [{"type": "call", "name": "extra"}]
+    assert calculate_graph_metrics(changed)["activity"] != baseline
+
+
+def test_semantics5_paths_packages_collisions_and_order_use_canonical_owners(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "pkg" / "sub").mkdir(parents=True)
+    for relative in ("root.py", "pkg.py", "pkg/__init__.py", "pkg/sub/m.py"):
+        path = source / relative
+        path.write_text("class Same: pass\n", encoding="utf-8")
+    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    first = calculate_graph_metrics(graph)
+    packages = {row["package"]: row for row in first["architecture"]["packages"]}
+    assert first["size"]["directories"] == 2
+    assert (packages["<root>"]["files"], packages["<root>"]["classes"]) == (2, 2)
+    assert (packages["pkg"]["files"], packages["pkg"]["classes"]) == (2, 2)
+
+    permuted = deepcopy(graph)
+    permuted["nodes"].reverse()
+    permuted["edges"].reverse()
+    second = calculate_graph_metrics(permuted)
+    assert second["size"] == first["size"]
+    assert second["architecture"] == first["architecture"]
+    assert second["object_oriented"] == first["object_oriented"]
+
+
+def test_semantics4_size_and_package_population_remain_legacy_backed() -> None:
+    graph = {
+        "parser_semantics_version": 4,
+        "body": [{"file": {"name": "legacy", "path": "legacy", "path_parts": ["legacy"],
+                            "classes": [{"name": "C", "type": "abstract", "methods": []}],
+                            "functions": [], "constants": [], "imports": []}}],
+        "nodes": [
+            {"id": "file:new.py", "kind": "file", "qualified_name": "new", "path": "new.py"},
+            {"id": "method:synthetic", "kind": "method", "qualified_name": "new.C.__init__",
+             "parent_id": "class:new", "synthetic": True},
+        ],
+        "edges": [], "callsites": [], "import_references": [],
+    }
+    metrics = calculate_graph_metrics(graph)
+    assert metrics["size"]["classes"] == 1
+    assert metrics["size"]["methods"] == 0
+    assert metrics["architecture"]["packages"][0]["package"] == "legacy"
+    assert metrics["architecture"]["packages"][0]["classes"] == 1

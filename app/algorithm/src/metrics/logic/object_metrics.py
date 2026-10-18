@@ -261,22 +261,23 @@ def calculate_canonical_object_metrics(
 
     canonical_complexity = (
         canonical_callable_metrics(graph)
-        if graph.get("parser_semantics_version") in {3, 4} else None
+        if graph.get("parser_semantics_version") in {3, 4, 5} else None
     )
     # Semantics v2 retains the transitional body-derived WMC path.
     legacy_wmc: dict[tuple[str, str], int] = {}
-    files = [file.data for file in projection.legacy_files] if projection else graph_files(graph)
-    for file in files:
-        module = legacy_file_id(file)
-        directory = str(file.get("path") or "").replace(".", "/")
-        source_path = "/".join(filter(None, (directory, f"{file.get('name')}.py")))
-        for class_info in file.get("classes", []):
-            if not isinstance(class_info, Mapping): continue
-            qualified = f"{module}.{class_info.get('name')}"
-            legacy_wmc[(source_path, qualified)] = sum(
-                int(method.get("metrics", {}).get("cyclomatic_complexity", 1))
-                for method in class_info.get("methods", []) if isinstance(method, Mapping)
-            )
+    if canonical_complexity is None:
+        files = [file.data for file in projection.legacy_files] if projection else graph_files(graph)
+        for file in files:
+            module = legacy_file_id(file)
+            directory = str(file.get("path") or "").replace(".", "/")
+            source_path = "/".join(filter(None, (directory, f"{file.get('name')}.py")))
+            for class_info in file.get("classes", []):
+                if not isinstance(class_info, Mapping): continue
+                qualified = f"{module}.{class_info.get('name')}"
+                legacy_wmc[(source_path, qualified)] = sum(
+                    int(method.get("metrics", {}).get("cyclomatic_complexity", 1))
+                    for method in class_info.get("methods", []) if isinstance(method, Mapping)
+                )
 
     rows = []
     for class_id in class_ids:

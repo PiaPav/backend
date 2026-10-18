@@ -1,8 +1,8 @@
 # Parser file contract
 
 `parse_project(source_path: Path, output_path: Path) -> Path` accepts only
-`Path` instances. It atomically writes Graph DTO schema v1 / parser semantics v4
-with canonical file, class, field and callable nodes; containment, import,
+`Path` instances. It atomically writes Graph DTO schema v1 / parser semantics v5
+with canonical file, class, field, module-constant and callable nodes; containment, import,
 inheritance, field-type, field-access and call edges; callsites, type references,
 diagnostics and a transitional legacy `body` mirror, then returns the resolved
 output path. `starter()` keeps
@@ -33,6 +33,12 @@ traversal above package context, are `unresolved`. For `from module import name`
 attribute was proven to exist. Non-exact imports do not create nodes or edges.
 Dynamic imports remain callsites. The legacy `body` continues to expose only its
 established module-level import projection.
+
+Each class node carries the existing parser classification as `class_kind`.
+Every supported top-level module constant is represented by a separate canonical
+occurrence node with a stable ID; repeated declarations and chained targets are
+not collapsed. These neutral declaration facts let Metrics calculate structural
+populations without reading their legacy mirror.
 
 Declared `self.<field>` reads produce occurrence-level `accesses_field` edges;
 nested functions, classes and lambdas are excluded from the enclosing method.

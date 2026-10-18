@@ -7,6 +7,12 @@ Every legacy field also affects the legacy-body fingerprint even when no
 formula reads it. Therefore `unused` below means "unused by metric formulas",
 not "safe to remove".
 
+For parser semantics v5, structural `size`, package file/class/abstract
+populations, quality, WMC, object metrics and call-graph metrics use canonical
+facts. The legacy fields listed below remain validated and fingerprinted;
+activity and its historical denominators still consume them. Older parser
+semantics retain the compatibility consumers documented in the tables.
+
 ## Root and files
 
 | JSON path | Validation / producer | Metrics consumers |
