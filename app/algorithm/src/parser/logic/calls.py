@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from .expressions import dotted_name
+from .imports import resolve_import_statement
 from .models import (
     CanonicalCallsiteInfo,
     CallArgumentInfo,
@@ -36,10 +37,11 @@ class _OutermostCallVisitor(ast.NodeVisitor):
 class _CanonicalCallVisitor(ast.NodeVisitor):
     """Collect every call while retaining call nesting and direct await state."""
 
-    def __init__(self) -> None:
-        self.calls: list[tuple[ast.Call, int, bool]] = []
+    def __init__(self, scope: Scope) -> None:
+        self.calls: list[tuple[ast.Call, int, bool, Scope]] = []
         self.depth = 0
         self.awaited_call: ast.Call | None = None
+        self.scope = scope
 
     def visit_Await(self, node: ast.Await) -> None:
         previous = self.awaited_call
@@ -48,7 +50,7 @@ class _CanonicalCallVisitor(ast.NodeVisitor):
         self.awaited_call = previous
 
     def visit_Call(self, node: ast.Call) -> None:
-        self.calls.append((node, self.depth, node is self.awaited_call))
+        self.calls.append((node, self.depth, node is self.awaited_call, self.scope.fork()))
         previous_awaited = self.awaited_call
         self.awaited_call = None
         self.depth += 1
@@ -63,21 +65,10 @@ class _CanonicalCallVisitor(ast.NodeVisitor):
             if default is not None:
                 self.visit(default)
 
-
-class _NamedExpressionTargetVisitor(ast.NodeVisitor):
-    def __init__(self) -> None:
-        self.targets: list[ast.expr] = []
-
     def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
-        self.targets.append(node.target)
+        # Assignment expressions bind only after their value has been evaluated.
         self.visit(node.value)
-
-    def visit_Lambda(self, node: ast.Lambda) -> None:
-        for default in node.args.defaults:
-            self.visit(default)
-        for default in node.args.kw_defaults:
-            if default is not None:
-                self.visit(default)
+        CallResolver._bind_targets(self.scope, [node.target])
 
 
 class _CallableBindingVisitor(ast.NodeVisitor):
@@ -626,24 +617,19 @@ class CallResolver:
         self, expressions: Iterable[ast.expr], module: ModuleInfo, scope: Scope,
         owner: ClassInfo | None,
     ) -> list[CanonicalCallsiteInfo]:
-        expressions = list(expressions)
-        named_targets = _NamedExpressionTargetVisitor()
-        for expression in expressions:
-            named_targets.visit(expression)
-        self._bind_targets(scope, named_targets.targets)
-        visitor = _CanonicalCallVisitor()
+        visitor = _CanonicalCallVisitor(scope)
         for expression in expressions:
             visitor.visit(expression)
         result: list[CanonicalCallsiteInfo] = []
-        for node, depth, awaited in visitor.calls:
-            target = self.canonical_target(node.func, module, scope, owner)
+        for node, depth, awaited, call_scope in visitor.calls:
+            target = self.canonical_target(node.func, module, call_scope, owner)
             result.append(
                 CanonicalCallsiteInfo(
                     node=node,
                     expression=ast.unparse(node),
                     syntactic_depth=depth,
                     awaited=awaited,
-                    resolution=self._resolution(node.func, scope, target),
+                    resolution=self._resolution(node.func, call_scope, target),
                     target=target,
                     file=module.file,
                     line=node.lineno,
@@ -732,8 +718,9 @@ class CallResolver:
     ) -> None:
         if isinstance(statement, (ast.Import, ast.ImportFrom)):
             module_level = scope.parent is None
-            imports = self._imports_for_statement(statement, module)
-            for name, imported in imports.items():
+            imports = resolve_import_statement(statement, module, self.index)
+            for imported in imports:
+                name = imported.local_name
                 if module_level:
                     scope.bind_import(name, imported)
                 else:
@@ -777,38 +764,6 @@ class CallResolver:
             for target in targets:
                 if isinstance(target, (ast.Name, ast.Attribute)):
                     scope.bind_type(dotted_name(target), type_name)
-
-    def _imports_for_statement(
-        self, statement: ast.Import | ast.ImportFrom, module: ModuleInfo
-    ) -> dict[str, ImportInfo]:
-        result: dict[str, ImportInfo] = {}
-        if isinstance(statement, ast.Import):
-            for alias in statement.names:
-                local_module = self.index.resolve_module(alias.name)
-                imported = ImportInfo(
-                    module="", object_name=alias.name, asname=alias.asname,
-                    local_module=local_module, from_lib=local_module is None,
-                    file=module.file, line=statement.lineno, column=statement.col_offset,
-                )
-                result[imported.local_name] = imported
-        else:
-            requested = statement.module or ""
-            local_module = self.index.resolve_module(
-                requested, current_package=module.package, level=statement.level
-            )
-            for alias in statement.names:
-                child = f"{requested}.{alias.name}" if requested else alias.name
-                resolved = self.index.resolve_module(
-                    child, current_package=module.package, level=statement.level
-                ) or local_module
-                imported = ImportInfo(
-                    module=requested, object_name=alias.name, asname=alias.asname,
-                    local_module=resolved, from_lib=resolved is None,
-                    level=statement.level, file=module.file,
-                    line=statement.lineno, column=statement.col_offset,
-                )
-                result[imported.local_name] = imported
-        return result
 
     def _class_ref_for_constructor(self, target: TargetRef | None) -> TargetRef | None:
         if target is None:
@@ -977,7 +932,7 @@ class CallResolver:
 
     def _canonical_import_target(self, target: ast.expr, scope: Scope) -> TargetRef | None:
         root_node = self._root_name(target)
-        if root_node is None:
+        if root_node is None or scope.expression_shadows(root_node.id, root_node):
             return None
         imported = scope.canonical_import_for(root_node.id)
         if not imported or not imported.local_module:
@@ -1017,9 +972,11 @@ class CallResolver:
             return "exact"
         root = self._root_name(target)
         if root is not None:
+            if scope.expression_shadows(root.id, root):
+                return "dynamic"
             imported = scope.canonical_import_for(root.id)
             if imported is not None:
-                return "external" if imported.from_lib is True else "unresolved"
+                return imported.resolution if imported.resolution != "exact" else "unresolved"
         if isinstance(target, ast.Name):
             if scope.shadows_import(target.id, target):
                 return "dynamic"

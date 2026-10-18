@@ -16,6 +16,8 @@ Version dispatch is explicit:
   topology adapter;
 - Graph DTO v1 / parser semantics v2 uses metrics semantics v3.
 - Graph DTO v1 / parser semantics v3 uses metrics semantics v4.
+- Graph DTO v1 / parser semantics v4 uses metrics semantics v4; formulas are
+  unchanged, while file import topology comes from canonical exact import edges.
 
 Semantics v3 builds object and call topology exclusively from canonical node IDs,
 typed edges, callsites and type references. Legacy `body` is still used for
@@ -67,6 +69,9 @@ ID-only weighted `calls`/`awaits` graph. Its DTOs are frozen and its topology
 collections are immutable. This is an internal data/topology view: it does not
 change formulas, perform legacy string resolution, or remove the required
 transitional `body` adapter.
+For parser semantics v4, import references are exposed as an immutable snapshot
+and import topology is independent of legacy `body[*].file.imports`; older
+parser semantics retain the compatibility projection.
 
 Legacy nested calls have one compatibility traversal. A root mapping call has
 depth 1; recursion follows only `args[*].value` mappings whose `type` is

@@ -3,7 +3,8 @@
 The envelope requires `schema_version: 1`, a supported
 `parser_semantics_version`, `project.fingerprint`, and arrays `nodes`, `edges`,
 `callsites`, `diagnostics`. Parser semantics 1 remains readable for compatibility.
-Parser semantics 2 and 3 additionally require `type_references`.
+Parser semantics 2-4 additionally require `type_references`; semantics 4 also
+requires occurrence-level `import_references`.
 Canonical collections are sorted before serialization. The SHA-256 fingerprint
 is calculated over the envelope without `project.fingerprint` and without the
 transitional `body` mirror; it is therefore independent of collection order.
@@ -19,7 +20,7 @@ corresponding aggregated `calls`/`awaits` weight (and vice versa); such edges
 always carry a positive integer weight. File/module nodes may own module-level
 callsites and be call-edge sources; targets remain function/method nodes.
 
-Current parser output uses semantics 3. In addition to file/class/callable nodes,
+Current parser output uses semantics 4. In addition to file/class/callable nodes,
 it emits field nodes and the following typed relations:
 
 - `inherits`: child class -> exact internal parent class;
@@ -33,10 +34,20 @@ role, source expression, location and `exact`, `ambiguous`, `external`, or
 `unresolved` resolution. Exact references and `inherits`/`field_type` edges are
 mutually consistent. Non-exact references never create topology edges.
 
-Semantics 2 and 3 validate endpoint kinds, require both `imports` endpoints to be
+Each semantics-4 static import alias, at any lexical nesting level, has a stable
+reference with its source spelling, alias, relative level, location and one of
+`exact`, `external`, or `unresolved`. The importer is the containing file node;
+lexical scope is not topology. An exact reference targets one internal
+file/module and has one matching `imports:<reference-id>` edge in `dependent ->
+dependency` direction. Exact `from` resolution identifies the dependency module,
+not the existence of the imported attribute. External absolute imports and
+failed relative imports have no target or topology edge. Dynamic imports remain
+callsites rather than static import references.
+
+Semantics 2-4 validate endpoint kinds, require both `imports` endpoints to be
 file/module nodes, requires fields and methods to belong to classes, and
 require `accesses_field` endpoints to have the same class owner.
-Semantics 3 additionally requires `complexity_facts` on every non-synthetic
+Semantics 3 and 4 additionally require `complexity_facts` on every non-synthetic
 function/method and forbids them elsewhere. The validator checks the exact facts
 shape, control parent references, kind-specific cardinalities, source paths,
 callable spans and occurrence/control locations. Semantics 1 and 2 remain

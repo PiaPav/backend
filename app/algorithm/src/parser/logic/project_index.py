@@ -120,11 +120,14 @@ class ProjectIndex:
             requested = ".".join(package_parts[:keep] + ([requested] if requested else []))
         if requested in self.by_module:
             return requested
+        if level:
+            return None
         # The test project uses its repository-qualified import path while the
-        # selected analysis root starts deeper. Match only complete module suffixes.
+        # selected analysis root starts deeper.  Accept only that explicit form,
+        # not an arbitrary qualified name which happens to share a suffix.
         candidates = [
             name
             for name in self.by_module
-            if requested == name or requested.endswith(f".{name}")
+            if requested.endswith(f".{self.root.name}.{name}")
         ]
         return max(candidates, key=lambda item: len(item.split(".")), default=None)

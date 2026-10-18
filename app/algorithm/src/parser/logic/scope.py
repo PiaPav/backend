@@ -168,3 +168,12 @@ class Scope:
                 return True
             scope = scope.parent
         return False
+
+    def expression_shadows(self, name: str, node: object) -> bool:
+        """Whether this particular load is hidden by an expression-local binding."""
+        scope: Scope | None = self
+        while scope is not None:
+            if name in scope.expression_bindings.get(id(node), ()):
+                return True
+            scope = scope.parent
+        return False

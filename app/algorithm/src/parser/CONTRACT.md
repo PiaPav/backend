@@ -1,7 +1,7 @@
 # Parser file contract
 
 `parse_project(source_path: Path, output_path: Path) -> Path` accepts only
-`Path` instances. It atomically writes Graph DTO schema v1 / parser semantics v3
+`Path` instances. It atomically writes Graph DTO schema v1 / parser semantics v4
 with canonical file, class, field and callable nodes; containment, import,
 inheritance, field-type, field-access and call edges; callsites, type references,
 diagnostics and a transitional legacy `body` mirror, then returns the resolved
@@ -23,6 +23,16 @@ proven local import bindings. Aliased and qualified imports use the same
 effective-module index as import/call resolution, including package initializer
 precedence. Parser does not use project-wide short-name guessing. External and
 unresolved references are preserved as non-topological `type_references`.
+
+Every static import alias, including imports nested in functions, classes and
+control-flow bodies, is preserved as an occurrence-level `import_references`
+record. Project-local imports are `exact` and create one canonical edge;
+non-local absolute imports are `external`; failed relative imports, including
+traversal above package context, are `unresolved`. For `from module import name`,
+`exact` means that the dependency module was resolved, not that the imported
+attribute was proven to exist. Non-exact imports do not create nodes or edges.
+Dynamic imports remain callsites. The legacy `body` continues to expose only its
+established module-level import projection.
 
 Declared `self.<field>` reads produce occurrence-level `accesses_field` edges;
 nested functions, classes and lambdas are excluded from the enclosing method.

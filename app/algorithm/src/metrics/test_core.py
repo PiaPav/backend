@@ -85,6 +85,70 @@ def test_metrics_projection_is_a_deeply_immutable_snapshot() -> None:
         projection.nodes_by_id["fn"]["metadata"]["tags"][0] = "changed"  # type: ignore[index]
 
 
+def test_semantics4_import_projection_uses_canonical_edges_not_legacy_body(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "dependency.py").write_text("value = 1\n", encoding="utf-8")
+    (source / "consumer.py").write_text(
+        "import dependency\nimport third_party\n", encoding="utf-8"
+    )
+    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    consumer = next(item["file"] for item in graph["body"] if item["file"]["name"] == "consumer")
+    consumer["imports"].clear()
+
+    projection = MetricsGraphProjection.from_graph(graph)
+    assert projection.directed_file_import_graph.edges == frozenset({
+        ("file:consumer.py", "file:dependency.py")
+    })
+    assert {item["resolution"] for item in projection.import_references} == {"exact", "external"}
+    with pytest.raises(TypeError):
+        projection.import_references[0]["resolution"] = "changed"  # type: ignore[index]
+
+
+def test_semantics4_nested_imports_do_not_migrate_legacy_activity(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "dependency.py").write_text("value = 1\n", encoding="utf-8")
+    (source / "consumer.py").write_text(
+        "def run():\n    import dependency\n",
+        encoding="utf-8",
+    )
+    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+
+    assert len(graph["import_references"]) == 1
+    assert any(edge["kind"] == "imports" for edge in graph["edges"])
+    consumer = next(item["file"] for item in graph["body"] if item["file"]["name"] == "consumer")
+    assert consumer["imports"] == []
+    assert calculate_graph_metrics(graph)["activity"]["local_imports"] == 0
+
+
+def test_semantics4_package_projection_uses_first_path_segment_and_deduplicates() -> None:
+    graph = {
+        "parser_semantics_version": 4, "body": [], "callsites": [],
+        "import_references": [{"id": "one"}, {"id": "two"}],
+        "nodes": [
+            {"id": "file:root.py", "kind": "file", "path": "root.py"},
+            {"id": "file:pkg/a.py", "kind": "file", "path": "pkg/a.py"},
+            {"id": "file:other/b.py", "kind": "file", "path": "other/b.py"},
+        ],
+        "edges": [
+            {"kind": "imports", "source_id": "file:root.py", "target_id": "file:pkg/a.py"},
+            {"kind": "imports", "source_id": "file:root.py", "target_id": "file:pkg/a.py"},
+            {"kind": "imports", "source_id": "file:pkg/a.py", "target_id": "file:other/b.py"},
+        ],
+    }
+    projection = MetricsGraphProjection.from_graph(graph)
+    assert projection.directed_file_import_graph.edges == frozenset({
+        ("file:root.py", "file:pkg/a.py"),
+        ("file:pkg/a.py", "file:other/b.py"),
+    })
+    assert projection.directed_package_import_graph.nodes == frozenset({"<root>", "pkg", "other"})
+    assert projection.directed_package_import_graph.edges == frozenset({
+        ("<root>", "pkg"), ("pkg", "other"),
+    })
+    assert len(projection.import_references) == 2
+
+
 def test_shared_legacy_call_traversal_keeps_order_depth_and_consumers_equal() -> None:
     calls = [{"object": "outer", "args": [
         {"value": {"type": "call", "object": "left", "args": [

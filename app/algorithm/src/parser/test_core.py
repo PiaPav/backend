@@ -95,6 +95,128 @@ def test_parse_project_is_atomic_deterministic_and_keeps_starter_semantics(tmp_p
     assert dto["nodes"][0]["id"] == "file:sample.py"
 
 
+def test_canonical_import_references_distinguish_all_static_outcomes(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "pkg").mkdir(parents=True)
+    (source / "pkg" / "__init__.py").write_text("", encoding="utf-8")
+    (source / "pkg" / "local.py").write_text("value = 1\n", encoding="utf-8")
+    (source / "pkg" / "consumer.py").write_text(
+        "from .local import value as first, value as second\n"
+        "from .missing import value\n"
+        "from ..too_high import value\n"
+        "import third_party as external\n",
+        encoding="utf-8",
+    )
+
+    dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    assert dto["parser_semantics_version"] == 4
+    references = [
+        item for item in dto["import_references"]
+        if item["importer_id"] == "file:pkg/consumer.py"
+    ]
+    assert [item["resolution"] for item in references].count("exact") == 2
+    assert [item["resolution"] for item in references].count("unresolved") == 2
+    assert [item["resolution"] for item in references].count("external") == 1
+    assert {item["alias"] for item in references if item["resolution"] == "exact"} == {"first", "second"}
+    exact = [item for item in references if item["resolution"] == "exact"]
+    assert all(item["target_id"] == "file:pkg/local.py" for item in exact)
+    import_edges = [edge for edge in dto["edges"] if edge["kind"] == "imports"]
+    assert {edge["id"] for edge in import_edges} == {
+        f"imports:{item['id']}" for item in dto["import_references"]
+        if item["resolution"] == "exact"
+    }
+    assert len([edge for edge in import_edges if edge["source_id"] == "file:pkg/consumer.py"]) == 2
+
+
+def test_canonical_imports_include_nested_occurrences_with_stable_unique_ids(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "dependency.py").write_text("value = 1\n", encoding="utf-8")
+    (source / "consumer.py").write_text(
+        "def run():\n"
+        "    import dependency, dependency\n"
+        "    if True:\n        from dependency import value\n"
+        "class C:\n    import dependency as class_dep\n"
+        "    def method(self):\n        import dependency as method_dep\n",
+        encoding="utf-8",
+    )
+
+    dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    references = [item for item in dto["import_references"]
+                  if item["importer_id"] == "file:consumer.py"]
+    assert len(references) == 5
+    assert len({item["id"] for item in references}) == 5
+    assert all(item["resolution"] == "exact" for item in references)
+    assert all(item["target_id"] == "file:dependency.py" for item in references)
+    consumer = next(item["file"] for item in dto["body"]
+                    if item["file"]["name"] == "consumer")
+    assert consumer["imports"] == []
+
+
+def test_over_root_relative_import_is_unresolved_in_import_and_call_scopes(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    (source / "pkg").mkdir(parents=True)
+    (source / "dependency.py").write_text("def f(): pass\n", encoding="utf-8")
+    (source / "pkg" / "__init__.py").write_text("", encoding="utf-8")
+    (source / "pkg" / "consumer.py").write_text(
+        "from ..dependency import f\n\ndef run():\n    f()\n",
+        encoding="utf-8",
+    )
+
+    dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    reference = next(
+        item for item in dto["import_references"]
+        if item["importer_id"] == "file:pkg/consumer.py"
+    )
+    callsite = next(item for item in dto["callsites"] if item["expression"] == "f()")
+
+    assert (reference["level"], reference["resolution"], reference["target_id"]) == (
+        2, "unresolved", None,
+    )
+    assert (callsite["resolution"], callsite["target_id"]) == ("unresolved", None)
+    assert not any(
+        edge["kind"] == "imports"
+        and edge["source_id"] == "file:pkg/consumer.py"
+        for edge in dto["edges"]
+    )
+
+
+def test_module_suffix_fallback_is_limited_to_repository_qualified_imports(tmp_path: Path) -> None:
+    source = tmp_path / "data"
+    (source / "pkg").mkdir(parents=True)
+    (source / "util.py").write_text("def f(): pass\n", encoding="utf-8")
+    (source / "pkg" / "__init__.py").write_text("", encoding="utf-8")
+    (source / "pkg" / "relative.py").write_text(
+        "from .util import f\n", encoding="utf-8"
+    )
+    (source / "absolute.py").write_text(
+        "from vendor.util import f\nfrom repository.data.util import f as qualified\n",
+        encoding="utf-8",
+    )
+
+    dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    absolute = next(
+        item for item in dto["import_references"]
+        if item["importer_id"] == "file:absolute.py"
+        and item["module"] == "vendor.util"
+        and item["name"] == "f"
+        and item["alias"] is None
+    )
+    qualified = next(
+        item for item in dto["import_references"] if item["alias"] == "qualified"
+    )
+    assert (absolute["resolution"], absolute["target_id"]) == (
+        "external", None,
+    )
+    relative = next(
+        item for item in dto["import_references"]
+        if item["importer_id"] == "file:pkg/relative.py"
+    )
+    assert (relative["resolution"], relative["target_id"]) == ("unresolved", None)
+    assert qualified["resolution"] == "exact"
+    assert qualified["target_id"] == "file:util.py"
+
+
 def test_parse_project_requires_paths(tmp_path: Path) -> None:
     with pytest.raises(TypeError):
         parse_project(str(tmp_path), tmp_path / "graph.json")  # type: ignore[arg-type]
@@ -406,6 +528,40 @@ def test_canonical_callsites_and_call_edges_are_deterministic(tmp_path: Path) ->
     assert first_call_edges == second_call_edges
     assert len(first["callsites"]) == 4
     assert sorted(edge["weight"] for edge in first_call_edges) == [1, 1, 2]
+
+
+def test_canonical_import_calls_respect_comprehension_and_walrus_order(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "provider.py").write_text("def f(): pass\n", encoding="utf-8")
+    (source / "consumer.py").write_text(
+        "from provider import f\n"
+        "def comprehension(values):\n    [f() for f in values]\n"
+        "def tuple_order(other):\n"
+        "    from provider import f\n    (f(), (f := other))\n    f()\n"
+        "def rhs_order():\n"
+        "    from provider import f\n    (f := f())\n    f()\n",
+        encoding="utf-8",
+    )
+
+    dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    calls = [
+        item for item in dto["callsites"]
+        if item["location"]["path"] == "consumer.py" and item["expression"] == "f()"
+    ]
+    calls.sort(key=lambda item: item["location"]["line"])
+    assert [item["resolution"] for item in calls] == [
+        "dynamic", "exact", "dynamic", "exact", "dynamic",
+    ]
+    assert [item["target_id"] is not None for item in calls] == [
+        False, True, False, True, False,
+    ]
+    comprehension_caller = calls[0]["caller_id"]
+    assert not any(
+        edge["kind"] in {"calls", "awaits"}
+        and edge["source_id"] == comprehension_caller
+        for edge in dto["edges"]
+    )
 
 
 def test_canonical_collection_covers_executable_expression_containers_once(tmp_path: Path) -> None:
@@ -747,7 +903,7 @@ def test_semantics2_object_relations_cover_imports_types_and_field_accesses(tmp_
         encoding="utf-8",
     )
     dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
-    assert dto["parser_semantics_version"] == 3
+    assert dto["parser_semantics_version"] == 4
     nodes = {node["id"]: node for node in dto["nodes"]}
     fields = [node for node in nodes.values() if node["kind"] == "field"]
     assert {node["qualified_name"] for node in fields} >= {
@@ -1127,7 +1283,7 @@ def test_semantics3_complexity_facts_exactly_reproduce_legacy_rich_flow(tmp_path
     graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
     node = next(item for item in graph["nodes"] if item["kind"] == "function")
     legacy = graph["body"][0]["file"]["functions"][0]["metrics"]
-    assert graph["parser_semantics_version"] == 3
+    assert graph["parser_semantics_version"] == 4
     assert metrics_from_facts(node["complexity_facts"]) == legacy
     assert "hidden" not in legacy["self_attribute_accesses"]
 

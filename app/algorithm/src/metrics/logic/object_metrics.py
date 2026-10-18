@@ -261,7 +261,7 @@ def calculate_canonical_object_metrics(
 
     canonical_complexity = (
         canonical_callable_metrics(graph)
-        if graph.get("parser_semantics_version") == 3 else None
+        if graph.get("parser_semantics_version") in {3, 4} else None
     )
     # Semantics v2 retains the transitional body-derived WMC path.
     legacy_wmc: dict[tuple[str, str], int] = {}

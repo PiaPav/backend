@@ -9,12 +9,13 @@ from typing import Any, Mapping
 NODE_KINDS = frozenset({"file", "module", "class", "field", "function", "method"})
 EDGE_KINDS = frozenset({"contains", "imports", "inherits", "field_type", "accesses_field", "calls", "awaits"})
 RESOLUTION_STATUSES = frozenset({"exact", "ambiguous", "external", "dynamic", "unresolved"})
+IMPORT_RESOLUTION_STATUSES = frozenset({"exact", "external", "unresolved"})
 CONTROL_KINDS = frozenset({
     "if", "for", "async_for", "while", "try", "try_star", "match",
     "if_expression", "boolean", "comprehension", "exception_handler",
 })
 OCCURRENCE_KINDS = frozenset({"statement", "return", "raise", "await", "self_attribute"})
-_COLLECTIONS = ("nodes", "edges", "callsites", "type_references", "diagnostics")
+_COLLECTIONS = ("nodes", "edges", "callsites", "type_references", "import_references", "diagnostics")
 
 
 def _key(value: Any) -> str:
@@ -139,14 +140,16 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         _error("root must be an object")
     if type(graph.get("schema_version")) is not int or graph["schema_version"] != 1:
         _error(f"Unsupported schema_version {graph.get('schema_version')!r}")
-    if type(graph.get("parser_semantics_version")) is not int or graph["parser_semantics_version"] not in {1, 2, 3}:
+    if type(graph.get("parser_semantics_version")) is not int or graph["parser_semantics_version"] not in {1, 2, 3, 4}:
         _error(f"Unsupported parser_semantics_version {graph.get('parser_semantics_version')!r}")
     semantics = graph["parser_semantics_version"]
     project = graph.get("project")
     if not isinstance(project, Mapping) or not isinstance(project.get("fingerprint"), str):
         _error("project.fingerprint is required")
-    required_collections = _COLLECTIONS if semantics >= 2 else tuple(
-        name for name in _COLLECTIONS if name != "type_references"
+    required_collections = tuple(
+        name for name in _COLLECTIONS
+        if (name != "type_references" or semantics >= 2)
+        and (name != "import_references" or semantics >= 4)
     )
     for name in required_collections:
         if not isinstance(graph.get(name), list):
@@ -164,7 +167,7 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         if node.get("kind") == "file" and identifier != f"file:{node.get('path')}":
             _error(f"nodes[{index}] file id must equal 'file:<path>'")
         nodes[identifier] = node
-        if semantics == 3:
+        if semantics >= 3:
             if "synthetic" in node and type(node["synthetic"]) is not bool:
                 _error(f"nodes[{index}].synthetic must be a boolean")
             callable_node = node.get("kind") in {"function", "method"}
@@ -176,14 +179,14 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
             elif "complexity_facts" in node:
                 _error(f"nodes[{index}].complexity_facts is not allowed")
     contains: dict[str, str] = {}
-    seen_edge_ids: set[str] = set()
+    edges_by_id: dict[str, Mapping[str, Any]] = {}
     call_weights: dict[tuple[str, str, str], int] = {}
     for index, edge in enumerate(graph["edges"]):
         if not isinstance(edge, Mapping): _error(f"edges[{index}] must be an object")
         edge_id = edge.get("id")
-        if not isinstance(edge_id, str) or not edge_id or edge_id in seen_edge_ids:
+        if not isinstance(edge_id, str) or not edge_id or edge_id in edges_by_id:
             _error(f"edges[{index}].id is missing or duplicate")
-        seen_edge_ids.add(edge_id)
+        edges_by_id[edge_id] = edge
         kind, source, target = edge.get("kind"), edge.get("source_id"), edge.get("target_id")
         if kind not in EDGE_KINDS: _error(f"edges[{index}].kind is invalid")
         if source not in nodes or target not in nodes: _error(f"edges[{index}] has an unknown node reference")
@@ -281,6 +284,75 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
             _error(f"callsites[{index}] non-internal resolution cannot have targets")
     if call_weights != observed:
         _error("aggregated call edge weights do not match exact callsites")
+    if semantics >= 4:
+        import_edge_ids = {identifier for identifier, edge in edges_by_id.items()
+                           if edge["kind"] == "imports"}
+        referenced_import_edges: set[str] = set()
+        import_reference_ids: set[str] = set()
+        for index, reference in enumerate(graph["import_references"]):
+            where = f"import_references[{index}]"
+            if not isinstance(reference, Mapping):
+                _error(f"{where} must be an object")
+            required = {
+                "id", "importer_id", "kind", "module", "name", "alias", "level",
+                "location", "resolution", "target_id", "candidate_ids",
+            }
+            if set(reference) != required:
+                _error(f"{where} has invalid fields")
+            identifier = reference.get("id")
+            if not isinstance(identifier, str) or not identifier or identifier in import_reference_ids:
+                _error(f"{where}.id is missing or duplicate")
+            import_reference_ids.add(identifier)
+            importer = reference.get("importer_id")
+            if importer not in nodes or nodes[importer]["kind"] not in {"file", "module"}:
+                _error(f"{where}.importer_id is invalid")
+            kind = reference.get("kind")
+            if kind not in {"import", "from"}:
+                _error(f"{where}.kind is invalid")
+            module, name, alias, level = (
+                reference.get("module"), reference.get("name"),
+                reference.get("alias"), reference.get("level"),
+            )
+            if not isinstance(module, str) or not isinstance(name, str) or not name:
+                _error(f"{where} module or name is invalid")
+            if alias is not None and (not isinstance(alias, str) or not alias):
+                _error(f"{where}.alias is invalid")
+            if type(level) is not int or level < 0:
+                _error(f"{where}.level is invalid")
+            if kind == "import" and (module or level != 0):
+                _error(f"{where} import kind cannot have module or level")
+            if kind == "import" and name == "*":
+                _error(f"{where} import kind cannot import a star")
+            if kind == "from" and level == 0 and not module:
+                _error(f"{where} absolute from kind requires a module")
+            _location(reference.get("location"), f"{where}.location")
+            if reference["location"]["path"] != nodes[importer]["path"]:
+                _error(f"{where}.location path must match importer")
+            status = reference.get("resolution")
+            if status not in IMPORT_RESOLUTION_STATUSES:
+                _error(f"{where}.resolution is invalid")
+            if status == "external" and level != 0:
+                _error(f"{where} external resolution must be absolute")
+            if status == "unresolved" and level == 0:
+                _error(f"{where} unresolved resolution must be relative")
+            target, candidates = reference.get("target_id"), reference.get("candidate_ids")
+            if candidates != []:
+                _error(f"{where}.candidate_ids must be an empty array")
+            edge_id = f"imports:{identifier}"
+            if status == "exact":
+                if target not in nodes or nodes[target]["kind"] not in {"file", "module"}:
+                    _error(f"{where} exact resolution requires one file or module target")
+                referenced_import_edges.add(edge_id)
+                matching = edges_by_id.get(edge_id)
+                if (matching is None or matching["kind"] != "imports"
+                        or matching["source_id"] != importer
+                        or matching["target_id"] != target
+                        or matching.get("location") != reference["location"]):
+                    _error(f"{where} exact resolution does not match its imports edge")
+            elif target is not None:
+                _error(f"{where} non-exact resolution cannot have a target")
+        if import_edge_ids != referenced_import_edges:
+            _error("imports edges do not match exact import references")
     if semantics >= 2:
         relation_edges = {
             (edge["kind"], edge["source_id"], edge["target_id"])

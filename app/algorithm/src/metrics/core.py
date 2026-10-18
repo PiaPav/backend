@@ -183,8 +183,8 @@ def calculate_metrics(graph_path: Path, output_path: Path) -> Path:
     graph = _load_graph_bytes(raw)
     is_v1 = graph.get("schema_version") == 1
     parser_semantics = graph.get("parser_semantics_version") if is_v1 else None
-    is_canonical_v2 = parser_semantics in {2, 3}
-    is_canonical_v3 = parser_semantics == 3
+    is_canonical_v2 = parser_semantics in {2, 3, 4}
+    is_canonical_v3 = parser_semantics in {3, 4}
     legacy_body = {"body": graph["body"]} if is_v1 else graph
     legacy_projection = (
         {

@@ -1,6 +1,6 @@
 # Статус декомпозиции
 
-Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 158 passed, 0 failed, 0 skipped.
+Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 170 passed, 0 failed, 0 skipped.
 
 ## Общий итог
 
@@ -9,7 +9,7 @@
 | 1. Фиксация текущей семантики | **выполнен** |
 | 2. Независимый файловый API Parser | **выполнен** |
 | 3. Независимый файловый API Metrics | **частично / почти выполнен в переходных границах**: не переиспользуется существующая serialization; Graph DTO v1 пока обязан содержать legacy `body` |
-| 4. Версионированный Graph DTO | **частично / основной object-relations scope выполнен** |
+| 4. Версионированный Graph DTO | **частично / object-relations и canonical import scope выполнены** |
 | 5. Формулы сложности в Metrics | **выполнен dual transition для quality, WMC и risk; legacy body сохранён** |
 | 6. Аналитические проекции | **частично / единая внутренняя read-only модель введена** |
 
@@ -42,7 +42,7 @@
 
 1. **Выполнен.** Envelope с `schema_version`, `parser_semantics_version` и fingerprint строится в `parser/graph_v1.py::build_graph_v1`; контракт проверяет `graph_dto/contract.py::validate_graph_v1`. Остатка нет.
 2. **Выполнен.** Canonical file/class/field/function/method IDs, `parent_id` и caller identity создаются в `build_graph_v1`; module-level calls принадлежат file node. Остатка нет.
-3. **Частично.** Локальные import edges сериализуются как `dependent -> dependency` с ID, включая package collision (`parser/test_core.py`), но внешний/неразрешённый импорт остаётся в legacy `body`, а canonical import-модель неполна. Остаток: представить все исходы импорта типизированно.
+3. **Выполнен для parser semantics v4.** Каждый статический alias, включая вложенные импорты, сериализуется как occurrence-level `import_references` с `exact`, `external` или `unresolved`; exact-ссылке соответствует ровно одно ребро `dependent file -> dependency file`, а non-exact исходы не изменяют topology. Единый resolver используется при сборе ссылок и разрешении вызовов; relative imports не используют suffix fallback, repository-qualified fallback ограничен именем корня анализа. Legacy `body` сохраняет прежнюю module-level проекцию. Остатка в текущем import scope нет.
 4. **Выполнен для вызовов.** Parser сохраняет legacy `semantic_target`, отдельно собирает canonical callsites и испускает exact `calls`/`awaits` edges по ID; переходный diagnostic удалён.
 5. **Выполнен.** Parser semantics v2 разрешает local/import-bound inheritance и field types, испускает `inherits`, `field_type`, field nodes, `accesses_field` и статусные `type_references`. CBO выводится в Metrics из первичных typed relations и exact calls без дублирующего `couples` edge. Остатка нет.
 6. **Выполнен.** Parser сериализует location, expression, syntactic depth, await/resolution и агрегирует exact edges с multiplicity; validator допускает file/module caller и сохраняет callable-only target.
@@ -67,9 +67,9 @@
 
 ## Вывод относительно ожидаемого состояния
 
-Этапы 1 и 2 подтверждены полностью. Этап 3 частично / почти выполнен в переходных границах: файловый API, loader/validation, identity и runtime independence готовы, но существующая serialization не переиспользуется и legacy `body` ещё обязателен для немигрированных формул. В этапе 4 завершён основной scope inheritance/field types/object metrics; неполной остаётся canonical модель внешних и неразрешённых импортов. Текущий transitional scope этапа 5 выполнен: complexity facts и migrated consumers работают в dual transition, однако пункт 5.5 — удаление обязательности `body` и оставшихся legacy metrics — остаётся будущим этапом. В этапе 6 введена единая внутренняя read-only projection-модель и централизованы topology/traversal views; весь этап не объявляется завершённым, поскольку legacy `body` и adapters пока остаются частью переходного контракта.
+Этапы 1 и 2 подтверждены полностью. Этап 3 частично / почти выполнен в переходных границах: файловый API, loader/validation, identity и runtime independence готовы, но существующая serialization не переиспользуется и legacy `body` ещё обязателен для немигрированных формул. В этапе 4 завершены object-relations и canonical import scope: exact/external/unresolved исходы представлены типизированно, включая вложенные статические импорты, а Metrics строит import topology по canonical exact edges. Текущий transitional scope этапа 5 выполнен: complexity facts и migrated consumers работают в dual transition, однако пункт 5.5 — удаление обязательности `body` и оставшихся legacy metrics — остаётся будущим этапом. В этапе 6 введена единая внутренняя read-only projection-модель и централизованы topology/traversal views; весь этап не объявляется завершённым, поскольку legacy `body` и adapters пока остаются частью переходного контракта.
 
 ## Приоритет доработок
 
-1. Представить external/unresolved import outcomes в canonical Graph DTO и завершить import-модель этапа 4.
-2. Мигрировать оставшихся потребителей с legacy `body` и затем снять его обязательность новой версией контракта.
+1. Мигрировать оставшихся потребителей с legacy `body`, сохраняя golden-эквивалентность численной семантики.
+2. Снять обязательность `body` только новой версией контракта после завершения миграции потребителей.

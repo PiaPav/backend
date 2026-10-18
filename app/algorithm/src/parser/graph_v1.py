@@ -5,7 +5,7 @@ from typing import Any
 import json
 from collections import Counter
 
-from graph_dto import graph_fingerprint, validate_graph_v1
+from graph_dto import PARSER_SEMANTICS_VERSION, graph_fingerprint, validate_graph_v1
 from .logic.models import FunctionComplexityFacts, ModuleInfo
 from .logic.project_index import ProjectIndex
 
@@ -56,6 +56,7 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
     edges: list[dict[str, Any]] = []
     callsites: list[dict[str, Any]] = []
     type_references: list[dict[str, Any]] = []
+    import_references: list[dict[str, Any]] = []
     declaration_ids: dict[int, str] = {}
     target_ids: dict[tuple[str, int], str] = {}
     module_files = {id(module): _file_id(module) for module in index.modules}
@@ -119,12 +120,26 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
             edges.append({"id": f"contains:{file_id}->{function_id}", "kind": "contains", "source_id": file_id, "target_id": function_id})
             declaration_ids[id(function)] = function_id
             target_ids[("function", id(function))] = function_id
-        for position, imported in enumerate(module.imports):
+        for imported in module.canonical_imports:
             target = effective_files.get(imported.local_module or "")
-            if target is not None:
-                edges.append({"id": f"imports:{file_id}->{target}:{position}", "kind": "imports",
-                              "source_id": file_id, "target_id": target,
-                               "location": _location(module, imported.line, imported.column)})
+            resolution = "exact" if target is not None else imported.resolution
+            reference_id = (
+                f"import:{path}:{imported.statement_line or imported.line or 1}:"
+                f"{imported.statement_column or 0}:{imported.line or 1}:"
+                f"{imported.column or 0}:{imported.alias_index}"
+            )
+            import_references.append({
+                "id": reference_id, "importer_id": file_id,
+                "kind": "from" if imported.module or imported.level else "import",
+                "module": imported.module, "name": imported.object_name,
+                "alias": imported.asname, "level": imported.level,
+                "location": _location(module, imported.line, imported.column),
+                "resolution": resolution, "target_id": target, "candidate_ids": [],
+            })
+            if resolution == "exact":
+                edges.append({"id": f"imports:{reference_id}", "kind": "imports",
+                               "source_id": file_id, "target_id": target,
+                                "location": _location(module, imported.line, imported.column)})
     reference_ordinal = 0
     for module in index.modules:
         for fact in module.type_references:
@@ -195,15 +210,16 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
          "path": shadowed.relative_path.as_posix(), "effective_path": effective.relative_path.as_posix()}
         for name, shadowed, effective in index.shadowed_modules
     ]
-    graph: dict[str, Any] = {"schema_version": 1, "parser_semantics_version": 3,
-                             "project": {"fingerprint": ""}, "nodes": nodes, "edges": edges,
-                             "callsites": callsites, "type_references": type_references,
-                             "diagnostics": diagnostics, "body": body}
+    graph: dict[str, Any] = {"schema_version": 1, "parser_semantics_version": PARSER_SEMANTICS_VERSION,
+                              "project": {"fingerprint": ""}, "nodes": nodes, "edges": edges,
+                              "callsites": callsites, "type_references": type_references,
+                              "import_references": import_references,
+                              "diagnostics": diagnostics, "body": body}
     sort_key = lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     # Nodes are emitted in deterministic containment order (file before its
     # declarations).  Sorting their complete JSON used to make newly added
     # optional payloads silently alter this public order.
-    for collection in ("edges", "callsites", "type_references", "diagnostics"):
+    for collection in ("edges", "callsites", "type_references", "import_references", "diagnostics"):
         graph[collection].sort(key=sort_key)
     graph["project"]["fingerprint"] = graph_fingerprint(graph)
     validate_graph_v1(graph)

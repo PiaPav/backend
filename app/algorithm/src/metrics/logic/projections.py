@@ -89,6 +89,12 @@ def _package(file: Mapping[str, Any]) -> str:
     return path.split(".", 1)[0] if path else "<root>"
 
 
+def _canonical_package(path: Any) -> str:
+    """Return package identity for a canonical relative file path."""
+    normalized = str(path or "")
+    return normalized.split("/", 1)[0] if "/" in normalized else "<root>"
+
+
 @dataclass(frozen=True, slots=True)
 class MetricsGraphProjection:
     legacy_files: tuple[LegacyFileProjection, ...]
@@ -96,6 +102,7 @@ class MetricsGraphProjection:
     nodes_by_id: Mapping[str, Mapping[str, Any]]
     node_ids_by_kind: Mapping[str, frozenset[str]]
     callsites: tuple[Mapping[str, Any], ...]
+    import_references: tuple[Mapping[str, Any], ...]
     directed_file_import_graph: DirectedGraphProjection
     directed_package_import_graph: DirectedGraphProjection
     undirected_file_import_graph: UndirectedGraphProjection
@@ -112,18 +119,40 @@ class MetricsGraphProjection:
             for file in raw_files
         )
         module_ids = effective_module_ids(raw_files)
-        file_nodes = frozenset(file.file_id for file in files)
+        raw_nodes = {
+            str(node["id"]): _immutable_snapshot(node)
+            for node in graph.get("nodes", [])
+            if isinstance(node, Mapping) and "id" in node
+        }
+        canonical_imports = graph.get("parser_semantics_version") == 4
+        file_nodes = (
+            frozenset(identifier for identifier, node in raw_nodes.items() if node.get("kind") in {"file", "module"})
+            if canonical_imports else frozenset(file.file_id for file in files)
+        )
         file_edges: set[tuple[str, str]] = set()
-        for file in files:
-            for imported in file.data.get("imports", []):
-                if not isinstance(imported, Mapping) or imported.get("from_lib") is not False:
+        if canonical_imports:
+            for edge in graph.get("edges", []):
+                if not isinstance(edge, Mapping) or edge.get("kind") != "imports":
                     continue
-                path = str(imported.get("path") or "")
-                target = module_ids.get(path, path)
-                if target in file_nodes and target != file.file_id:
-                    file_edges.add((file.file_id, target))
+                source, target = str(edge.get("source_id")), str(edge.get("target_id"))
+                if source in file_nodes and target in file_nodes and source != target:
+                    file_edges.add((source, target))
+        else:
+            for file in files:
+                for imported in file.data.get("imports", []):
+                    if not isinstance(imported, Mapping) or imported.get("from_lib") is not False:
+                        continue
+                    path = str(imported.get("path") or "")
+                    target = module_ids.get(path, path)
+                    if target in file_nodes and target != file.file_id:
+                        file_edges.add((file.file_id, target))
 
         package_of = {file.file_id: file.package for file in files}
+        if canonical_imports:
+            package_of = {
+                identifier: _canonical_package(node.get("path"))
+                for identifier, node in raw_nodes.items() if identifier in file_nodes
+            }
         packages = frozenset(package_of.values())
         package_edges = frozenset(
             (package_of[source], package_of[target])
@@ -132,11 +161,6 @@ class MetricsGraphProjection:
         )
         undirected_edges = frozenset(tuple(sorted(edge)) for edge in file_edges)
 
-        raw_nodes = {
-            str(node["id"]): _immutable_snapshot(node)
-            for node in graph.get("nodes", [])
-            if isinstance(node, Mapping) and "id" in node
-        }
         kinds: dict[str, set[str]] = {}
         for identifier, node in raw_nodes.items():
             kinds.setdefault(str(node.get("kind")), set()).add(identifier)
@@ -144,6 +168,11 @@ class MetricsGraphProjection:
             _immutable_snapshot(callsite)
             for callsite in graph.get("callsites", [])
             if isinstance(callsite, Mapping)
+        )
+        import_references = tuple(
+            _immutable_snapshot(reference)
+            for reference in graph.get("import_references", [])
+            if isinstance(reference, Mapping)
         )
         weights: Counter[tuple[str, str]] = Counter()
         for edge in graph.get("edges", []):
@@ -161,6 +190,7 @@ class MetricsGraphProjection:
                 kind: frozenset(identifiers) for kind, identifiers in kinds.items()
             }),
             callsites=callsites,
+            import_references=import_references,
             directed_file_import_graph=DirectedGraphProjection(file_nodes, frozenset(file_edges)),
             directed_package_import_graph=DirectedGraphProjection(packages, package_edges),
             undirected_file_import_graph=UndirectedGraphProjection(file_nodes, undirected_edges),

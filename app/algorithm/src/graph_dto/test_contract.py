@@ -32,7 +32,7 @@ def test_fingerprint_ignores_body_fingerprint_and_collection_permutations():
 
 def test_unknown_version_and_invalid_contains_are_rejected():
     graph = _graph()
-    graph["parser_semantics_version"] = 4
+    graph["parser_semantics_version"] = 5
     with pytest.raises(ValueError, match="Unsupported"):
         validate_graph_v1(graph)
     graph = _graph()
@@ -108,6 +108,80 @@ def test_semantics3_requires_facts_only_on_real_callables():
     validate_graph_v1(graph, verify_fingerprint=False)
     graph["nodes"][1].pop("complexity_facts")
     with pytest.raises(ValueError, match="complexity_facts"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+def _semantics4_graph():
+    graph = _semantics3_graph()
+    graph["parser_semantics_version"] = 4
+    graph["import_references"] = [{
+        "id": "import:a.py:1:0:1", "importer_id": "file:a.py",
+        "kind": "import", "module": "", "name": "third_party", "alias": None,
+        "level": 0, "location": {"path": "a.py", "line": 1, "column": 0},
+        "resolution": "external", "target_id": None, "candidate_ids": [],
+    }]
+    return graph
+
+
+def test_semantics4_requires_and_validates_import_references():
+    graph = _semantics4_graph()
+    validate_graph_v1(graph, verify_fingerprint=False)
+
+    graph["import_references"][0]["resolution"] = "unresolved"
+    graph["import_references"][0]["level"] = 1
+    graph["import_references"][0]["kind"] = "from"
+    validate_graph_v1(graph, verify_fingerprint=False)
+
+    graph["import_references"][0]["target_id"] = "file:a.py"
+    with pytest.raises(ValueError, match="non-exact"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+def test_semantics4_exact_import_reference_and_edge_are_one_to_one():
+    graph = _semantics4_graph()
+    reference = graph["import_references"][0]
+    reference.update({"name": "a", "resolution": "exact", "target_id": "file:a.py"})
+    graph["edges"].append({
+        "id": f"imports:{reference['id']}", "kind": "imports",
+        "source_id": "file:a.py", "target_id": "file:a.py",
+        "location": deepcopy(reference["location"]),
+    })
+    validate_graph_v1(graph, verify_fingerprint=False)
+
+    graph["edges"][-1]["id"] = "imports:orphan"
+    with pytest.raises(ValueError, match="exact resolution"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
+def test_semantics4_import_edge_location_and_resolution_combinations_are_strict():
+    graph = _semantics4_graph()
+    reference = graph["import_references"][0]
+    reference.update({"name": "a", "resolution": "exact", "target_id": "file:a.py"})
+    graph["edges"].append({
+        "id": f"imports:{reference['id']}", "kind": "imports",
+        "source_id": "file:a.py", "target_id": "file:a.py",
+        "location": {"path": "a.py", "line": 2, "column": 0},
+    })
+    with pytest.raises(ValueError, match="does not match"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+    for status, level in (("external", 1), ("unresolved", 0)):
+        graph = _semantics4_graph()
+        graph["import_references"][0].update({
+            "kind": "from", "module": "a", "resolution": status, "level": level,
+        })
+        with pytest.raises(ValueError, match=status):
+            validate_graph_v1(graph, verify_fingerprint=False)
+
+
+def test_semantics4_allows_star_from_import_but_rejects_empty_absolute_from():
+    graph = _semantics4_graph()
+    graph["import_references"][0].update({
+        "kind": "from", "module": "package", "name": "*",
+    })
+    validate_graph_v1(graph, verify_fingerprint=False)
+    graph["import_references"][0]["module"] = ""
+    with pytest.raises(ValueError, match="requires a module"):
         validate_graph_v1(graph, verify_fingerprint=False)
 
 

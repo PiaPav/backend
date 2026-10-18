@@ -170,6 +170,9 @@ class ImportInfo:
     file: Path | None = None
     line: int | None = None
     column: int | None = None
+    statement_line: int | None = None
+    statement_column: int | None = None
+    alias_index: int = 0
 
     @property
     def local_name(self) -> str:
@@ -180,6 +183,12 @@ class ImportInfo:
         if not self.module:
             return self.object_name.split(".", 1)[0]
         return self.object_name
+
+    @property
+    def resolution(self) -> str:
+        if self.local_module is not None:
+            return "exact"
+        return "unresolved" if self.level else "external"
 
 
 @dataclass(slots=True)
@@ -216,6 +225,7 @@ class ModuleInfo:
     source_bytes: bytes
     byte_order_mark_size: int = 0
     imports: list[ImportInfo] = field(default_factory=list)
+    canonical_imports: list[ImportInfo] = field(default_factory=list)
     constants: list[FieldInfo] = field(default_factory=list)
     classes: list[ClassInfo] = field(default_factory=list)
     functions: list[FunctionInfo] = field(default_factory=list)
