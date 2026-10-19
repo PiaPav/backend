@@ -1,5 +1,6 @@
 import json
 import ast
+import os
 from copy import deepcopy
 from collections.abc import Callable
 from pathlib import Path
@@ -12,6 +13,12 @@ from metrics import calculate_graph_metrics, calculate_metrics, load_graph
 from graph_dto import graph_fingerprint
 from parser import parse_project
 from metrics.logic.projections import MetricsGraphProjection, iter_legacy_calls
+from metrics.logic.serialization import (
+    compact_graph_metrics,
+    restore_graph_metrics,
+    save_compact_graph_metrics,
+    save_graph_metrics,
+)
 
 
 def _v3_metrics(graph: dict) -> dict:
@@ -545,6 +552,44 @@ def test_full_metrics_and_file_api_are_deterministic(tmp_path: Path) -> None:
     assert result["metrics"]["activity"]["average_calls_per_call_owner"] == 1.0
 
 
+def test_calculate_metrics_keeps_canonical_json_bytes(tmp_path: Path) -> None:
+    graph_path = tmp_path / "graph.json"
+    graph_path.write_text(json.dumps(_graph()), encoding="utf-8")
+
+    result_path = calculate_metrics(graph_path, tmp_path / "nested" / "metrics.json")
+    envelope = json.loads(result_path.read_text(encoding="utf-8"))
+
+    assert result_path == result_path.resolve()
+    assert result_path.read_bytes() == (
+        json.dumps(envelope, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+
+
+def test_compatibility_json_writers_preserve_formats_and_restore(tmp_path: Path) -> None:
+    metrics = {
+        "zeta": "Привет",
+        "rows": [{"name": "один", "value": 1}, {"name": "два", "value": 2}],
+    }
+
+    full_path = save_graph_metrics(metrics, tmp_path / "full" / "metrics.json")
+    compact_path = save_compact_graph_metrics(metrics, tmp_path / "compact.json")
+
+    assert full_path == full_path.resolve()
+    assert compact_path == compact_path.resolve()
+    assert full_path.read_bytes() == (
+        json.dumps(metrics, ensure_ascii=False, indent=2) + "\n"
+    ).encode("utf-8")
+    assert compact_path.read_bytes() == (
+        json.dumps(
+            compact_graph_metrics(metrics),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ) + "\n"
+    ).encode("utf-8")
+    assert restore_graph_metrics(json.loads(compact_path.read_text(encoding="utf-8"))) == metrics
+    assert not list(tmp_path.glob(".metrics.json.*"))
+
+
 def test_average_calls_per_call_owner_keeps_legacy_hybrid_denominator() -> None:
     """All callables count, while only modules that call are module owners."""
     function = lambda name, calls=[]: {
@@ -724,11 +769,99 @@ def test_calculate_metrics_cleans_up_when_replace_fails(tmp_path: Path) -> None:
     target = tmp_path / "metrics.json"
     target.write_text("old metrics", encoding="utf-8")
 
-    with patch("metrics.core.os.replace", side_effect=OSError("injected failure")):
+    with patch("metrics.logic.serialization.os.replace", side_effect=OSError("injected failure")):
         with pytest.raises(OSError, match="injected failure"):
             calculate_metrics(graph_path, target)
 
     assert target.read_text(encoding="utf-8") == "old metrics"
+    assert not list(tmp_path.glob(".metrics.json.*"))
+
+
+def test_compatibility_writer_cleans_up_on_serialization_failure(tmp_path: Path) -> None:
+    target = tmp_path / "metrics.json"
+    target.write_text("old metrics", encoding="utf-8")
+
+    with pytest.raises(TypeError):
+        save_graph_metrics({"invalid": object()}, target)
+
+    assert target.read_text(encoding="utf-8") == "old metrics"
+    assert not list(tmp_path.glob(".metrics.json.*"))
+
+
+def test_compatibility_writer_cleans_up_on_keyboard_interrupt(tmp_path: Path) -> None:
+    target = tmp_path / "metrics.json"
+    target.write_text("old metrics", encoding="utf-8")
+
+    interruption = KeyboardInterrupt()
+    with patch(
+        "metrics.logic.serialization.json.dump", side_effect=interruption
+    ):
+        with pytest.raises(KeyboardInterrupt) as caught:
+            save_graph_metrics({"value": 1}, target)
+
+    assert caught.value is interruption
+    assert target.read_text(encoding="utf-8") == "old metrics"
+    assert not list(tmp_path.glob(".metrics.json.*"))
+
+
+def test_compatibility_writer_closes_descriptor_when_fdopen_fails(tmp_path: Path) -> None:
+    from metrics.logic import serialization
+
+    target = tmp_path / "metrics.json"
+    target.write_text("old metrics", encoding="utf-8")
+    original_mkstemp = serialization.tempfile.mkstemp
+    descriptors: list[int] = []
+
+    def capture_mkstemp(*args, **kwargs) -> tuple[int, str]:
+        descriptor, temporary = original_mkstemp(*args, **kwargs)
+        descriptors.append(descriptor)
+        return descriptor, temporary
+
+    failure = KeyboardInterrupt()
+    with patch(
+        "metrics.logic.serialization.tempfile.mkstemp", side_effect=capture_mkstemp
+    ), patch("metrics.logic.serialization.os.fdopen", side_effect=failure):
+        with pytest.raises(KeyboardInterrupt) as caught:
+            save_graph_metrics({"value": 1}, target)
+
+    assert caught.value is failure
+    assert len(descriptors) == 1
+    with pytest.raises(OSError):
+        os.fstat(descriptors[0])
+    assert target.read_text(encoding="utf-8") == "old metrics"
+    assert not list(tmp_path.glob(".metrics.json.*"))
+
+
+def test_cleanup_failure_does_not_mask_serialization_failure(tmp_path: Path) -> None:
+    from metrics.logic import serialization
+
+    target = tmp_path / "metrics.json"
+    target.write_text("old metrics", encoding="utf-8")
+    original_unlink = serialization.os.unlink
+    unlink_calls = 0
+
+    def fail_first_unlink(path: str | Path) -> None:
+        nonlocal unlink_calls
+        unlink_calls += 1
+        if unlink_calls == 1:
+            raise SystemExit("injected cleanup failure")
+        original_unlink(path)
+
+    failure = ValueError("injected serialization failure")
+    try:
+        with patch(
+            "metrics.logic.serialization.json.dump", side_effect=failure
+        ), patch("metrics.logic.serialization.os.unlink", side_effect=fail_first_unlink):
+            with pytest.raises(ValueError) as caught:
+                save_graph_metrics({"value": 1}, target)
+
+        temporary_files = list(tmp_path.glob(".metrics.json.*"))
+        assert caught.value is failure
+        assert target.read_text(encoding="utf-8") == "old metrics"
+        assert len(temporary_files) == 1
+    finally:
+        for temporary_file in tmp_path.glob(".metrics.json.*"):
+            original_unlink(temporary_file)
     assert not list(tmp_path.glob(".metrics.json.*"))
 
 

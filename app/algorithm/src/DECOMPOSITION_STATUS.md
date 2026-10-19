@@ -1,6 +1,6 @@
 # Статус декомпозиции
 
-Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 192 passed, 0 failed, 0 skipped.
+Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 198 passed, 0 failed, 0 skipped.
 
 ## Общий итог
 
@@ -8,7 +8,7 @@
 |---|---|
 | 1. Фиксация текущей семантики | **выполнен** |
 | 2. Независимый файловый API Parser | **выполнен** |
-| 3. Независимый файловый API Metrics | **частично / почти выполнен**: semantics v6 полностью bodyless; не переиспользуется существующая serialization |
+| 3. Независимый файловый API Metrics | **выполнен** |
 | 4. Версионированный Graph DTO | **частично / object-relations, imports и structural declarations выполнены** |
 | 5. Формулы сложности в Metrics | **выполнен для semantics v6**: Metrics использует canonical facts и не зависит от legacy `body` |
 | 6. Аналитические проекции | **частично / единая внутренняя read-only модель введена** |
@@ -32,11 +32,11 @@
 
 1. **Выполнен.** `metrics/core.py::load_graph`, `_load_graph_bytes`, `_validate_legacy_graph` и `graph_dto/contract.py::validate_graph_v1` загружают и валидируют legacy/v1; semantics v6 принимается без `body`, а v1-v5 сохраняют compatibility validation. Негативные сценарии есть в `metrics/test_core.py` и validator tests.
 2. **Выполнен.** `metrics/core.py::calculate_metrics(graph_path, output_path) -> Path` реализует файловый контракт. Остатка в текущем scope нет.
-3. **Частично.** Фасад переиспользует `metrics/logic/calculator.py::calculate_graph_metrics`, но не использует `metrics/logic/serialization.py`: `metrics/core.py::calculate_metrics` самостоятельно формирует Metrics envelope и атомарно пишет JSON; детерминизм и cleanup покрыты `test_full_metrics_and_file_api_are_deterministic` и `test_calculate_metrics_cleans_up_when_replace_fails`. Остаток: переиспользовать или адаптировать существующую serialization либо формально пересмотреть этот пункт плана, документировав новый writer.
+3. **Выполнен.** Фасад переиспользует `metrics/logic/calculator.py::calculate_graph_metrics` и внутренний канонический writer из `metrics/logic/serialization.py`. Единый writer атомарно записывает UTF-8 JSON через временный файл рядом с target и `os.replace`, выполняет best-effort cleanup без маскировки исходной ошибки и возвращает resolved `Path`. Канонический Metrics DTO сохраняет прежние детерминированные байты (`indent=2`, sorted keys, LF и trailing newline), а публичные full/compact compatibility writers сохраняют свои форматы. Детерминизм, exact bytes, Unicode, restore equivalence и cleanup покрыты `metrics/test_core.py`.
 4. **Выполнен.** Legacy-чтение сосредоточено в `metrics/core.py`, а идентичность файлов — в `metrics/logic/identity.py` (`legacy_file_id`, `graph_files`, `effective_module_ids`). Остатка в переходном scope нет.
 5. **Выполнен.** Runtime-код `metrics` не импортирует Parser и читает только graph-файл; ограничение проверяет `metrics/test_core.py::test_no_runtime_cross_package_or_legacy_imports`. Остатка нет.
 
-Файловый API, loader/validation, identity и runtime independence готовы. Semantics v6 рассчитывается без `body`; v1-v5 сохраняют legacy adapter. Этап остаётся частично закрытым только потому, что существующая serialization не переиспользуется и это решение ещё не формализовано в плане.
+Файловый API, loader/validation, identity, runtime independence и единая атомарная serialization готовы. Semantics v6 рассчитывается без `body`; v1-v5 сохраняют legacy adapter. Остатка по этапу 3 нет.
 
 ## Этап 4. Ввести версионированный Graph DTO
 
@@ -71,9 +71,9 @@ Parser semantics v6 добавляет `owner_structural_facts` для кажд�
 
 ## Вывод относительно ожидаемого состояния
 
-Этапы 1 и 2 подтверждены полностью. Этап 3 частично / почти выполнен: файловый API, loader/validation, identity и runtime independence готовы, semantics v6 полностью bodyless; открытым остаётся решение по существующей serialization. В этапе 4 завершены object-relations, canonical imports, structural declarations и owner structural facts. Этап 5 выполнен для текущей semantics v6: complexity и activity используют canonical facts без изменения чисел; v1-v5 adapters сохранены только для совместимости. В этапе 6 введена единая внутренняя read-only projection-модель и централизованы topology/traversal views; полный этап не объявляется завершённым до отдельного удаления legacy adapters.
+Этапы 1, 2 и 3 подтверждены полностью: оба файловых API, loader/validation, identity, runtime independence и единая атомарная Metrics serialization готовы; semantics v6 полностью bodyless. В этапе 4 завершены object-relations, canonical imports, structural declarations и owner structural facts. Этап 5 выполнен для текущей semantics v6: complexity и activity используют canonical facts без изменения чисел; v1-v5 adapters сохранены только для совместимости. В этапе 6 введена единая внутренняя read-only projection-модель и централизованы topology/traversal views; полный этап не объявляется завершённым до отдельного удаления legacy adapters.
 
 ## Приоритет доработок
 
-1. Формально решить пункт 3.3: адаптировать существующую serialization либо документированно закрепить самостоятельный атомарный writer Metrics.
-2. Отдельным версионированным изменением спланировать прекращение emission `body` Parser и последующее удаление v1-v5 legacy adapters, не смешивая это с semantics v6.
+1. Отдельным версионированным изменением спланировать прекращение emission `body` Parser и последующее удаление v1-v5 legacy adapters, не смешивая это с semantics v6.
+2. После фиксации границ совместимости завершить этап 6 статическими запретами на новые legacy topology/resolution paths.

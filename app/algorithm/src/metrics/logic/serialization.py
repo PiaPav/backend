@@ -3,12 +3,69 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 _TABLE_COLUMNS = "$columns"
 _TABLE_ROWS = "$rows"
+
+
+def _save_json(
+    value: Any,
+    output_path: str | Path,
+    *,
+    indent: int | None = None,
+    sort_keys: bool = False,
+    separators: tuple[str, str] | None = None,
+) -> Path:
+    """Atomically write one UTF-8 JSON document with a trailing newline."""
+    target = Path(output_path).expanduser()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{target.name}.", dir=target.parent
+    )
+    descriptor_open = True
+    try:
+        handle = os.fdopen(descriptor, "w", encoding="utf-8", newline="\n")
+        descriptor_open = False
+        try:
+            json.dump(
+                value,
+                handle,
+                ensure_ascii=False,
+                indent=indent,
+                sort_keys=sort_keys,
+                separators=separators,
+            )
+            handle.write("\n")
+        except BaseException:
+            try:
+                handle.close()
+            except BaseException:
+                pass
+            raise
+        handle.close()
+        os.replace(temporary, target)
+    except BaseException:
+        if descriptor_open:
+            try:
+                os.close(descriptor)
+            except BaseException:
+                pass
+        try:
+            os.unlink(temporary)
+        except BaseException:
+            pass
+        raise
+    return target.resolve()
+
+
+def _save_metrics_dto(metrics: Mapping[str, Any], output_path: str | Path) -> Path:
+    """Persist the canonical Metrics DTO without changing its byte format."""
+    return _save_json(metrics, output_path, indent=2, sort_keys=True)
 
 
 def _json_size(value: Any) -> int:
@@ -21,13 +78,7 @@ def save_graph_metrics(
     metrics: Mapping[str, Any], output_path: str | Path
 ) -> Path:
     """Write the complete, human-readable metrics JSON and return its path."""
-    path = Path(output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(metrics, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    return path.resolve()
+    return _save_json(metrics, output_path, indent=2)
 
 
 def compact_graph_metrics(metrics: Mapping[str, Any]) -> dict[str, Any]:
@@ -101,15 +152,8 @@ def save_compact_graph_metrics(
     metrics: Mapping[str, Any], output_path: str | Path
 ) -> Path:
     """Write compact metrics JSON suitable for inclusion in an LLM prompt."""
-    path = Path(output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
-            compact_graph_metrics(metrics),
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
-        + "\n",
-        encoding="utf-8",
+    return _save_json(
+        compact_graph_metrics(metrics),
+        output_path,
+        separators=(",", ":"),
     )
-    return path.resolve()

@@ -7,6 +7,12 @@ calculated entirely from canonical content and does not validate or read an
 optional `body`. Canonical identity and fingerprint always come only from
 canonical v1 content. Compatibility results include
 `input.legacy_body_fingerprint`; semantics-v6 results do not. Output is atomic.
+The canonical writer stores UTF-8 JSON with LF line endings,
+`ensure_ascii=False`, two-space indentation, sorted keys and exactly one final
+newline. It writes a temporary file beside the target and publishes it with
+`os.replace`; failures preserve an existing target and trigger best-effort
+temporary-file cleanup without masking the original error. The compatibility full and compact writers use the same atomic delivery
+while retaining their established key order and compact encoding.
 The exhaustive field-to-consumer matrix for this compatibility projection is
 maintained in [`LEGACY_GRAPH_CONTRACT.md`](LEGACY_GRAPH_CONTRACT.md).
 Version dispatch is explicit:

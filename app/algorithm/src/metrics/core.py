@@ -3,12 +3,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
 from .logic.calculator import calculate_graph_metrics
+from .logic.serialization import _save_metrics_dto
 from graph_dto import graph_fingerprint, validate_graph_v1
 
 __all__ = ["calculate_graph_metrics", "calculate_metrics", "load_graph"]
@@ -212,18 +211,4 @@ def calculate_metrics(graph_path: Path, output_path: Path) -> Path:
             canonical_calls=is_canonical_v2,
         ),
     }
-    target = output_path.expanduser().resolve()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
-            json.dump(envelope, handle, ensure_ascii=False, indent=2, sort_keys=True)
-            handle.write("\n")
-        os.replace(temporary, target)
-    except Exception:
-        try:
-            os.unlink(temporary)
-        except FileNotFoundError:
-            pass
-        raise
-    return target
+    return _save_metrics_dto(envelope, output_path)
