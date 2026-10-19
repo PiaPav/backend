@@ -1,12 +1,12 @@
 # Metrics file contract
 
 `calculate_metrics(graph_path: Path, output_path: Path) -> Path` accepts a
-legacy unversioned parser graph or a validated Graph DTO v1. During migration,
-some formulas still consume its required legacy `body` adapter; canonical
-identity and fingerprint always come only from canonical v1 content. Until all
-formulas are migrated, a result is identified by the pair `input.graph_fingerprint`
-and `input.legacy_body_fingerprint`; the latter changes with every semantic
-change to the actual legacy metric input. Output is atomic.
+legacy unversioned parser graph or a validated Graph DTO v1. Parser semantics
+v1-v5 retain the required legacy `body` compatibility adapter. Semantics v6 is
+calculated entirely from canonical content and does not validate or read an
+optional `body`. Canonical identity and fingerprint always come only from
+canonical v1 content. Compatibility results include
+`input.legacy_body_fingerprint`; semantics-v6 results do not. Output is atomic.
 The exhaustive field-to-consumer matrix for this compatibility projection is
 maintained in [`LEGACY_GRAPH_CONTRACT.md`](LEGACY_GRAPH_CONTRACT.md).
 Version dispatch is explicit:
@@ -21,16 +21,19 @@ Version dispatch is explicit:
 - Graph DTO v1 / parser semantics v5 uses metrics semantics v4; formulas remain
   unchanged, while structural size and package class populations use canonical
   declaration nodes.
+- Graph DTO v1 / parser semantics v6 uses metrics semantics v4; activity also
+  uses canonical structural owner facts and the entire calculation is bodyless.
 
 Semantics v3 builds object and call topology exclusively from canonical node IDs,
 typed edges, callsites and type references.
 Semantics v4 derives callable complexity from canonical facts keyed by node ID.
 Quality, WMC and call-graph risk use that projection; transitional body mutation
 cannot affect them. Synthetic constructors are excluded from those populations.
-Parser semantics v5 additionally derives `size` and package file/class/abstract
+Parser semantics v5 and v6 additionally derive `size` and package file/class/abstract
 populations from canonical roots, declaration nodes and `class_kind`. Synthetic
-constructors do not increase structural method counts. Activity and its hybrid
-denominators remain body-backed, so the compatibility mirror is still required.
+constructors do not increase structural method counts. In semantics v6,
+activity derives call and direct-import occurrences from
+`owner_structural_facts`; body mutation or omission cannot affect it.
 
 Current metrics semantics v1-v4 intentionally preserve the historical hybrid denominator
 of `activity.average_calls_per_call_owner`: every declared function and method
@@ -73,8 +76,8 @@ canonical nodes/callsites, directed file and package imports in the explicit
 `dependent -> dependency` direction, normalized undirected file pairs, and an
 ID-only weighted `calls`/`awaits` graph. Its DTOs are frozen and its topology
 collections are immutable. This is an internal data/topology view: it does not
-change formulas, perform legacy string resolution, or remove the required
-transitional `body` adapter.
+change formulas or perform legacy string resolution. The transitional `body`
+adapter remains only for parser semantics v1-v5.
 For parser semantics v4 and later, import references are exposed as an immutable snapshot
 and import topology is independent of legacy `body[*].file.imports`; older
 parser semantics retain the compatibility projection.

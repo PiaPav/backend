@@ -109,7 +109,7 @@ def test_canonical_import_references_distinguish_all_static_outcomes(tmp_path: P
     )
 
     dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
-    assert dto["parser_semantics_version"] == 5
+    assert dto["parser_semantics_version"] == 6
     references = [
         item for item in dto["import_references"]
         if item["importer_id"] == "file:pkg/consumer.py"
@@ -903,7 +903,7 @@ def test_semantics2_object_relations_cover_imports_types_and_field_accesses(tmp_
         encoding="utf-8",
     )
     dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
-    assert dto["parser_semantics_version"] == 5
+    assert dto["parser_semantics_version"] == 6
     nodes = {node["id"]: node for node in dto["nodes"]}
     fields = [node for node in nodes.values() if node["kind"] == "field"]
     assert {node["qualified_name"] for node in fields} >= {
@@ -1283,7 +1283,7 @@ def test_semantics3_complexity_facts_exactly_reproduce_legacy_rich_flow(tmp_path
     graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
     node = next(item for item in graph["nodes"] if item["kind"] == "function")
     legacy = graph["body"][0]["file"]["functions"][0]["metrics"]
-    assert graph["parser_semantics_version"] == 5
+    assert graph["parser_semantics_version"] == 6
     assert metrics_from_facts(node["complexity_facts"]) == legacy
     assert "hidden" not in legacy["self_attribute_accesses"]
 
@@ -1369,3 +1369,54 @@ def test_semantics5_class_kind_matches_legacy_class_type(tmp_path: Path) -> None
         "Plain": "class", "Data": "dataclass", "Choice": "enum",
         "Abstract": "abstract", "Inherited": "abstract", "Implemented": "class",
     }
+
+
+def test_semantics6_structural_facts_exactly_mirror_legacy_activity_owners(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "local.py").write_text("def inner(): pass\n", encoding="utf-8")
+    (source / "sample.py").write_text(
+        "import local\nimport third_party\nouter(local.inner())\n"
+        "class Empty: pass\n"
+        "class Real:\n    def method(self):\n        import local\n        outer(local.inner())\n"
+        "def function():\n    outer(local.inner())\n"
+        "Empty()\n",
+        encoding="utf-8",
+    )
+    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+
+    def count_calls(calls):
+        def count(call):
+            return 1 + sum(
+                count(value)
+                for argument in call.get("args", []) if isinstance(argument, dict)
+                for value in (argument.get("value"),)
+                if isinstance(value, dict) and value.get("type") == "call"
+            )
+        return sum(count(call) for call in calls if isinstance(call, dict))
+
+    facts = {item["owner_id"]: item for item in graph["owner_structural_facts"]}
+    nodes = {item["id"]: item for item in graph["nodes"]}
+    sample = next(item["file"] for item in graph["body"] if item["file"]["name"] == "sample")
+    expected_calls = {"file:sample.py": count_calls(sample["calls"])}
+    expected_calls.update({
+        next(node_id for node_id, node in nodes.items() if node["qualified_name"] == f"sample.{item['name']}"):
+            count_calls(item["calls"])
+        for item in sample["functions"]
+    })
+    for class_item in sample["classes"]:
+        for method in class_item["methods"]:
+            owner = next(node_id for node_id, node in nodes.items()
+                         if node["qualified_name"] == f"sample.{class_item['name']}.{method['name']}")
+            expected_calls[owner] = count_calls(method["calls"])
+
+    assert {owner: facts[owner]["call_occurrences"] for owner in expected_calls} == expected_calls
+    assert facts["file:sample.py"]["direct_import_occurrences"] == {
+        "project_local": 1, "non_project": 1,
+    }
+    assert set(facts) == {
+        node_id for node_id, node in nodes.items()
+        if node["kind"] == "file"
+        or (node["kind"] in {"function", "method"} and not node.get("synthetic"))
+    }
+    assert not any(nodes[owner].get("synthetic") for owner in facts)

@@ -1370,6 +1370,7 @@ def test_semantics5_activity_remains_legacy_body_backed(tmp_path: Path) -> None:
     source.mkdir()
     (source / "a.py").write_text("import os\nclass C:\n def m(self):\n  print(1)\n", encoding="utf-8")
     graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    graph["parser_semantics_version"] = 5
     baseline = calculate_graph_metrics(graph)["activity"]
     changed = deepcopy(graph)
     file = changed["body"][0]["file"]
@@ -1419,3 +1420,55 @@ def test_semantics4_size_and_package_population_remain_legacy_backed() -> None:
     assert metrics["size"]["methods"] == 0
     assert metrics["architecture"]["packages"][0]["package"] == "legacy"
     assert metrics["architecture"]["packages"][0]["classes"] == 1
+
+
+def test_semantics6_metrics_are_bodyless_and_activity_uses_structural_facts(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "local.py").write_text("def target(): pass\n", encoding="utf-8")
+    (source / "sample.py").write_text(
+        "import local\nimport external_package\nlocal.target()\n"
+        "class Empty: pass\nclass C:\n    def method(self):\n        local.target()\n"
+        "def idle(): pass\nEmpty()\n",
+        encoding="utf-8",
+    )
+    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    baseline = calculate_graph_metrics(graph)
+    bodyless = deepcopy(graph)
+    del bodyless["body"]
+
+    assert calculate_graph_metrics(bodyless) == baseline
+    assert baseline["activity"] == {
+        "calls": 3,
+        "local_imports": 1,
+        "external_imports": 1,
+        "average_calls_per_callable": 0.3333,
+        "average_calls_per_call_owner": 0.75,
+        "average_methods_per_class": 0.5,
+    }
+
+    graph_path = tmp_path / "bodyless.json"
+    graph_path.write_text(json.dumps(bodyless), encoding="utf-8")
+    envelope = json.loads(calculate_metrics(
+        graph_path, tmp_path / "metrics.json"
+    ).read_text(encoding="utf-8"))
+    assert envelope["metrics_semantics_version"] == 4
+    assert "legacy_body_fingerprint" not in envelope["input"]
+    assert envelope["metrics"] == baseline
+
+
+def test_semantics6_activity_zero_denominators_are_floats() -> None:
+    graph = {
+        "parser_semantics_version": 6,
+        "nodes": [{"id": "file:empty.py", "kind": "file", "qualified_name": "empty",
+                   "path": "empty.py"}],
+        "edges": [], "callsites": [], "import_references": [],
+        "owner_structural_facts": [{
+            "owner_id": "file:empty.py", "call_occurrences": 0,
+            "direct_import_occurrences": {"project_local": 0, "non_project": 0},
+        }],
+    }
+    activity = calculate_graph_metrics(graph)["activity"]
+    assert activity["average_calls_per_callable"] == 0.0
+    assert activity["average_calls_per_call_owner"] == 0.0
+    assert activity["average_methods_per_class"] == 0.0

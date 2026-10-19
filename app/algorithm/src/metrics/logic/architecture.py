@@ -86,7 +86,7 @@ def calculate_architecture_metrics(
     *,
     projection: MetricsGraphProjection | None = None,
 ) -> dict[str, Any]:
-    if projection is not None and projection.parser_semantics_version == 5:
+    if projection is not None and projection.parser_semantics_version in {5, 6}:
         root_ids = (
             projection.node_ids_by_kind.get("file", frozenset())
             | projection.node_ids_by_kind.get("module", frozenset())
@@ -123,7 +123,7 @@ def calculate_architecture_metrics(
 
     class_counts = {package: 0 for package in packages}
     abstract_counts = {package: 0 for package in packages}
-    if projection is not None and projection.parser_semantics_version == 5:
+    if projection is not None and projection.parser_semantics_version in {5, 6}:
         # Constants first appear in semantics v5, whose package populations are
         # canonical and keyed by owning root IDs rather than module names.
         canonical_nodes = projection.nodes_by_id

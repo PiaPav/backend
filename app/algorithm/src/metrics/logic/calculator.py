@@ -112,7 +112,8 @@ def calculate_graph_metrics(
 ) -> dict[str, Any]:
     """Return deterministic size, coupling, density and connectivity metrics."""
     projection = MetricsGraphProjection.from_graph(graph)
-    semantics_v5 = graph.get("parser_semantics_version") == 5
+    semantics_v5_plus = graph.get("parser_semantics_version") in {5, 6}
+    semantics_v6 = graph.get("parser_semantics_version") == 6
     files = [file.data for file in projection.legacy_files]
     file_graph = projection.directed_file_import_graph
     nodes = set(file_graph.nodes)
@@ -153,6 +154,20 @@ def calculate_graph_metrics(
         for item in file.get("imports", [])
         if isinstance(item, Mapping) and item.get("from_lib") is True
     )
+    if semantics_v6:
+        facts = projection.owner_structural_facts_by_id
+        roots = (projection.node_ids_by_kind.get("file", frozenset())
+                 | projection.node_ids_by_kind.get("module", frozenset()))
+        callable_ids = (
+            projection.node_ids_by_kind.get("function", frozenset())
+            | {identifier for identifier in projection.node_ids_by_kind.get("method", frozenset())
+               if projection.nodes_by_id[identifier].get("synthetic") is not True}
+        )
+        module_call_count = sum(int(facts[item]["call_occurrences"]) for item in roots)
+        callable_call_count = sum(int(facts[item]["call_occurrences"]) for item in callable_ids)
+        call_count = module_call_count + callable_call_count
+        local_imports = sum(int(facts[item]["direct_import_occurrences"]["project_local"]) for item in roots)
+        external_imports = sum(int(facts[item]["direct_import_occurrences"]["non_project"]) for item in roots)
 
     fan_in = {node: 0 for node in nodes}
     fan_out = {node: 0 for node in nodes}
@@ -167,12 +182,18 @@ def calculate_graph_metrics(
         if len(component) > 1
     ])
     node_count = len(nodes)
-    callable_count = len(functions) + len(methods)
-    call_owner_count = callable_count + sum(bool(file.get("calls")) for file in files)
+    callable_count = len(callable_ids) if semantics_v6 else len(functions) + len(methods)
+    call_owner_count = (callable_count + sum(facts[item]["call_occurrences"] > 0 for item in roots)
+                        if semantics_v6 else callable_count + sum(bool(file.get("calls")) for file in files))
+    method_count = (sum(projection.nodes_by_id[item].get("synthetic") is not True
+                        for item in projection.node_ids_by_kind.get("method", frozenset()))
+                    if semantics_v6 else len(methods))
+    class_count = (len(projection.node_ids_by_kind.get("class", frozenset()))
+                   if semantics_v6 else len(classes))
     density_denominator = node_count * (node_count - 1)
 
     return {
-        "size": _canonical_size(graph) if graph.get("parser_semantics_version") == 5 else {
+        "size": _canonical_size(graph) if semantics_v5_plus else {
             "directories": _directory_count(files),
             "files": len(files),
             "classes": len(classes),
@@ -199,8 +220,8 @@ def calculate_graph_metrics(
             "average_calls_per_call_owner": round(call_count / call_owner_count, 4)
             if call_owner_count
             else 0.0,
-            "average_methods_per_class": round(len(methods) / len(classes), 4)
-            if classes
+            "average_methods_per_class": round(method_count / class_count, 4)
+            if class_count
             else 0.0,
         },
         "dependency_graph": {
@@ -227,10 +248,10 @@ def calculate_graph_metrics(
             files, nodes, edges, legacy_file_id, projection=projection
         ),
         "code_quality": calculate_quality_metrics(graph, projection=projection),
-        "object_oriented": calculate_canonical_object_metrics(graph, projection=projection) if canonical_objects or semantics_v5 else calculate_object_metrics(graph, cyclic_dit_is_none=canonical_mode, projection=projection),
+        "object_oriented": calculate_canonical_object_metrics(graph, projection=projection) if canonical_objects or semantics_v5_plus else calculate_object_metrics(graph, cyclic_dit_is_none=canonical_mode, projection=projection),
         "call_graph": calculate_call_graph_metrics(
             graph, legacy_resolution=legacy_resolution,
-            canonical=canonical_calls or semantics_v5,
+            canonical=canonical_calls or semantics_v5_plus,
             projection=projection,
         ),
     }

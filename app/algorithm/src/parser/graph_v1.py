@@ -51,12 +51,33 @@ def _complexity_facts(module: ModuleInfo, facts: FunctionComplexityFacts) -> dic
     }
 
 
+def _legacy_call_occurrences(calls: list[Any]) -> int:
+    count = 0
+    for call in calls:
+        count += 1
+        for argument in getattr(call, "args", []):
+            value = getattr(argument, "value", None)
+            if isinstance(value, dict) and value.get("type") == "call":
+                count += _legacy_mapping_call_occurrences(value)
+    return count
+
+
+def _legacy_mapping_call_occurrences(call: dict[str, Any]) -> int:
+    return 1 + sum(
+        _legacy_mapping_call_occurrences(value)
+        for argument in call.get("args", []) if isinstance(argument, dict)
+        for value in (argument.get("value"),)
+        if isinstance(value, dict) and value.get("type") == "call"
+    )
+
+
 def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str, Any]:
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
     callsites: list[dict[str, Any]] = []
     type_references: list[dict[str, Any]] = []
     import_references: list[dict[str, Any]] = []
+    owner_structural_facts: list[dict[str, Any]] = []
     declaration_ids: dict[int, str] = {}
     target_ids: dict[tuple[str, int], str] = {}
     module_files = {id(module): _file_id(module) for module in index.modules}
@@ -76,6 +97,13 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
         path = module.relative_path.as_posix()
         nodes.append({"id": file_id, "kind": "file", "qualified_name": module.module,
                       "parent_id": None, "path": path, "location": _location(module, 1, 0)})
+        owner_structural_facts.append({
+            "owner_id": file_id, "call_occurrences": _legacy_call_occurrences(module.calls),
+            "direct_import_occurrences": {
+                "project_local": sum(item.from_lib is False for item in module.imports),
+                "non_project": sum(item.from_lib is True for item in module.imports),
+            },
+        })
         for class_info in module.classes:
             class_id = f"class:{path}:{class_info.line or 1}:{class_info.column or 0}:{class_info.name}"
             nodes.append({"id": class_id, "kind": "class", "class_kind": class_info.kind,
@@ -100,6 +128,8 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
                 edges.append({"id": f"contains:{class_id}->{method_id}", "kind": "contains", "source_id": class_id, "target_id": method_id})
                 declaration_ids[id(method)] = method_id
                 target_ids[("method", id(method))] = method_id
+                owner_structural_facts.append({"owner_id": method_id,
+                                               "call_occurrences": _legacy_call_occurrences(method.calls)})
             constructor_key = ("constructor", id(class_info))
             if (
                 constructor_key in required_constructors
@@ -121,6 +151,8 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
             edges.append({"id": f"contains:{file_id}->{function_id}", "kind": "contains", "source_id": file_id, "target_id": function_id})
             declaration_ids[id(function)] = function_id
             target_ids[("function", id(function))] = function_id
+            owner_structural_facts.append({"owner_id": function_id,
+                                           "call_occurrences": _legacy_call_occurrences(function.calls)})
         for constant_ordinal, constant in enumerate(module.constants, 1):
             constant_id = (f"constant:{path}:{constant.line or 1}:{constant.column or 0}:"
                            f"{constant.name}:{constant_ordinal}")
@@ -224,12 +256,13 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
                               "project": {"fingerprint": ""}, "nodes": nodes, "edges": edges,
                               "callsites": callsites, "type_references": type_references,
                               "import_references": import_references,
+                              "owner_structural_facts": owner_structural_facts,
                               "diagnostics": diagnostics, "body": body}
     sort_key = lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     # Nodes are emitted in deterministic containment order (file before its
     # declarations).  Sorting their complete JSON used to make newly added
     # optional payloads silently alter this public order.
-    for collection in ("edges", "callsites", "type_references", "import_references", "diagnostics"):
+    for collection in ("edges", "callsites", "type_references", "import_references", "owner_structural_facts", "diagnostics"):
         graph[collection].sort(key=sort_key)
     graph["project"]["fingerprint"] = graph_fingerprint(graph)
     validate_graph_v1(graph)

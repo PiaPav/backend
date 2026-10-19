@@ -104,6 +104,7 @@ class MetricsGraphProjection:
     node_ids_by_kind: Mapping[str, frozenset[str]]
     callsites: tuple[Mapping[str, Any], ...]
     import_references: tuple[Mapping[str, Any], ...]
+    owner_structural_facts_by_id: Mapping[str, Mapping[str, Any]]
     directed_file_import_graph: DirectedGraphProjection
     directed_package_import_graph: DirectedGraphProjection
     undirected_file_import_graph: UndirectedGraphProjection
@@ -175,6 +176,11 @@ class MetricsGraphProjection:
             for reference in graph.get("import_references", [])
             if isinstance(reference, Mapping)
         )
+        owner_facts = {
+            str(fact["owner_id"]): _immutable_snapshot(fact)
+            for fact in graph.get("owner_structural_facts", [])
+            if isinstance(fact, Mapping) and "owner_id" in fact
+        }
         weights: Counter[tuple[str, str]] = Counter()
         for edge in graph.get("edges", []):
             if not isinstance(edge, Mapping) or edge.get("kind") not in {"calls", "awaits"}:
@@ -193,6 +199,7 @@ class MetricsGraphProjection:
             }),
             callsites=callsites,
             import_references=import_references,
+            owner_structural_facts_by_id=MappingProxyType(owner_facts),
             directed_file_import_graph=DirectedGraphProjection(file_nodes, frozenset(file_edges)),
             directed_package_import_graph=DirectedGraphProjection(packages, package_edges),
             undirected_file_import_graph=UndirectedGraphProjection(file_nodes, undirected_edges),

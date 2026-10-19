@@ -32,7 +32,7 @@ def test_fingerprint_ignores_body_fingerprint_and_collection_permutations():
 
 def test_unknown_version_and_invalid_contains_are_rejected():
     graph = _graph()
-    graph["parser_semantics_version"] = 6
+    graph["parser_semantics_version"] = 7
     with pytest.raises(ValueError, match="Unsupported"):
         validate_graph_v1(graph)
     graph = _graph()
@@ -130,6 +130,47 @@ def _semantics5_graph():
         if node["kind"] == "class":
             node["class_kind"] = "class"
     return graph
+
+
+def _semantics6_graph():
+    graph = _semantics5_graph()
+    graph["parser_semantics_version"] = 6
+    graph["owner_structural_facts"] = [
+        {
+            "owner_id": "file:a.py",
+            "call_occurrences": 0,
+            "direct_import_occurrences": {"project_local": 0, "non_project": 1},
+        },
+        {"owner_id": "function:a.py:1:0:f", "call_occurrences": 0},
+        {"owner_id": "method:a.py:4:4:C.read", "call_occurrences": 0},
+    ]
+    return graph
+
+
+def test_semantics6_requires_complete_strict_structural_facts_but_not_body():
+    graph = _semantics6_graph()
+    del graph["body"]
+    validate_graph_v1(graph, verify_fingerprint=False)
+
+    for mutate, message in (
+        (lambda value: value.pop(), "exactly every structural owner"),
+        (lambda value: value[0].__setitem__("call_occurrences", True), "call_occurrences"),
+        (lambda value: value[1].__setitem__("direct_import_occurrences", {}), "invalid fields"),
+    ):
+        invalid = _semantics6_graph()
+        mutate(invalid["owner_structural_facts"])
+        with pytest.raises(ValueError, match=message):
+            validate_graph_v1(invalid, verify_fingerprint=False)
+
+
+def test_semantics6_body_is_not_part_of_graph_fingerprint():
+    graph = _semantics6_graph()
+    without_body = deepcopy(graph)
+    del without_body["body"]
+    changed_body = deepcopy(graph)
+    changed_body["body"] = [{"legacy": "changed"}]
+    assert graph_fingerprint(graph) == graph_fingerprint(without_body)
+    assert graph_fingerprint(graph) == graph_fingerprint(changed_body)
 
 
 def test_semantics5_requires_legacy_body_and_class_kind():

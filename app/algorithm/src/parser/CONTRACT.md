@@ -1,10 +1,11 @@
 # Parser file contract
 
 `parse_project(source_path: Path, output_path: Path) -> Path` accepts only
-`Path` instances. It atomically writes Graph DTO schema v1 / parser semantics v5
+`Path` instances. It atomically writes Graph DTO schema v1 / parser semantics v6
 with canonical file, class, field, module-constant and callable nodes; containment, import,
 inheritance, field-type, field-access and call edges; callsites, type references,
-diagnostics and a transitional legacy `body` mirror, then returns the resolved
+diagnostics, structural owner facts and a transitional legacy `body` mirror,
+then returns the resolved
 output path. `starter()` keeps
 returning the unchanged unversioned legacy graph for compatibility.
 
@@ -39,6 +40,15 @@ Every supported top-level module constant is represented by a separate canonical
 occurrence node with a stable ID; repeated declarations and chained targets are
 not collapsed. These neutral declaration facts let Metrics calculate structural
 populations without reading their legacy mirror.
+
+Every file root and real function/method has one neutral
+`owner_structural_facts` record. Its call count follows the historical traversal:
+each root legacy call is counted, and recursion follows only direct
+`args[*].value` call records. File records also count direct module-body import
+aliases as project-local or non-project; nested imports remain canonical import
+references but do not enter these counts. Synthetic constructors are excluded.
+Metrics can therefore process semantics v6 without reading `body`, although
+Parser still emits the mirror for transitional external consumers.
 
 Declared `self.<field>` reads produce occurrence-level `accesses_field` edges;
 nested functions, classes and lambdas are excluded from the enclosing method.

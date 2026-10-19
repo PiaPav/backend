@@ -16,7 +16,7 @@ CONTROL_KINDS = frozenset({
     "if_expression", "boolean", "comprehension", "exception_handler",
 })
 OCCURRENCE_KINDS = frozenset({"statement", "return", "raise", "await", "self_attribute"})
-_COLLECTIONS = ("nodes", "edges", "callsites", "type_references", "import_references", "diagnostics")
+_COLLECTIONS = ("nodes", "edges", "callsites", "type_references", "import_references", "owner_structural_facts", "diagnostics")
 
 
 def _key(value: Any) -> str:
@@ -141,11 +141,13 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         _error("root must be an object")
     if type(graph.get("schema_version")) is not int or graph["schema_version"] != 1:
         _error(f"Unsupported schema_version {graph.get('schema_version')!r}")
-    if type(graph.get("parser_semantics_version")) is not int or graph["parser_semantics_version"] not in {1, 2, 3, 4, 5}:
+    if type(graph.get("parser_semantics_version")) is not int or graph["parser_semantics_version"] not in {1, 2, 3, 4, 5, 6}:
         _error(f"Unsupported parser_semantics_version {graph.get('parser_semantics_version')!r}")
     semantics = graph["parser_semantics_version"]
-    if semantics >= 5 and not isinstance(graph.get("body"), list):
+    if semantics == 5 and not isinstance(graph.get("body"), list):
         _error("body must be an array for parser semantics v5")
+    if semantics == 6 and "body" in graph and not isinstance(graph["body"], list):
+        _error("body must be an array when present for parser semantics v6")
     project = graph.get("project")
     if not isinstance(project, Mapping) or not isinstance(project.get("fingerprint"), str):
         _error("project.fingerprint is required")
@@ -153,6 +155,7 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         name for name in _COLLECTIONS
         if (name != "type_references" or semantics >= 2)
         and (name != "import_references" or semantics >= 4)
+        and (name != "owner_structural_facts" or semantics >= 6)
     )
     for name in required_collections:
         if not isinstance(graph.get(name), list):
@@ -284,6 +287,34 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
                 root_path = nodes[root]["path"]
                 if nodes[node]["path"] != root_path or nodes[node]["location"]["path"] != root_path:
                     _error(f"node {node!r} path must match its owning root")
+    if semantics >= 6:
+        expected_fact_owners = {
+            identifier for identifier, node in nodes.items()
+            if node["kind"] in {"file", "module"}
+            or (node["kind"] in {"function", "method"} and node.get("synthetic") is not True)
+        }
+        seen_fact_owners: set[str] = set()
+        for index, fact in enumerate(graph["owner_structural_facts"]):
+            where = f"owner_structural_facts[{index}]"
+            if not isinstance(fact, Mapping): _error(f"{where} must be an object")
+            owner = fact.get("owner_id")
+            if owner not in expected_fact_owners or owner in seen_fact_owners:
+                _error(f"{where}.owner_id is invalid or duplicate")
+            seen_fact_owners.add(owner)
+            root = nodes[owner]["kind"] in {"file", "module"}
+            expected_fields = {"owner_id", "call_occurrences"}
+            if root: expected_fields.add("direct_import_occurrences")
+            if set(fact) != expected_fields: _error(f"{where} has invalid fields")
+            calls = fact.get("call_occurrences")
+            if type(calls) is not int or calls < 0: _error(f"{where}.call_occurrences is invalid")
+            if root:
+                imports = fact.get("direct_import_occurrences")
+                if not isinstance(imports, Mapping) or set(imports) != {"project_local", "non_project"}:
+                    _error(f"{where}.direct_import_occurrences is invalid")
+                if any(type(value) is not int or value < 0 for value in imports.values()):
+                    _error(f"{where}.direct_import_occurrences counts are invalid")
+        if seen_fact_owners != expected_fact_owners:
+            _error("owner_structural_facts must contain exactly every structural owner")
     observed: dict[tuple[str, str, str], int] = {}
     seen_callsites: set[str] = set()
     for index, callsite in enumerate(graph["callsites"]):
