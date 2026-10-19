@@ -1,13 +1,12 @@
 # Parser file contract
 
 `parse_project(source_path: Path, output_path: Path) -> Path` accepts only
-`Path` instances. It atomically writes Graph DTO schema v1 / parser semantics v6
+`Path` instances. It atomically writes Graph DTO schema v1 / parser semantics v7
 with canonical file, class, field, module-constant and callable nodes; containment, import,
 inheritance, field-type, field-access and call edges; callsites, type references,
-diagnostics, structural owner facts and a transitional legacy `body` mirror,
-then returns the resolved
-output path. `starter()` keeps
-returning the unchanged unversioned legacy graph for compatibility.
+diagnostics and structural owner facts, then returns the resolved output path.
+The file DTO does not contain `body`. `starter()` keeps returning the unchanged
+unversioned legacy graph, including `body`, for compatibility.
 
 Every real function/method node carries canonical `complexity_facts`: callable
 span and async status, ordered structural controls with parent indices and
@@ -32,8 +31,8 @@ non-local absolute imports are `external`; failed relative imports, including
 traversal above package context, are `unresolved`. For `from module import name`,
 `exact` means that the dependency module was resolved, not that the imported
 attribute was proven to exist. Non-exact imports do not create nodes or edges.
-Dynamic imports remain callsites. The legacy `body` continues to expose only its
-established module-level import projection.
+Dynamic imports remain callsites. The separate legacy `starter()` result
+continues to expose only its established module-level import projection.
 
 Each class node carries the existing parser classification as `class_kind`.
 Every supported top-level module constant is represented by a separate canonical
@@ -47,8 +46,8 @@ each root legacy call is counted, and recursion follows only direct
 `args[*].value` call records. File records also count direct module-body import
 aliases as project-local or non-project; nested imports remain canonical import
 references but do not enter these counts. Synthetic constructors are excluded.
-Metrics can therefore process semantics v6 without reading `body`, although
-Parser still emits the mirror for transitional external consumers.
+Metrics processes semantics 6 and 7 without reading `body`; semantics 7 makes
+that boundary explicit by prohibiting the mirror in the file DTO.
 
 Declared `self.<field>` reads produce occurrence-level `accesses_field` edges;
 nested functions, classes and lambdas are excluded from the enclosing method.

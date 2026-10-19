@@ -12,10 +12,10 @@ populations, quality, WMC, object metrics and call-graph metrics use canonical
 facts. The legacy fields listed below remain validated and fingerprinted;
 activity and its historical denominators still consume them. Older parser
 semantics retain the compatibility consumers documented in the tables.
-Parser semantics v6 no longer consumes or validates this projection: all metric
+Parser semantics v6 and v7 no longer consume or validate this projection: all metric
 sections, including activity, use canonical nodes, relations and
-`owner_structural_facts`. Parser may still emit `body` for external compatibility,
-but Metrics ignores it and does not produce `legacy_body_fingerprint`.
+`owner_structural_facts`. Semantics v6 may carry an optional ignored `body`;
+semantics v7 forbids it. Metrics produces no `legacy_body_fingerprint` for either.
 
 ## Root and files
 

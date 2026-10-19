@@ -71,7 +71,7 @@ def _legacy_mapping_call_occurrences(call: dict[str, Any]) -> int:
     )
 
 
-def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str, Any]:
+def build_graph_v1(index: ProjectIndex) -> dict[str, Any]:
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
     callsites: list[dict[str, Any]] = []
@@ -257,7 +257,7 @@ def build_graph_v1(index: ProjectIndex, body: list[dict[str, Any]]) -> dict[str,
                               "callsites": callsites, "type_references": type_references,
                               "import_references": import_references,
                               "owner_structural_facts": owner_structural_facts,
-                              "diagnostics": diagnostics, "body": body}
+                              "diagnostics": diagnostics}
     sort_key = lambda item: json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     # Nodes are emitted in deterministic containment order (file before its
     # declarations).  Sorting their complete JSON used to make newly added

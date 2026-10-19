@@ -8,11 +8,16 @@ import pytest
 from parser import parse_project, starter
 
 
+def _legacy_file(source: Path, name: str) -> dict:
+    return next(
+        item["file"] for item in starter(source)["body"]
+        if item["file"]["name"] == name
+    )
+
+
 def test_committed_source_matches_complete_graph_v1_golden(tmp_path: Path) -> None:
     fixtures = Path(__file__).resolve().parents[1] / "gpt_work_dir/tests/golden_v1"
-    actual_path = parse_project(fixtures / "source", tmp_path / "graph.json")
-
-    actual = json.loads(actual_path.read_text(encoding="utf-8"))
+    actual = starter(fixtures / "source")
     expected = json.loads((fixtures / "graph.json").read_text(encoding="utf-8"))
 
     # The committed fixture remains a semantics-v2 compatibility artifact.
@@ -24,20 +29,21 @@ def test_package_calls_source_matches_complete_graph_v1_golden(tmp_path: Path) -
         Path(__file__).resolve().parents[1]
         / "gpt_work_dir/tests/golden_v1/package_calls"
     )
-    actual_path = parse_project(fixtures / "source", tmp_path / "graph.json")
-
-    actual = json.loads(actual_path.read_text(encoding="utf-8"))
+    actual = starter(fixtures / "source")
+    canonical = json.loads(parse_project(
+        fixtures / "source", tmp_path / "graph.json"
+    ).read_text(encoding="utf-8"))
     expected = json.loads((fixtures / "graph.json").read_text(encoding="utf-8"))
 
     assert actual["body"] == expected["body"]
 
-    file_ids = {node["id"] for node in actual["nodes"] if node["kind"] == "file"}
+    file_ids = {node["id"] for node in canonical["nodes"] if node["kind"] == "file"}
     assert file_ids == {
         "file:pkg.py",
         "file:pkg/__init__.py",
         "file:consumer.py",
     }
-    import_edges = [edge for edge in actual["edges"] if edge["kind"] == "imports"]
+    import_edges = [edge for edge in canonical["edges"] if edge["kind"] == "imports"]
     assert [(edge["source_id"], edge["target_id"]) for edge in import_edges] == [
         ("file:consumer.py", "file:pkg/__init__.py")
     ]
@@ -49,14 +55,14 @@ def test_package_calls_source_matches_complete_graph_v1_golden(tmp_path: Path) -
     assert any(
         diagnostic["kind"] == "shadowed_module"
         and diagnostic["path"] == "pkg.py"
-        for diagnostic in actual["diagnostics"]
+        for diagnostic in canonical["diagnostics"]
     )
 
-    callsites = actual["callsites"]
+    callsites = canonical["callsites"]
     assert len(callsites) == 4
     assert len({callsite["caller_id"] for callsite in callsites}) == 1
     assert sorted(callsite["syntactic_depth"] for callsite in callsites) == [0, 0, 0, 1]
-    nodes = {node["id"]: node for node in actual["nodes"]}
+    nodes = {node["id"]: node for node in canonical["nodes"]}
     run_id = next(
         node_id
         for node_id, node in nodes.items()
@@ -66,9 +72,9 @@ def test_package_calls_source_matches_complete_graph_v1_golden(tmp_path: Path) -
         edge["kind"] == "contains"
         and edge["source_id"] == "file:consumer.py"
         and edge["target_id"] == run_id
-        for edge in actual["edges"]
+        for edge in canonical["edges"]
     )
-    call_edges = [edge for edge in actual["edges"] if edge["kind"] == "calls"]
+    call_edges = [edge for edge in canonical["edges"] if edge["kind"] == "calls"]
     weights = {
         nodes[edge["target_id"]]["qualified_name"]: edge["weight"]
         for edge in call_edges
@@ -91,7 +97,9 @@ def test_parse_project_is_atomic_deterministic_and_keeps_starter_semantics(tmp_p
     assert first.read_bytes() == second.read_bytes()
     dto = json.loads(first.read_text(encoding="utf-8"))
     assert dto["schema_version"] == 1
-    assert dto["body"] == starter(source)["body"]
+    assert dto["parser_semantics_version"] == 7
+    assert "body" not in dto
+    assert starter(source)["body"]
     assert dto["nodes"][0]["id"] == "file:sample.py"
 
 
@@ -109,7 +117,7 @@ def test_canonical_import_references_distinguish_all_static_outcomes(tmp_path: P
     )
 
     dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
-    assert dto["parser_semantics_version"] == 6
+    assert dto["parser_semantics_version"] == 7
     references = [
         item for item in dto["import_references"]
         if item["importer_id"] == "file:pkg/consumer.py"
@@ -148,8 +156,7 @@ def test_canonical_imports_include_nested_occurrences_with_stable_unique_ids(tmp
     assert len({item["id"] for item in references}) == 5
     assert all(item["resolution"] == "exact" for item in references)
     assert all(item["target_id"] == "file:dependency.py" for item in references)
-    consumer = next(item["file"] for item in dto["body"]
-                    if item["file"]["name"] == "consumer")
+    consumer = _legacy_file(source, "consumer")
     assert consumer["imports"] == []
 
 
@@ -268,9 +275,7 @@ def test_dotted_import_binds_root_and_alias_and_resolves_deep_package(tmp_path: 
     dto = json.loads(
         parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8")
     )
-    consumer = next(
-        item["file"] for item in dto["body"] if item["file"]["name"] == "consumer"
-    )
+    consumer = _legacy_file(source, "consumer")
     calls = consumer["functions"][0]["calls"]
     assert [call["object"] for call in calls] == ["func", "func"]
     targets = [edge["target_id"] for edge in dto["edges"] if edge["kind"] == "imports"
@@ -293,9 +298,7 @@ def test_from_import_resolves_deep_package_function(tmp_path: Path) -> None:
     dto = json.loads(
         parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8")
     )
-    consumer = next(
-        item["file"] for item in dto["body"] if item["file"]["name"] == "consumer"
-    )
+    consumer = _legacy_file(source, "consumer")
     assert consumer["functions"][0]["calls"][0]["object"] == "chosen"
     assert any(
         edge["kind"] == "imports"
@@ -320,9 +323,7 @@ def test_calls_preserve_import_semantic_targets_for_aliases_and_nested_calls(tmp
     dto = json.loads(
         parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8")
     )
-    consumer = next(
-        item["file"] for item in dto["body"] if item["file"]["name"] == "consumer"
-    )
+    consumer = _legacy_file(source, "consumer")
     calls = consumer["functions"][0]["calls"]
     assert [call["object"] for call in calls] == ["f", "f", "f", "f"]
     assert [call["semantic_target"] for call in calls] == [
@@ -355,9 +356,7 @@ def test_import_targets_are_suppressed_by_callable_lexical_bindings(tmp_path: Pa
     dto = json.loads(
         parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8")
     )
-    consumer = next(
-        item["file"] for item in dto["body"] if item["file"]["name"] == "consumer"
-    )
+    consumer = _legacy_file(source, "consumer")
     for function in consumer["functions"]:
         assert function["calls"]
         assert all("semantic_target" not in call for call in function["calls"])
@@ -379,9 +378,7 @@ def test_from_import_distinguishes_class_methods_from_module_functions(tmp_path:
     dto = json.loads(
         parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8")
     )
-    consumer = next(
-        item["file"] for item in dto["body"] if item["file"]["name"] == "consumer"
-    )
+    consumer = _legacy_file(source, "consumer")
     calls = consumer["functions"][0]["calls"]
     assert calls[0]["semantic_target"] == {"module": "pkg", "object": "C.f"}
     assert calls[1]["semantic_target"] == {"module": "pkg", "object": "f"}
@@ -404,7 +401,7 @@ def test_module_import_provenance_follows_statement_order(tmp_path: Path) -> Non
     )
 
     dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
-    consumer = next(item["file"] for item in dto["body"] if item["file"]["name"] == "consumer")
+    consumer = _legacy_file(source, "consumer")
     calls = consumer["calls"]
     assert [call.get("semantic_target") for call in calls] == [
         {"module": "provider", "object": "f"}, None,
@@ -427,7 +424,7 @@ def test_global_write_and_reimports_follow_statement_order(tmp_path: Path) -> No
     )
 
     dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
-    consumer = next(item["file"] for item in dto["body"] if item["file"]["name"] == "consumer")
+    consumer = _legacy_file(source, "consumer")
     assert [call["semantic_target"]["module"] for call in consumer["calls"]] == [
         "first", "first", "second",
     ]
@@ -455,7 +452,8 @@ def test_canonical_callsites_preserve_legacy_and_emit_exact_aggregates(tmp_path:
 
     legacy = starter(source)["body"]
     dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
-    assert dto["body"] == legacy
+    assert "body" not in dto
+    assert legacy
     assert not any(item["id"] == "semantic_callsites_transition" for item in dto["diagnostics"])
 
     consumer_calls = [item for item in dto["callsites"] if item["location"]["path"] == "consumer.py"]
@@ -903,7 +901,7 @@ def test_semantics2_object_relations_cover_imports_types_and_field_accesses(tmp_
         encoding="utf-8",
     )
     dto = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
-    assert dto["parser_semantics_version"] == 6
+    assert dto["parser_semantics_version"] == 7
     nodes = {node["id"]: node for node in dto["nodes"]}
     fields = [node for node in nodes.values() if node["kind"] == "field"]
     assert {node["qualified_name"] for node in fields} >= {
@@ -1282,8 +1280,8 @@ def test_semantics3_complexity_facts_exactly_reproduce_legacy_rich_flow(tmp_path
     )
     graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
     node = next(item for item in graph["nodes"] if item["kind"] == "function")
-    legacy = graph["body"][0]["file"]["functions"][0]["metrics"]
-    assert graph["parser_semantics_version"] == 6
+    legacy = _legacy_file(source, "flow")["functions"][0]["metrics"]
+    assert graph["parser_semantics_version"] == 7
     assert metrics_from_facts(node["complexity_facts"]) == legacy
     assert "hidden" not in legacy["self_attribute_accesses"]
 
@@ -1311,7 +1309,7 @@ def test_semantics3_structural_locations_and_scope_boundaries_match_legacy(tmp_p
     graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
     node = next(item for item in graph["nodes"] if item["kind"] == "function")
     facts = node["complexity_facts"]
-    legacy = graph["body"][0]["file"]["functions"][0]["metrics"]
+    legacy = _legacy_file(source, "edges")["functions"][0]["metrics"]
 
     assert metrics_from_facts(facts) == legacy
     # Legacy comprehensions contribute 1 + filter_count (plus depth cognitively).
@@ -1337,7 +1335,7 @@ def test_semantics5_emits_occurrence_level_constants_with_unique_ids(tmp_path: P
 
     graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
     constants = [node for node in graph["nodes"] if node["kind"] == "constant"]
-    legacy = graph["body"][0]["file"]["constants"]
+    legacy = _legacy_file(source, "constants")["constants"]
 
     assert [item["name"] for item in legacy] == ["A", "B", "A", "A", "C"]
     assert [item["qualified_name"].rsplit(".", 1)[-1] for item in constants] == ["A", "B", "A", "A", "C"]
@@ -1363,7 +1361,10 @@ def test_semantics5_class_kind_matches_legacy_class_type(tmp_path: Path) -> None
         node["qualified_name"].rsplit(".", 1)[-1]: node["class_kind"]
         for node in graph["nodes"] if node["kind"] == "class"
     }
-    legacy = {item["name"]: item["type"] for item in graph["body"][0]["file"]["classes"]}
+    legacy = {
+        item["name"]: item["type"]
+        for item in _legacy_file(source, "classes")["classes"]
+    }
 
     assert canonical == legacy == {
         "Plain": "class", "Data": "dataclass", "Choice": "enum",
@@ -1397,7 +1398,7 @@ def test_semantics6_structural_facts_exactly_mirror_legacy_activity_owners(tmp_p
 
     facts = {item["owner_id"]: item for item in graph["owner_structural_facts"]}
     nodes = {item["id"]: item for item in graph["nodes"]}
-    sample = next(item["file"] for item in graph["body"] if item["file"]["name"] == "sample")
+    sample = _legacy_file(source, "sample")
     expected_calls = {"file:sample.py": count_calls(sample["calls"])}
     expected_calls.update({
         next(node_id for node_id, node in nodes.items() if node["qualified_name"] == f"sample.{item['name']}"):

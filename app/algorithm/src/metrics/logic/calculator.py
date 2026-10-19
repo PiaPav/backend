@@ -112,8 +112,8 @@ def calculate_graph_metrics(
 ) -> dict[str, Any]:
     """Return deterministic size, coupling, density and connectivity metrics."""
     projection = MetricsGraphProjection.from_graph(graph)
-    semantics_v5_plus = graph.get("parser_semantics_version") in {5, 6}
-    semantics_v6 = graph.get("parser_semantics_version") == 6
+    semantics_v5_plus = graph.get("parser_semantics_version") in {5, 6, 7}
+    bodyless_semantics = graph.get("parser_semantics_version") in {6, 7}
     files = [file.data for file in projection.legacy_files]
     file_graph = projection.directed_file_import_graph
     nodes = set(file_graph.nodes)
@@ -154,7 +154,7 @@ def calculate_graph_metrics(
         for item in file.get("imports", [])
         if isinstance(item, Mapping) and item.get("from_lib") is True
     )
-    if semantics_v6:
+    if bodyless_semantics:
         facts = projection.owner_structural_facts_by_id
         roots = (projection.node_ids_by_kind.get("file", frozenset())
                  | projection.node_ids_by_kind.get("module", frozenset()))
@@ -182,14 +182,14 @@ def calculate_graph_metrics(
         if len(component) > 1
     ])
     node_count = len(nodes)
-    callable_count = len(callable_ids) if semantics_v6 else len(functions) + len(methods)
+    callable_count = len(callable_ids) if bodyless_semantics else len(functions) + len(methods)
     call_owner_count = (callable_count + sum(facts[item]["call_occurrences"] > 0 for item in roots)
-                        if semantics_v6 else callable_count + sum(bool(file.get("calls")) for file in files))
+                        if bodyless_semantics else callable_count + sum(bool(file.get("calls")) for file in files))
     method_count = (sum(projection.nodes_by_id[item].get("synthetic") is not True
                         for item in projection.node_ids_by_kind.get("method", frozenset()))
-                    if semantics_v6 else len(methods))
+                    if bodyless_semantics else len(methods))
     class_count = (len(projection.node_ids_by_kind.get("class", frozenset()))
-                   if semantics_v6 else len(classes))
+                   if bodyless_semantics else len(classes))
     density_denominator = node_count * (node_count - 1)
 
     return {

@@ -141,13 +141,15 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
         _error("root must be an object")
     if type(graph.get("schema_version")) is not int or graph["schema_version"] != 1:
         _error(f"Unsupported schema_version {graph.get('schema_version')!r}")
-    if type(graph.get("parser_semantics_version")) is not int or graph["parser_semantics_version"] not in {1, 2, 3, 4, 5, 6}:
+    if type(graph.get("parser_semantics_version")) is not int or graph["parser_semantics_version"] not in {1, 2, 3, 4, 5, 6, 7}:
         _error(f"Unsupported parser_semantics_version {graph.get('parser_semantics_version')!r}")
     semantics = graph["parser_semantics_version"]
     if semantics == 5 and not isinstance(graph.get("body"), list):
         _error("body must be an array for parser semantics v5")
     if semantics == 6 and "body" in graph and not isinstance(graph["body"], list):
         _error("body must be an array when present for parser semantics v6")
+    if semantics == 7 and "body" in graph:
+        _error("body is not allowed for parser semantics v7")
     project = graph.get("project")
     if not isinstance(project, Mapping) or not isinstance(project.get("fingerprint"), str):
         _error("project.fingerprint is required")

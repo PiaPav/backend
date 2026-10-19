@@ -2,11 +2,11 @@
 
 `calculate_metrics(graph_path: Path, output_path: Path) -> Path` accepts a
 legacy unversioned parser graph or a validated Graph DTO v1. Parser semantics
-v1-v5 retain the required legacy `body` compatibility adapter. Semantics v6 is
-calculated entirely from canonical content and does not validate or read an
-optional `body`. Canonical identity and fingerprint always come only from
+v1-v5 retain the required legacy `body` compatibility adapter. Semantics v6 and
+v7 are calculated entirely from canonical content; v6 may carry an ignored
+optional `body`, while v7 forbids it. Canonical identity and fingerprint always come only from
 canonical v1 content. Compatibility results include
-`input.legacy_body_fingerprint`; semantics-v6 results do not. Output is atomic.
+`input.legacy_body_fingerprint`; semantics-v6/v7 results do not. Output is atomic.
 The canonical writer stores UTF-8 JSON with LF line endings,
 `ensure_ascii=False`, two-space indentation, sorted keys and exactly one final
 newline. It writes a temporary file beside the target and publishes it with
@@ -29,15 +29,17 @@ Version dispatch is explicit:
   declaration nodes.
 - Graph DTO v1 / parser semantics v6 uses metrics semantics v4; activity also
   uses canonical structural owner facts and the entire calculation is bodyless.
+- Graph DTO v1 / parser semantics v7 uses the same metrics semantics v4 and
+  bodyless formulas; the input contract no longer permits `body`.
 
 Semantics v3 builds object and call topology exclusively from canonical node IDs,
 typed edges, callsites and type references.
 Semantics v4 derives callable complexity from canonical facts keyed by node ID.
 Quality, WMC and call-graph risk use that projection; transitional body mutation
 cannot affect them. Synthetic constructors are excluded from those populations.
-Parser semantics v5 and v6 additionally derive `size` and package file/class/abstract
+Parser semantics v5-v7 additionally derive `size` and package file/class/abstract
 populations from canonical roots, declaration nodes and `class_kind`. Synthetic
-constructors do not increase structural method counts. In semantics v6,
+constructors do not increase structural method counts. In semantics v6 and v7,
 activity derives call and direct-import occurrences from
 `owner_structural_facts`; body mutation or omission cannot affect it.
 

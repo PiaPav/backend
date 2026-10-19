@@ -43,9 +43,10 @@ def _load_graph_bytes(raw: bytes) -> dict[str, Any]:
         if data["schema_version"] != 1:
             raise ValueError(f"Unsupported graph schema_version: {data['schema_version']!r}")
         validate_graph_v1(data)
-        if data.get("parser_semantics_version") != 6 and "body" not in data:
+        bodyless_semantics = data.get("parser_semantics_version") in {6, 7}
+        if not bodyless_semantics and "body" not in data:
             raise ValueError("Graph DTO v1 requires a legacy body mirror in this metrics increment")
-        if data.get("parser_semantics_version") != 6:
+        if not bodyless_semantics:
             _validate_legacy_graph({"body": data["body"]})
     else:
         _validate_legacy_graph(data)
@@ -183,15 +184,16 @@ def calculate_metrics(graph_path: Path, output_path: Path) -> Path:
     graph = _load_graph_bytes(raw)
     is_v1 = graph.get("schema_version") == 1
     parser_semantics = graph.get("parser_semantics_version") if is_v1 else None
-    is_canonical_v2 = parser_semantics in {2, 3, 4, 5, 6}
-    is_canonical_v3 = parser_semantics in {3, 4, 5, 6}
-    legacy_body = {"body": graph["body"]} if is_v1 and parser_semantics != 6 else graph
+    is_canonical_v2 = parser_semantics in {2, 3, 4, 5, 6, 7}
+    is_canonical_v3 = parser_semantics in {3, 4, 5, 6, 7}
+    is_bodyless = parser_semantics in {6, 7}
+    legacy_body = {"body": graph["body"]} if is_v1 and not is_bodyless else graph
     legacy_projection = (
         {
             "body": graph["body"],
             "parser_semantics_version": graph["parser_semantics_version"],
         }
-        if is_v1 and parser_semantics != 6 else graph
+        if is_v1 and not is_bodyless else graph
     )
     envelope = {
         "schema_version": 1,
@@ -200,7 +202,7 @@ def calculate_metrics(graph_path: Path, output_path: Path) -> Path:
             "graph_schema_version": 1 if is_v1 else None,
             "graph_fingerprint": graph_fingerprint(graph) if is_v1 else _legacy_graph_fingerprint(graph),
             **({"legacy_body_fingerprint": _legacy_graph_fingerprint(legacy_body)}
-               if is_v1 and parser_semantics != 6 else {}),
+               if is_v1 and not is_bodyless else {}),
         },
         # v1 formulas are temporarily isolated on the documented body adapter.
         "metrics": calculate_graph_metrics(

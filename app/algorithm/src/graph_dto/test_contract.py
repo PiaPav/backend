@@ -32,7 +32,7 @@ def test_fingerprint_ignores_body_fingerprint_and_collection_permutations():
 
 def test_unknown_version_and_invalid_contains_are_rejected():
     graph = _graph()
-    graph["parser_semantics_version"] = 7
+    graph["parser_semantics_version"] = 8
     with pytest.raises(ValueError, match="Unsupported"):
         validate_graph_v1(graph)
     graph = _graph()
@@ -145,6 +145,34 @@ def _semantics6_graph():
         {"owner_id": "method:a.py:4:4:C.read", "call_occurrences": 0},
     ]
     return graph
+
+
+def _semantics7_graph():
+    graph = _semantics6_graph()
+    graph["parser_semantics_version"] = 7
+    del graph["body"]
+    return graph
+
+
+def test_semantics7_requires_bodyless_canonical_graph():
+    graph = _semantics7_graph()
+    validate_graph_v1(graph, verify_fingerprint=False)
+
+    for body in ([], [{"legacy": True}], None):
+        invalid = deepcopy(graph)
+        invalid["body"] = body
+        with pytest.raises(ValueError, match="body is not allowed"):
+            validate_graph_v1(invalid, verify_fingerprint=False)
+
+
+def test_semantics6_body_remains_an_optional_array():
+    graph = _semantics6_graph()
+    validate_graph_v1(graph, verify_fingerprint=False)
+    del graph["body"]
+    validate_graph_v1(graph, verify_fingerprint=False)
+    graph["body"] = {}
+    with pytest.raises(ValueError, match="body must be an array"):
+        validate_graph_v1(graph, verify_fingerprint=False)
 
 
 def test_semantics6_requires_complete_strict_structural_facts_but_not_body():

@@ -11,7 +11,7 @@ import pytest
 
 from metrics import calculate_graph_metrics, calculate_metrics, load_graph
 from graph_dto import graph_fingerprint
-from parser import parse_project
+from parser import parse_project, starter
 from metrics.logic.projections import MetricsGraphProjection, iter_legacy_calls
 from metrics.logic.serialization import (
     compact_graph_metrics,
@@ -100,6 +100,8 @@ def test_semantics4_import_projection_uses_canonical_edges_not_legacy_body(tmp_p
         "import dependency\nimport third_party\n", encoding="utf-8"
     )
     graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    graph["parser_semantics_version"] = 4
+    graph["body"] = starter(source)["body"]
     consumer = next(item["file"] for item in graph["body"] if item["file"]["name"] == "consumer")
     consumer["imports"].clear()
 
@@ -121,6 +123,8 @@ def test_semantics4_nested_imports_do_not_migrate_legacy_activity(tmp_path: Path
         encoding="utf-8",
     )
     graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    graph["parser_semantics_version"] = 4
+    graph["body"] = starter(source)["body"]
 
     assert len(graph["import_references"]) == 1
     assert any(edge["kind"] == "imports" for edge in graph["edges"])
@@ -207,6 +211,8 @@ def test_semantics3_complexity_consumers_use_facts_by_node_id(tmp_path: Path) ->
     graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
     envelope = json.loads(calculate_metrics(tmp_path / "graph.json", tmp_path / "metrics.json").read_text(encoding="utf-8"))
     assert envelope["metrics_semantics_version"] == 4
+    graph["parser_semantics_version"] = 3
+    graph["body"] = starter(source)["body"]
     baseline = _v3_metrics(graph)
 
     body_mutation = deepcopy(graph)
@@ -1315,9 +1321,9 @@ def test_global_write_does_not_keep_import_provenance(tmp_path: Path) -> None:
     )
 
     graph_path = parse_project(source, tmp_path / "graph.json")
-    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    legacy = starter(source)
     consumer = next(
-        item["file"] for item in graph["body"] if item["file"]["name"] == "consumer"
+        item["file"] for item in legacy["body"] if item["file"]["name"] == "consumer"
     )
     run = next(item for item in consumer["functions"] if item["name"] == "run")
     assert "semantic_target" not in run["calls"][0]
@@ -1472,6 +1478,8 @@ def test_semantics5_size_matches_legacy_and_body_mutations_do_not_change_canonic
         encoding="utf-8",
     )
     graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    graph["parser_semantics_version"] = 5
+    graph["body"] = starter(source)["body"]
     baseline = calculate_graph_metrics(graph)
     file = graph["body"][0]["file"]
     legacy_size = {
@@ -1504,6 +1512,7 @@ def test_semantics5_activity_remains_legacy_body_backed(tmp_path: Path) -> None:
     (source / "a.py").write_text("import os\nclass C:\n def m(self):\n  print(1)\n", encoding="utf-8")
     graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
     graph["parser_semantics_version"] = 5
+    graph["body"] = starter(source)["body"]
     baseline = calculate_graph_metrics(graph)["activity"]
     changed = deepcopy(graph)
     file = changed["body"][0]["file"]
@@ -1520,6 +1529,8 @@ def test_semantics5_paths_packages_collisions_and_order_use_canonical_owners(tmp
         path = source / relative
         path.write_text("class Same: pass\n", encoding="utf-8")
     graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    graph["parser_semantics_version"] = 5
+    graph["body"] = starter(source)["body"]
     first = calculate_graph_metrics(graph)
     packages = {row["package"]: row for row in first["architecture"]["packages"]}
     assert first["size"]["directories"] == 2
@@ -1555,7 +1566,7 @@ def test_semantics4_size_and_package_population_remain_legacy_backed() -> None:
     assert metrics["architecture"]["packages"][0]["classes"] == 1
 
 
-def test_semantics6_metrics_are_bodyless_and_activity_uses_structural_facts(tmp_path: Path) -> None:
+def test_semantics7_metrics_are_bodyless_and_activity_uses_structural_facts(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
     (source / "local.py").write_text("def target(): pass\n", encoding="utf-8")
@@ -1567,10 +1578,9 @@ def test_semantics6_metrics_are_bodyless_and_activity_uses_structural_facts(tmp_
     )
     graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
     baseline = calculate_graph_metrics(graph)
-    bodyless = deepcopy(graph)
-    del bodyless["body"]
 
-    assert calculate_graph_metrics(bodyless) == baseline
+    assert graph["parser_semantics_version"] == 7
+    assert "body" not in graph
     assert baseline["activity"] == {
         "calls": 3,
         "local_imports": 1,
@@ -1581,13 +1591,35 @@ def test_semantics6_metrics_are_bodyless_and_activity_uses_structural_facts(tmp_
     }
 
     graph_path = tmp_path / "bodyless.json"
-    graph_path.write_text(json.dumps(bodyless), encoding="utf-8")
+    graph_path.write_text(json.dumps(graph), encoding="utf-8")
     envelope = json.loads(calculate_metrics(
         graph_path, tmp_path / "metrics.json"
     ).read_text(encoding="utf-8"))
     assert envelope["metrics_semantics_version"] == 4
     assert "legacy_body_fingerprint" not in envelope["input"]
     assert envelope["metrics"] == baseline
+
+
+def test_semantics6_and_7_bodyless_payloads_produce_equivalent_metrics(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "sample.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+    semantics7 = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+    semantics6 = deepcopy(semantics7)
+    semantics6["parser_semantics_version"] = 6
+    semantics6["project"]["fingerprint"] = graph_fingerprint(semantics6)
+    semantics7["project"]["fingerprint"] = graph_fingerprint(semantics7)
+    v6_path = tmp_path / "v6.json"
+    v7_path = tmp_path / "v7.json"
+    v6_path.write_text(json.dumps(semantics6), encoding="utf-8")
+    v7_path.write_text(json.dumps(semantics7), encoding="utf-8")
+
+    v6 = json.loads(calculate_metrics(v6_path, tmp_path / "v6-metrics.json").read_text(encoding="utf-8"))
+    v7 = json.loads(calculate_metrics(v7_path, tmp_path / "v7-metrics.json").read_text(encoding="utf-8"))
+    assert v6["metrics_semantics_version"] == v7["metrics_semantics_version"] == 4
+    assert "legacy_body_fingerprint" not in v6["input"]
+    assert "legacy_body_fingerprint" not in v7["input"]
+    assert v6["metrics"] == v7["metrics"]
 
 
 def test_semantics6_activity_zero_denominators_are_floats() -> None:

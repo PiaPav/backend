@@ -24,7 +24,7 @@ def _require_path(value: Path, name: str) -> Path:
 
 
 def parse_project(source_path: Path, output_path: Path) -> Path:
-    """Analyze ``source_path`` and atomically save its legacy graph.
+    """Analyze ``source_path`` and atomically save its canonical Graph DTO.
 
     ``starter`` deliberately remains available for existing in-memory clients.
     The file representation is canonical JSON only; it does not alter the
@@ -33,8 +33,8 @@ def parse_project(source_path: Path, output_path: Path) -> Path:
     source_path = _require_path(source_path, "source_path")
     output_path = _require_path(output_path, "output_path")
     analyzer = ProjectAnalyzer(source_path)
-    legacy_graph = analyzer.analyze()
-    graph = build_graph_v1(analyzer.index, legacy_graph["body"])
+    analyzer.analyze()
+    graph = build_graph_v1(analyzer.index)
     target = output_path.expanduser().resolve()
     target.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
