@@ -320,6 +320,68 @@ def test_internal_metric_consumers_keep_projection_compatibility_fallback() -> N
     )
 
 
+def test_canonical_consumers_use_one_detached_snapshot_after_raw_mutation() -> None:
+    from metrics.logic.call_graph import calculate_call_graph_metrics
+    from metrics.logic.calculator import _canonical_size
+    from metrics.logic.complexity import canonical_callable_metrics
+    from metrics.logic.object_metrics import calculate_canonical_object_metrics
+    from metrics.logic.quality import calculate_quality_metrics
+
+    graph = _canonical_metrics_graph()
+    graph["parser_semantics_version"] = 7
+    graph["nodes"].append({
+        "id": "file:m.py", "kind": "file", "qualified_name": "m", "path": "pkg/m.py",
+    })
+    for node in graph["nodes"]:
+        if node["kind"] in {"function", "method"}:
+            node["complexity_facts"] = _facts(controls=[{
+                "kind": "if", "parent_index": None,
+            }])
+    projection = MetricsGraphProjection.from_graph(graph)
+    expected = {
+        "complexity": canonical_callable_metrics(graph, projection=projection),
+        "quality": calculate_quality_metrics(graph, projection=projection),
+        "objects": calculate_canonical_object_metrics(graph, projection=projection),
+        "calls": calculate_call_graph_metrics(graph, canonical=True, projection=projection),
+        "size": _canonical_size(projection),
+    }
+    assert canonical_callable_metrics(graph) == expected["complexity"]
+    assert calculate_quality_metrics(graph) == expected["quality"]
+    assert calculate_canonical_object_metrics(graph) == expected["objects"]
+    assert calculate_call_graph_metrics(graph, canonical=True) == expected["calls"]
+
+    for node in graph["nodes"]:
+        facts = node.get("complexity_facts")
+        if facts:
+            facts["controls"].clear()
+    graph["nodes"].clear()
+    graph["parser_semantics_version"] = 2
+
+    assert canonical_callable_metrics(graph, projection=projection) == expected["complexity"]
+    assert calculate_quality_metrics(graph, projection=projection) == expected["quality"]
+    assert calculate_canonical_object_metrics(graph, projection=projection) == expected["objects"]
+    assert calculate_call_graph_metrics(
+        graph, canonical=True, projection=projection,
+    ) == expected["calls"]
+    assert _canonical_size(projection) == expected["size"]
+    assert expected["objects"]["classes"][0]["wmc"] > 0
+    assert expected["calls"]["risk_top"]
+
+
+def test_canonical_callable_fallback_builds_one_projection() -> None:
+    from metrics.logic.quality import callable_metrics
+
+    graph = _canonical_call_graph()
+    with patch.object(
+        MetricsGraphProjection, "from_graph",
+        wraps=MetricsGraphProjection.from_graph,
+    ) as from_graph:
+        metrics = callable_metrics(graph)
+
+    assert set(metrics) == {"fn:available", "fn:run"}
+    from_graph.assert_called_once_with(graph)
+
+
 def test_semantics3_complexity_consumers_use_facts_by_node_id() -> None:
     graph = _canonical_metrics_graph()
     graph["body"][0]["file"]["classes"][0]["methods"].append({
@@ -1351,6 +1413,49 @@ def test_unversioned_legacy_dto_keeps_unambiguous_fallback() -> None:
     }
 
     assert calculate_graph_metrics(graph)["call_graph"]["heaviest_edges"] == [
+        {"caller": "consumer.run", "target": "provider.f", "callsites": 1}
+    ]
+
+
+def test_legacy_call_resolution_uses_projection_semantics_snapshot() -> None:
+    from metrics.logic.call_graph import calculate_call_graph_metrics
+
+    graph = {
+        "body": [
+            {"file": {"name": "provider", "path": "", "imports": [], "functions": [
+                {"name": "f", "metrics": {"cyclomatic_complexity": 1}, "calls": []}
+            ]}},
+            {"file": {"name": "consumer", "path": "", "imports": [
+                {"object": "f", "path": "provider", "from_lib": False}
+            ], "functions": [
+                {"name": "run", "metrics": {"cyclomatic_complexity": 1},
+                 "calls": [{"object": "f", "args": []}]}
+            ]}},
+        ]
+    }
+    unversioned_projection = MetricsGraphProjection.from_graph(graph)
+    graph["parser_semantics_version"] = 1
+
+    assert calculate_call_graph_metrics(
+        graph, projection=unversioned_projection,
+    )["heaviest_edges"] == [
+        {"caller": "consumer.run", "target": "provider.f", "callsites": 1}
+    ]
+    assert calculate_call_graph_metrics(
+        graph, projection=unversioned_projection, legacy_resolution=False,
+    )["heaviest_edges"] == []
+
+    versioned_projection = MetricsGraphProjection.from_graph(graph)
+    del graph["parser_semantics_version"]
+
+    versioned_result = calculate_call_graph_metrics(
+        graph, projection=versioned_projection,
+    )
+    assert versioned_result["heaviest_edges"] == []
+    assert versioned_result["unresolved_callsites"] == 1
+    assert calculate_call_graph_metrics(
+        graph, projection=versioned_projection, legacy_resolution=True,
+    )["heaviest_edges"] == [
         {"caller": "consumer.run", "target": "provider.f", "callsites": 1}
     ]
 

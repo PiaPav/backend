@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Mapping
 from typing import Any
-from .identity import graph_files, legacy_file_id
+from .identity import legacy_file_id
 from .complexity import canonical_callable_metrics
 from .projections import MetricsGraphProjection
 
@@ -13,10 +13,11 @@ from .projections import MetricsGraphProjection
 def callable_metrics(
     graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None
 ) -> dict[str, dict[str, Any]]:
-    if graph.get("parser_semantics_version") in {3, 4, 5, 6, 7}:
-        return canonical_callable_metrics(graph)
+    projection = projection or MetricsGraphProjection.from_graph(graph)
+    if projection.parser_semantics_version in {3, 4, 5, 6, 7}:
+        return canonical_callable_metrics(graph, projection=projection)
     result: dict[str, dict[str, Any]] = {}
-    files = [file.data for file in projection.legacy_files] if projection else graph_files(graph)
+    files = [file.data for file in projection.legacy_files]
     for file in files:
         module = legacy_file_id(file)
         for function in file.get("functions", []):

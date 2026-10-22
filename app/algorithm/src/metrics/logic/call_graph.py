@@ -167,7 +167,11 @@ def calculate_call_graph_metrics(
     files = [file.data for file in projection.legacy_files] if projection else _graph_files(graph)
     module_ids = projection.effective_module_ids if projection else effective_module_ids(files)
     use_legacy_resolution = (
-        graph.get("parser_semantics_version") is None
+        (
+            projection.parser_semantics_version is None
+            if projection is not None
+            else graph.get("parser_semantics_version") is None
+        )
         if legacy_resolution is None
         else legacy_resolution
     )
@@ -555,7 +559,7 @@ def _calculate_canonical_call_graph_metrics(
     peak_in = max(incoming.values(), default=0); peak_out = max(outgoing.values(), default=0)
     peak_reach = max(reach.values(), default=0)
     pagerank = _pagerank(call_owner_ids, edges); betweenness = _betweenness(call_owner_ids, edges)
-    semantics_v3 = graph.get("parser_semantics_version") in {3, 4, 5, 6, 7}
+    semantics_v3 = projection.parser_semantics_version in {3, 4, 5, 6, 7}
     complexity = callable_metrics(graph, projection=projection) if semantics_v3 else {}
     # ID-keyed complexity and its risk projection belong to parser semantics
     # v3.  Semantics v2 keeps its established empty canonical risk list.

@@ -241,9 +241,66 @@ def _literal_mapping_keys(node: ast.AST) -> set[str]:
     return keys
 
 
+def _literal_root_mapping_keys(node: ast.AST, roots: set[str]) -> set[str]:
+    keys = {
+        child.slice.value
+        for child in ast.walk(node)
+        if isinstance(child, ast.Subscript)
+        and isinstance(child.value, ast.Name)
+        and child.value.id in roots
+        and isinstance(child.slice, ast.Constant)
+        and isinstance(child.slice.value, str)
+    }
+    keys.update(
+        child.args[0].value
+        for child in ast.walk(node)
+        if isinstance(child, ast.Call)
+        and isinstance(child.func, ast.Attribute)
+        and isinstance(child.func.value, ast.Name)
+        and child.func.value.id in roots
+        and child.func.attr == "get"
+        and child.args
+        and isinstance(child.args[0], ast.Constant)
+        and isinstance(child.args[0].value, str)
+    )
+    return keys
+
+
 def test_literal_mapping_key_detection_covers_subscript_and_get() -> None:
     tree = ast.parse("graph['edges']; graph.get('edges'); graph.get(name)")
     assert _literal_mapping_keys(tree) == {"edges"}
+
+
+def test_literal_root_mapping_key_detection_is_receiver_specific() -> None:
+    tree = ast.parse(
+        "graph['nodes']; graph.get('edges'); "
+        "projection.get('callsites'); projection.parser_semantics_version"
+    )
+    assert _literal_root_mapping_keys(tree, {"graph"}) == {"nodes", "edges"}
+    assert _literal_root_mapping_keys(tree, {"projection"}) == {"callsites"}
+
+
+def test_canonical_consumers_cannot_read_projection_root_keys_from_raw_graph() -> None:
+    forbidden = {
+        "nodes", "edges", "callsites", "owner_structural_facts",
+        "parser_semantics_version",
+    }
+    consumers = (
+        (ROOT / "metrics/logic/complexity.py", "canonical_callable_metrics"),
+        (ROOT / "metrics/logic/calculator.py", "_canonical_size"),
+        (ROOT / "metrics/logic/calculator.py", "calculate_graph_metrics"),
+        (ROOT / "metrics/logic/object_metrics.py", "calculate_canonical_object_metrics"),
+        (ROOT / "metrics/logic/call_graph.py", "_calculate_canonical_call_graph_metrics"),
+    )
+    violations = []
+    for path, name in consumers:
+        function = _function(path, name)
+        keys = _literal_root_mapping_keys(function, {"graph"}) & forbidden
+        if keys:
+            violations.append(
+                f"{path.relative_to(ROOT)}:{name} -> {', '.join(sorted(keys))}"
+            )
+    assert not violations, "canonical consumers read raw graph roots:\n" + "\n".join(violations)
 
 
 def test_canonical_object_metrics_cannot_read_raw_edges() -> None:

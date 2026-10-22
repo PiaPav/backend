@@ -84,28 +84,26 @@ def _directory_count(files: list[dict[str, Any]]) -> int:
     return len(directories)
 
 
-def _canonical_size(graph: Mapping[str, Any]) -> dict[str, int]:
-    nodes = {
-        str(node["id"]): node for node in graph.get("nodes", [])
-        if isinstance(node, Mapping) and isinstance(node.get("id"), str)
-    }
-    by_kind = {
-        kind: {identifier for identifier, node in nodes.items() if node.get("kind") == kind}
-        for kind in ("file", "module", "class", "function", "method", "field", "constant")
-    }
-    roots = by_kind["file"] | by_kind["module"]
+def _canonical_size(projection: MetricsGraphProjection) -> dict[str, int]:
+    nodes = projection.nodes_by_id
+    by_kind = projection.node_ids_by_kind
+    roots = by_kind.get("file", frozenset()) | by_kind.get("module", frozenset())
     directories: set[str] = set()
     for identifier in roots:
         parts = str(nodes[identifier].get("path") or "").split("/")[:-1]
         directories.update("/".join(parts[:index]) for index in range(1, len(parts) + 1))
-    classes = by_kind["class"]
+    classes = by_kind.get("class", frozenset())
     return {
         "directories": len(directories), "files": len(roots), "classes": len(classes),
         "abstract_classes": sum(nodes[item].get("class_kind") == "abstract" for item in classes),
         "dataclasses": sum(nodes[item].get("class_kind") == "dataclass" for item in classes),
-        "functions": len(by_kind["function"]),
-        "methods": sum(nodes[item].get("synthetic") is not True for item in by_kind["method"]),
-        "fields": len(by_kind["field"]), "constants": len(by_kind["constant"]),
+        "functions": len(by_kind.get("function", frozenset())),
+        "methods": sum(
+            nodes[item].get("synthetic") is not True
+            for item in by_kind.get("method", frozenset())
+        ),
+        "fields": len(by_kind.get("field", frozenset())),
+        "constants": len(by_kind.get("constant", frozenset())),
     }
 
 
@@ -116,8 +114,8 @@ def calculate_graph_metrics(
 ) -> dict[str, Any]:
     """Return deterministic size, coupling, density and connectivity metrics."""
     projection = MetricsGraphProjection.from_graph(graph)
-    semantics_v5_plus = graph.get("parser_semantics_version") in {5, 6, 7}
-    bodyless_semantics = graph.get("parser_semantics_version") in {6, 7}
+    semantics_v5_plus = projection.parser_semantics_version in {5, 6, 7}
+    bodyless_semantics = projection.parser_semantics_version in {6, 7}
     files = [file.data for file in projection.legacy_files]
     file_graph = projection.directed_file_import_graph
     nodes = set(file_graph.nodes)
@@ -197,7 +195,7 @@ def calculate_graph_metrics(
     if canonical_objects or semantics_v5_plus:
         object_metrics = (
             calculate_semantics_v2_object_metrics(graph, projection=projection)
-            if graph.get("parser_semantics_version") == 2
+            if projection.parser_semantics_version == 2
             else calculate_canonical_object_metrics(graph, projection=projection)
         )
     else:
@@ -207,7 +205,7 @@ def calculate_graph_metrics(
     density_denominator = node_count * (node_count - 1)
 
     return {
-        "size": _canonical_size(graph) if semantics_v5_plus else {
+        "size": _canonical_size(projection) if semantics_v5_plus else {
             "directories": _directory_count(files),
             "files": len(files),
             "classes": len(classes),

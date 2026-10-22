@@ -89,6 +89,10 @@ frozen and its topology collections are immutable. This is an internal
 data/topology view: it does not change formulas or perform legacy string
 resolution. The transitional `body` adapter remains only for parser semantics
 v1-v5.
+Canonical size, complexity, quality, object WMC and call-graph risk read node
+attributes, complexity facts and parser semantics version from that same
+snapshot. Once a projection has been built, later mutation of the input mapping
+cannot mix declaration data from one graph state with topology from another.
 For parser semantics v4 and later, import references are exposed as an immutable snapshot
 and import topology is independent of legacy `body[*].file.imports`; older
 parser semantics retain the compatibility projection.

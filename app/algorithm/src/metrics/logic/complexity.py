@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .projections import MetricsGraphProjection
 
 
 def metrics_from_facts(facts: Mapping[str, Any]) -> dict[str, Any]:
@@ -52,11 +55,17 @@ def metrics_from_facts(facts: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def canonical_callable_metrics(graph: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+def canonical_callable_metrics(
+    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None,
+) -> dict[str, dict[str, Any]]:
     """Return metrics keyed exclusively by stable callable node ID."""
+    if projection is None:
+        from .projections import MetricsGraphProjection
+
+        projection = MetricsGraphProjection.from_graph(graph)
     return {
         str(node["id"]): metrics_from_facts(node["complexity_facts"])
-        for node in graph.get("nodes", [])
+        for node in projection.nodes_by_id.values()
         if isinstance(node, Mapping)
         and node.get("kind") in {"function", "method"}
         and node.get("synthetic") is not True
