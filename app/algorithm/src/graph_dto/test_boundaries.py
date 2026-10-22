@@ -226,6 +226,34 @@ def _literal_subscript_keys(node: ast.AST) -> set[str]:
     }
 
 
+def _literal_mapping_keys(node: ast.AST) -> set[str]:
+    keys = _literal_subscript_keys(node)
+    keys.update(
+        child.args[0].value
+        for child in ast.walk(node)
+        if isinstance(child, ast.Call)
+        and isinstance(child.func, ast.Attribute)
+        and child.func.attr == "get"
+        and child.args
+        and isinstance(child.args[0], ast.Constant)
+        and isinstance(child.args[0].value, str)
+    )
+    return keys
+
+
+def test_literal_mapping_key_detection_covers_subscript_and_get() -> None:
+    tree = ast.parse("graph['edges']; graph.get('edges'); graph.get(name)")
+    assert _literal_mapping_keys(tree) == {"edges"}
+
+
+def test_canonical_object_metrics_cannot_read_raw_edges() -> None:
+    function = _function(
+        ROOT / "metrics/logic/object_metrics.py",
+        "calculate_canonical_object_metrics",
+    )
+    assert "edges" not in _literal_mapping_keys(function)
+
+
 def test_known_legacy_resolution_markers_stay_in_compatibility_functions() -> None:
     call_graph = ROOT / "metrics/logic/call_graph.py"
     object_metrics = ROOT / "metrics/logic/object_metrics.py"

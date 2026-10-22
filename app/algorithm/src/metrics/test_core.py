@@ -164,6 +164,71 @@ def test_metrics_projection_is_a_deeply_immutable_snapshot() -> None:
         projection.nodes_by_id["fn"]["metadata"]["tags"][0] = "changed"  # type: ignore[index]
 
 
+def test_canonical_relation_projections_filter_deduplicate_and_snapshot() -> None:
+    graph = {
+        "nodes": [
+            {"id": "c:A", "kind": "class"},
+            {"id": "c:B", "kind": "class"},
+            {"id": "f:x", "kind": "field"},
+            {"id": "m:run", "kind": "method"},
+            {"id": "fn:free", "kind": "function"},
+        ],
+        "edges": [
+            {"kind": "inherits", "source_id": "c:A", "target_id": "c:B"},
+            {"kind": "inherits", "source_id": "c:A", "target_id": "c:B"},
+            {"kind": "inherits", "source_id": "c:A", "target_id": "c:A"},
+            {"kind": "inherits", "source_id": "m:run", "target_id": "c:A"},
+            {"kind": "inherits", "source_id": "c:A", "target_id": "missing"},
+            {"kind": "field_type", "source_id": "f:x", "target_id": "c:B"},
+            {"kind": "field_type", "source_id": "f:x", "target_id": "fn:free"},
+            {"kind": "accesses_field", "source_id": "m:run", "target_id": "f:x"},
+            {"kind": "accesses_field", "source_id": "fn:free", "target_id": "f:x"},
+        ],
+    }
+    projection = MetricsGraphProjection.from_graph(graph)
+
+    assert projection.directed_canonical_inheritance_graph.nodes == frozenset({
+        "c:A", "c:B",
+    })
+    assert projection.directed_canonical_inheritance_graph.edges == frozenset({
+        ("c:A", "c:B"), ("c:A", "c:A"),
+    })
+    assert projection.directed_canonical_field_type_graph.nodes == frozenset({
+        "f:x", "c:A", "c:B",
+    })
+    assert projection.directed_canonical_field_type_graph.edges == frozenset({
+        ("f:x", "c:B"),
+    })
+    assert projection.directed_canonical_field_access_graph.nodes == frozenset({
+        "m:run", "f:x",
+    })
+    assert projection.directed_canonical_field_access_graph.edges == frozenset({
+        ("m:run", "f:x"),
+    })
+    graph["edges"].clear()
+    assert projection.directed_canonical_inheritance_graph.edges == frozenset({
+        ("c:A", "c:B"), ("c:A", "c:A"),
+    })
+    with pytest.raises(FrozenInstanceError):
+        projection.directed_canonical_inheritance_graph.edges = frozenset()  # type: ignore[misc]
+
+
+def test_canonical_object_metrics_use_detached_relation_projections() -> None:
+    from metrics.logic.object_metrics import calculate_canonical_object_metrics
+
+    graph = _canonical_metrics_graph()
+    projection = MetricsGraphProjection.from_graph(graph)
+    wmc = {"c:A": 2, "c:B": 1, "c:C": 0}
+    expected = calculate_canonical_object_metrics(
+        graph, projection=projection, wmc_by_class_id=wmc,
+    )
+    graph["edges"].clear()
+
+    assert calculate_canonical_object_metrics(
+        graph, projection=projection, wmc_by_class_id=wmc,
+    ) == expected
+
+
 def test_semantics4_import_projection_uses_canonical_edges_not_legacy_body() -> None:
     graph = _canonical_call_graph()
     graph["parser_semantics_version"] = 4

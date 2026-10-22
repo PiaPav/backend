@@ -1,6 +1,6 @@
 # Статус декомпозиции
 
-Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `graph_dto/test_boundaries.py`, `parser/test_core.py` и `metrics/test_core.py`: 207 passed, 0 failed, 0 skipped.
+Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `graph_dto/test_boundaries.py`, `parser/test_core.py` и `metrics/test_core.py`: 211 passed, 0 failed, 0 skipped.
 
 ## Общий итог
 
@@ -69,14 +69,14 @@ Parser semantics v7 прекращает emission legacy `body` из файло�
 
 1. **Выполнен текущий инкремент.** `metrics/logic/projections.py::MetricsGraphProjection` один раз строится фасадом расчёта и предоставляет frozen/slots DTO, immutable topology collections, legacy files/effective modules, canonical nodes и callsites. Прямые вызовы внутренних consumers сохраняют fallback с самостоятельным построением или прежними аргументами.
 2. **Выполнен текущий инкремент.** Локальные wrappers `_file_id` удалены; единый `iter_legacy_calls` обслуживает activity, syntactic call nesting и legacy RFC. `identity.py` и legacy adapters сохранены.
-3. **Выполнен текущий инкремент.** Именованы и централизованы directed file/package imports (`dependent -> dependency`), normalized undirected file imports и weighted ID-only canonical `calls`/`awaits`. Calculator, architecture, canonical call graph и canonical object call topology переведены на эти views.
+3. **Выполнен текущий инкремент.** Именованы и централизованы directed file/package imports (`dependent -> dependency`), normalized undirected file imports, weighted ID-only canonical `calls`/`awaits`, а также canonical object relations `inherits`, `field_type` и `accesses_field`. Calculator, architecture, canonical call graph и canonical object topology переведены на эти immutable views.
 4. **Выполнен для parser semantics v2.** Canonical object/call branches используют только готовые IDs, typed edges и resolution statuses. Строковые `resolve`-эвристики сохранены исключительно внутри versioned legacy compatibility path. Остаток полного этапа связан с общей projection-моделью и последующим удалением legacy adapter.
 
 ## Этап 7. Закрепить независимость
 
 1. **Выполнен для Parser test boundary.** `parser/test_core.py` больше не импортирует Metrics: complexity facts и legacy projection проверяются собственными точными ожиданиями Parser.
 2. **Выполнен для Metrics test boundary.** `metrics/test_core.py` не импортирует и не запускает Parser или legacy calculator. Metrics проверяется на статических Graph DTO, включая два полных golden-сравнения файлового API и валидный bodyless semantics-v7 fixture.
-3. **Выполнен текущий статический gate.** `graph_dto/test_boundaries.py` через AST запрещает cross-imports между Parser, Metrics и Graph DTO в production и тестах, включая литеральные dynamic imports и их aliases. Отдельный marker/helper/key guard ограничивает известные legacy topology/name-resolution paths compatibility-функциями и запрещает их canonical calculators.
+3. **Выполнен текущий статический gate.** `graph_dto/test_boundaries.py` через AST запрещает cross-imports между Parser, Metrics и Graph DTO в production и тестах, включая литеральные dynamic imports и их aliases. Отдельный marker/helper/key guard ограничивает известные legacy topology/name-resolution paths compatibility-функциями, запрещает их canonical calculators и не допускает возврата прямого чтения raw `edges` в canonical object calculator.
 4. **Выполнен ранее.** Файловые контракты Parser, Metrics и Graph DTO документированы отдельно в соответствующих `CONTRACT.md`.
 5. **Не выполнялся по плану перехода.** Legacy adapters v1-v5 сохранены; их удаление требует отдельного версионированного решения.
 
@@ -84,7 +84,7 @@ Semantics-v2 body-derived WMC вынесен из canonical object calculator в
 
 ## Вывод относительно ожидаемого состояния
 
-Этапы 1, 2 и 3 подтверждены полностью. Этап 4 выполнен для текущего canonical output: semantics v7 содержит готовые relations/facts и не допускает `body`, при этом старые DTO остаются читаемыми. Этап 5 выполнен для semantics v7: complexity и activity используют canonical facts без изменения чисел. V1-v5 adapters сохранены только для совместимости. В этапе 6 введена единая внутренняя read-only projection-модель и централизованы topology/traversal views; полный этап не объявляется завершённым до отдельного удаления legacy adapters. В этапе 7 Parser и Metrics получили независимые test boundaries и AST architecture gates; удаление legacy adapters по-прежнему остаётся отдельным версионированным изменением.
+Этапы 1, 2 и 3 подтверждены полностью. Этап 4 выполнен для текущего canonical output: semantics v7 содержит готовые relations/facts и не допускает `body`, при этом старые DTO остаются читаемыми. Этап 5 выполнен для semantics v7: complexity и activity используют canonical facts без изменения чисел. V1-v5 adapters сохранены только для совместимости. В этапе 6 введена единая внутренняя read-only projection-модель и централизованы import, call и canonical object topology/traversal views; полный этап не объявляется завершённым до отдельного удаления legacy adapters. В этапе 7 Parser и Metrics получили независимые test boundaries и AST architecture gates; удаление legacy adapters по-прежнему остаётся отдельным версионированным изменением.
 
 ## Приоритет доработок
 

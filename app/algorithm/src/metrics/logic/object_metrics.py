@@ -197,9 +197,9 @@ def calculate_canonical_object_metrics(
     """Calculate object metrics exclusively from canonical ID relations."""
     projection = projection or MetricsGraphProjection.from_graph(graph)
     nodes = projection.nodes_by_id
-    class_ids = {identifier for identifier, node in nodes.items() if node.get("kind") == "class"}
-    method_ids = {identifier for identifier, node in nodes.items() if node.get("kind") == "method"}
-    field_ids = {identifier for identifier, node in nodes.items() if node.get("kind") == "field"}
+    class_ids = set(projection.node_ids_by_kind.get("class", ()))
+    method_ids = set(projection.node_ids_by_kind.get("method", ()))
+    field_ids = set(projection.node_ids_by_kind.get("field", ()))
     parents = {identifier: set() for identifier in class_ids}
     children = {identifier: set() for identifier in class_ids}
     fields_by_class = {identifier: set() for identifier in class_ids}
@@ -226,17 +226,14 @@ def calculate_canonical_object_metrics(
     for identifier in method_ids:
         owner = nodes[identifier].get("parent_id")
         if owner in class_ids: methods_by_class[owner].add(identifier)
-    for edge in graph.get("edges", []):
-        if not isinstance(edge, Mapping): continue
-        kind = edge.get("kind"); source = edge.get("source_id"); target = edge.get("target_id")
-        if kind == "inherits" and source in class_ids and target in class_ids:
-            parents[source].add(target)
-            if source != target:
-                children[target].add(source)
-        elif kind == "field_type" and source in field_ids and target in class_ids:
-            field_types[source].add(target)
-        elif kind == "accesses_field" and source in method_ids and target in field_ids:
-            accesses[source].add(target)
+    for source, target in projection.directed_canonical_inheritance_graph.edges:
+        parents[source].add(target)
+        if source != target:
+            children[target].add(source)
+    for source, target in projection.directed_canonical_field_type_graph.edges:
+        field_types[source].add(target)
+    for source, target in projection.directed_canonical_field_access_graph.edges:
+        accesses[source].add(target)
     for source, target in projection.directed_canonical_call_graph.edges:
         if source in method_ids and target in nodes and nodes[target].get("kind") in {"function", "method"}:
             calls[source].add(target)

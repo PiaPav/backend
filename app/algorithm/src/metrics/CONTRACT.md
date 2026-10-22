@@ -82,10 +82,13 @@ Metric calculation constructs one internal read-only `MetricsGraphProjection`.
 It exposes collision-safe legacy file identity and effective semantic modules,
 canonical nodes/callsites, directed file and package imports in the explicit
 `dependent -> dependency` direction, normalized undirected file pairs, and an
-ID-only weighted `calls`/`awaits` graph. Its DTOs are frozen and its topology
-collections are immutable. This is an internal data/topology view: it does not
-change formulas or perform legacy string resolution. The transitional `body`
-adapter remains only for parser semantics v1-v5.
+ID-only weighted `calls`/`awaits` graph. Canonical object topology is exposed
+through separate directed `inherits` (`class -> class`), `field_type`
+(`field -> class`), and `accesses_field` (`method -> field`) views. Its DTOs are
+frozen and its topology collections are immutable. This is an internal
+data/topology view: it does not change formulas or perform legacy string
+resolution. The transitional `body` adapter remains only for parser semantics
+v1-v5.
 For parser semantics v4 and later, import references are exposed as an immutable snapshot
 and import topology is independent of legacy `body[*].file.imports`; older
 parser semantics retain the compatibility projection.

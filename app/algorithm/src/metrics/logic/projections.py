@@ -109,6 +109,9 @@ class MetricsGraphProjection:
     directed_package_import_graph: DirectedGraphProjection
     undirected_file_import_graph: UndirectedGraphProjection
     directed_canonical_call_graph: WeightedDirectedGraphProjection
+    directed_canonical_inheritance_graph: DirectedGraphProjection
+    directed_canonical_field_type_graph: DirectedGraphProjection
+    directed_canonical_field_access_graph: DirectedGraphProjection
 
     @classmethod
     def from_graph(cls, graph: Mapping[str, Any]) -> "MetricsGraphProjection":
@@ -182,12 +185,25 @@ class MetricsGraphProjection:
             if isinstance(fact, Mapping) and "owner_id" in fact
         }
         weights: Counter[tuple[str, str]] = Counter()
+        relation_edges: dict[str, set[tuple[str, str]]] = {
+            "inherits": set(), "field_type": set(), "accesses_field": set(),
+        }
+        relation_kinds = {
+            "inherits": ("class", "class"),
+            "field_type": ("field", "class"),
+            "accesses_field": ("method", "field"),
+        }
         for edge in graph.get("edges", []):
-            if not isinstance(edge, Mapping) or edge.get("kind") not in {"calls", "awaits"}:
+            if not isinstance(edge, Mapping):
                 continue
+            kind = edge.get("kind")
             source, target = edge.get("source_id"), edge.get("target_id")
-            if source in raw_nodes and target in raw_nodes:
+            if kind in {"calls", "awaits"} and source in raw_nodes and target in raw_nodes:
                 weights[(str(source), str(target))] += int(edge.get("weight", 1))
+            if kind in relation_kinds and source in raw_nodes and target in raw_nodes:
+                source_kind, target_kind = relation_kinds[kind]
+                if raw_nodes[source].get("kind") == source_kind and raw_nodes[target].get("kind") == target_kind:
+                    relation_edges[kind].add((str(source), str(target)))
 
         return cls(
             parser_semantics_version=graph.get("parser_semantics_version"),
@@ -205,5 +221,16 @@ class MetricsGraphProjection:
             undirected_file_import_graph=UndirectedGraphProjection(file_nodes, undirected_edges),
             directed_canonical_call_graph=WeightedDirectedGraphProjection(
                 frozenset(raw_nodes), MappingProxyType(dict(weights))
+            ),
+            directed_canonical_inheritance_graph=DirectedGraphProjection(
+                frozenset(kinds.get("class", ())), frozenset(relation_edges["inherits"])
+            ),
+            directed_canonical_field_type_graph=DirectedGraphProjection(
+                frozenset((*kinds.get("field", ()), *kinds.get("class", ()))),
+                frozenset(relation_edges["field_type"]),
+            ),
+            directed_canonical_field_access_graph=DirectedGraphProjection(
+                frozenset((*kinds.get("method", ()), *kinds.get("field", ()))),
+                frozenset(relation_edges["accesses_field"]),
             ),
         )
