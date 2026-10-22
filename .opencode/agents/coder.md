@@ -17,6 +17,7 @@ permission:
 
     # Pytest через виртуальное окружение
     '*\.venv\Scripts\python.exe" -m pytest *': allow
+    "'*\\.venv\\Scripts\\python.exe' -m pytest *": allow
     '*\.venv\Scripts\python.exe -m pytest *': allow
         
     # Powershell
