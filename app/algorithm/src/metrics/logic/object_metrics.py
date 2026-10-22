@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict, deque
 from collections.abc import Mapping
 from itertools import combinations
 from typing import Any
@@ -191,9 +191,10 @@ def calculate_object_metrics(
 
 
 def calculate_canonical_object_metrics(
-    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None
+    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None,
+    wmc_by_class_id: Mapping[str, int] | None = None,
 ) -> dict[str, Any]:
-    """Calculate v3 object metrics exclusively from canonical ID relations."""
+    """Calculate object metrics exclusively from canonical ID relations."""
     projection = projection or MetricsGraphProjection.from_graph(graph)
     nodes = projection.nodes_by_id
     class_ids = {identifier for identifier, node in nodes.items() if node.get("kind") == "class"}
@@ -259,25 +260,16 @@ def calculate_canonical_object_metrics(
                 if parent in active: depths[parent] = None
                 elif parent not in depths: stack.append((parent, False))
 
-    canonical_complexity = (
-        canonical_callable_metrics(graph)
-        if graph.get("parser_semantics_version") in {3, 4, 5, 6, 7} else None
-    )
-    # Semantics v2 retains the transitional body-derived WMC path.
-    legacy_wmc: dict[tuple[str, str], int] = {}
-    if canonical_complexity is None:
-        files = [file.data for file in projection.legacy_files] if projection else graph_files(graph)
-        for file in files:
-            module = legacy_file_id(file)
-            directory = str(file.get("path") or "").replace(".", "/")
-            source_path = "/".join(filter(None, (directory, f"{file.get('name')}.py")))
-            for class_info in file.get("classes", []):
-                if not isinstance(class_info, Mapping): continue
-                qualified = f"{module}.{class_info.get('name')}"
-                legacy_wmc[(source_path, qualified)] = sum(
-                    int(method.get("metrics", {}).get("cyclomatic_complexity", 1))
-                    for method in class_info.get("methods", []) if isinstance(method, Mapping)
-                )
+    if wmc_by_class_id is None:
+        callable_metrics = canonical_callable_metrics(graph)
+        wmc_by_class_id = {
+            class_id: sum(
+                int(callable_metrics[method]["cyclomatic_complexity"])
+                for method in methods_by_class[class_id]
+                if method in callable_metrics and not bool(nodes[method].get("synthetic"))
+            )
+            for class_id in class_ids
+        }
 
     rows = []
     for class_id in class_ids:
@@ -296,12 +288,7 @@ def calculate_canonical_object_metrics(
         method_fields = [accesses[method] & fields_by_class[class_id] for method in declared]
         pairs = list(combinations(method_fields, 2))
         lcom = (sum(not (left & right) for left, right in pairs) / len(pairs)) if pairs and fields_by_class[class_id] else None
-        wmc = (
-            sum(int(canonical_complexity[method]["cyclomatic_complexity"])
-                for method in declared if method in canonical_complexity)
-            if canonical_complexity is not None
-            else legacy_wmc.get((str(node.get("path") or ""), str(node.get("qualified_name") or class_id)), 0)
-        )
+        wmc = int(wmc_by_class_id.get(class_id, 0))
         rows.append({
             "class": label, "wmc": wmc, "cbo": len(dependencies),
             "rfc": len(declared | targets), "lcom": round(lcom, 4) if lcom is not None else None,
@@ -318,3 +305,56 @@ def calculate_canonical_object_metrics(
         "classes": sorted(rows, key=lambda row: row["class"]),
     }
     return result
+
+
+def calculate_semantics_v2_object_metrics(
+    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None,
+) -> dict[str, Any]:
+    """Compatibility adapter for the semantics-v2 body-derived WMC."""
+    projection = projection or MetricsGraphProjection.from_graph(graph)
+    legacy_wmc: dict[tuple[str, str], deque[int]] = defaultdict(deque)
+    for legacy_file in projection.legacy_files:
+        file = legacy_file.data
+        path_parts = tuple(str(part) for part in file.get("path_parts", ()))
+        source_path = "/".join((*path_parts, f"{file.get('name')}.py"))
+        for class_info in file.get("classes", []):
+            if not isinstance(class_info, Mapping):
+                continue
+            class_name = str(class_info.get("name") or "")
+            legacy_wmc[(source_path, class_name)].append(sum(
+                int(method.get("metrics", {}).get("cyclomatic_complexity", 1))
+                for method in class_info.get("methods", [])
+                if isinstance(method, Mapping)
+            ))
+
+    def source_occurrence(item: tuple[str, Mapping[str, Any]]) -> tuple[str, int, int, str]:
+        identifier, node = item
+        location = node.get("location")
+        if not isinstance(location, Mapping):
+            location = {}
+        path = str(node.get("path") or location.get("path") or "")
+        line = location.get("line")
+        column = location.get("column")
+        return (
+            path,
+            int(line) if isinstance(line, int) else 2**63 - 1,
+            int(column) if isinstance(column, int) else 2**63 - 1,
+            identifier,
+        )
+
+    canonical_classes = sorted(
+        (
+            (identifier, node)
+            for identifier, node in projection.nodes_by_id.items()
+            if node.get("kind") == "class"
+        ),
+        key=source_occurrence,
+    )
+    wmc_by_class_id: dict[str, int] = {}
+    for identifier, node in canonical_classes:
+        class_name = str(node.get("qualified_name") or identifier).rsplit(".", 1)[-1]
+        occurrences = legacy_wmc.get((str(node.get("path") or ""), class_name))
+        wmc_by_class_id[identifier] = occurrences.popleft() if occurrences else 0
+    return calculate_canonical_object_metrics(
+        graph, projection=projection, wmc_by_class_id=wmc_by_class_id,
+    )

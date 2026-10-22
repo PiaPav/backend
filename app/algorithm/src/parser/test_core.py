@@ -1261,8 +1261,6 @@ def test_semantics2_type_wrappers_only_follow_type_arguments(tmp_path: Path) -> 
         ("model.Owner.either", "B", "model.B"),
     ]
 def test_semantics3_complexity_facts_exactly_reproduce_legacy_rich_flow(tmp_path: Path) -> None:
-    from metrics.logic.complexity import metrics_from_facts
-
     source = tmp_path / "source"
     source.mkdir()
     (source / "flow.py").write_text(
@@ -1282,13 +1280,30 @@ def test_semantics3_complexity_facts_exactly_reproduce_legacy_rich_flow(tmp_path
     node = next(item for item in graph["nodes"] if item["kind"] == "function")
     legacy = _legacy_file(source, "flow")["functions"][0]["metrics"]
     assert graph["parser_semantics_version"] == 7
-    assert metrics_from_facts(node["complexity_facts"]) == legacy
+    facts = node["complexity_facts"]
+    assert [item["kind"] for item in facts["controls"]] == [
+        "try", "if", "boolean", "comprehension", "match",
+        "exception_handler",
+    ]
+    assert legacy == {
+        "cyclomatic_complexity": 7,
+        "cognitive_complexity": 12,
+        "max_nesting": 3,
+        "lines_of_code": 11,
+        "statement_count": 8,
+        "return_count": 2,
+        "raise_count": 1,
+        "await_count": 1,
+        "broad_exception_handlers": 1,
+        "raised_exceptions": ["ValueError"],
+        "caught_exceptions": ["Exception"],
+        "self_attribute_accesses": ["fallback", "run"],
+        "is_async": True,
+    }
     assert "hidden" not in legacy["self_attribute_accesses"]
 
 
 def test_semantics3_structural_locations_and_scope_boundaries_match_legacy(tmp_path: Path) -> None:
-    from metrics.logic.complexity import metrics_from_facts
-
     source = tmp_path / "source"
     source.mkdir()
     (source / "edges.py").write_text(
@@ -1311,7 +1326,21 @@ def test_semantics3_structural_locations_and_scope_boundaries_match_legacy(tmp_p
     facts = node["complexity_facts"]
     legacy = _legacy_file(source, "edges")["functions"][0]["metrics"]
 
-    assert metrics_from_facts(facts) == legacy
+    assert legacy == {
+        "cyclomatic_complexity": 5,
+        "cognitive_complexity": 7,
+        "max_nesting": 2,
+        "lines_of_code": 12,
+        "statement_count": 8,
+        "return_count": 0,
+        "raise_count": 0,
+        "await_count": 0,
+        "broad_exception_handlers": 0,
+        "raised_exceptions": [],
+        "caught_exceptions": ["ValueError"],
+        "self_attribute_accesses": [],
+        "is_async": True,
+    }
     # Legacy comprehensions contribute 1 + filter_count (plus depth cognitively).
     assert legacy["cyclomatic_complexity"] == 5
     assert legacy["cognitive_complexity"] == 7

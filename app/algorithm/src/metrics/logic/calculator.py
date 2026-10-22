@@ -8,7 +8,11 @@ from typing import Any
 
 from .architecture import calculate_architecture_metrics
 from .call_graph import calculate_call_graph_metrics
-from .object_metrics import calculate_canonical_object_metrics, calculate_object_metrics
+from .object_metrics import (
+    calculate_canonical_object_metrics,
+    calculate_object_metrics,
+    calculate_semantics_v2_object_metrics,
+)
 from .quality import calculate_quality_metrics
 from .identity import effective_module_ids, graph_files, legacy_file_id
 from .graph_algorithms import strong_components as _strong_components
@@ -190,6 +194,16 @@ def calculate_graph_metrics(
                     if bodyless_semantics else len(methods))
     class_count = (len(projection.node_ids_by_kind.get("class", frozenset()))
                    if bodyless_semantics else len(classes))
+    if canonical_objects or semantics_v5_plus:
+        object_metrics = (
+            calculate_semantics_v2_object_metrics(graph, projection=projection)
+            if graph.get("parser_semantics_version") == 2
+            else calculate_canonical_object_metrics(graph, projection=projection)
+        )
+    else:
+        object_metrics = calculate_object_metrics(
+            graph, cyclic_dit_is_none=canonical_mode, projection=projection,
+        )
     density_denominator = node_count * (node_count - 1)
 
     return {
@@ -248,7 +262,7 @@ def calculate_graph_metrics(
             files, nodes, edges, legacy_file_id, projection=projection
         ),
         "code_quality": calculate_quality_metrics(graph, projection=projection),
-        "object_oriented": calculate_canonical_object_metrics(graph, projection=projection) if canonical_objects or semantics_v5_plus else calculate_object_metrics(graph, cyclic_dit_is_none=canonical_mode, projection=projection),
+        "object_oriented": object_metrics,
         "call_graph": calculate_call_graph_metrics(
             graph, legacy_resolution=legacy_resolution,
             canonical=canonical_calls or semantics_v5_plus,

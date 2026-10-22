@@ -1,6 +1,6 @@
 # Статус декомпозиции
 
-Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `parser/test_core.py` и `metrics/test_core.py`: 201 passed, 0 failed, 0 skipped.
+Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `graph_dto/test_boundaries.py`, `parser/test_core.py` и `metrics/test_core.py`: 207 passed, 0 failed, 0 skipped.
 
 ## Общий итог
 
@@ -12,6 +12,7 @@
 | 4. Версионированный Graph DTO | **выполнен для текущего canonical output**: semantics v7 не содержит `body`; старые версии читаются |
 | 5. Формулы сложности в Metrics | **выполнен для semantics v7**: Metrics использует canonical facts и не зависит от legacy `body` |
 | 6. Аналитические проекции | **частично / единая внутренняя read-only модель введена** |
+| 7. Независимость ядер | **частично / тестовые границы и статические запреты закреплены** |
 
 ## Этап 1. Зафиксировать текущую семантику
 
@@ -34,7 +35,7 @@
 2. **Выполнен.** `metrics/core.py::calculate_metrics(graph_path, output_path) -> Path` реализует файловый контракт. Остатка в текущем scope нет.
 3. **Выполнен.** Фасад переиспользует `metrics/logic/calculator.py::calculate_graph_metrics` и внутренний канонический writer из `metrics/logic/serialization.py`. Единый writer атомарно записывает UTF-8 JSON через временный файл рядом с target и `os.replace`, выполняет best-effort cleanup без маскировки исходной ошибки и возвращает resolved `Path`. Канонический Metrics DTO сохраняет прежние детерминированные байты (`indent=2`, sorted keys, LF и trailing newline), а публичные full/compact compatibility writers сохраняют свои форматы. Детерминизм, exact bytes, Unicode, restore equivalence и cleanup покрыты `metrics/test_core.py`.
 4. **Выполнен.** Legacy-чтение сосредоточено в `metrics/core.py`, а идентичность файлов — в `metrics/logic/identity.py` (`legacy_file_id`, `graph_files`, `effective_module_ids`). Остатка в переходном scope нет.
-5. **Выполнен.** Runtime-код `metrics` не импортирует Parser и читает только graph-файл; ограничение проверяет `metrics/test_core.py::test_no_runtime_cross_package_or_legacy_imports`. Остатка нет.
+5. **Выполнен.** Runtime-код `metrics` не импортирует Parser и читает только graph-файл; ограничение проверяет `graph_dto/test_boundaries.py::test_production_package_import_boundaries`. Остатка нет.
 
 Файловый API, loader/validation, identity, runtime independence и единая атомарная serialization готовы. Semantics v6/v7 рассчитываются без `body`; v1-v5 сохраняют legacy adapter. Остатка по этапу 3 нет.
 
@@ -71,11 +72,21 @@ Parser semantics v7 прекращает emission legacy `body` из файло�
 3. **Выполнен текущий инкремент.** Именованы и централизованы directed file/package imports (`dependent -> dependency`), normalized undirected file imports и weighted ID-only canonical `calls`/`awaits`. Calculator, architecture, canonical call graph и canonical object call topology переведены на эти views.
 4. **Выполнен для parser semantics v2.** Canonical object/call branches используют только готовые IDs, typed edges и resolution statuses. Строковые `resolve`-эвристики сохранены исключительно внутри versioned legacy compatibility path. Остаток полного этапа связан с общей projection-моделью и последующим удалением legacy adapter.
 
+## Этап 7. Закрепить независимость
+
+1. **Выполнен для Parser test boundary.** `parser/test_core.py` больше не импортирует Metrics: complexity facts и legacy projection проверяются собственными точными ожиданиями Parser.
+2. **Выполнен для Metrics test boundary.** `metrics/test_core.py` не импортирует и не запускает Parser или legacy calculator. Metrics проверяется на статических Graph DTO, включая два полных golden-сравнения файлового API и валидный bodyless semantics-v7 fixture.
+3. **Выполнен текущий статический gate.** `graph_dto/test_boundaries.py` через AST запрещает cross-imports между Parser, Metrics и Graph DTO в production и тестах, включая литеральные dynamic imports и их aliases. Отдельный marker/helper/key guard ограничивает известные legacy topology/name-resolution paths compatibility-функциями и запрещает их canonical calculators.
+4. **Выполнен ранее.** Файловые контракты Parser, Metrics и Graph DTO документированы отдельно в соответствующих `CONTRACT.md`.
+5. **Не выполнялся по плану перехода.** Legacy adapters v1-v5 сохранены; их удаление требует отдельного версионированного решения.
+
+Semantics-v2 body-derived WMC вынесен из canonical object calculator в compatibility adapter. Сопоставление legacy и canonical классов использует source path, короткое имя и occurrence order, сохраняя default complexity `1`, пустые и повторные классы и коллизии `pkg.py`/`pkg/__init__.py`. Semantics v3+ продолжает использовать canonical complexity facts.
+
 ## Вывод относительно ожидаемого состояния
 
-Этапы 1, 2 и 3 подтверждены полностью. Этап 4 выполнен для текущего canonical output: semantics v7 содержит готовые relations/facts и не допускает `body`, при этом старые DTO остаются читаемыми. Этап 5 выполнен для semantics v7: complexity и activity используют canonical facts без изменения чисел. V1-v5 adapters сохранены только для совместимости. В этапе 6 введена единая внутренняя read-only projection-модель и централизованы topology/traversal views; полный этап не объявляется завершённым до отдельного удаления legacy adapters.
+Этапы 1, 2 и 3 подтверждены полностью. Этап 4 выполнен для текущего canonical output: semantics v7 содержит готовые relations/facts и не допускает `body`, при этом старые DTO остаются читаемыми. Этап 5 выполнен для semantics v7: complexity и activity используют canonical facts без изменения чисел. V1-v5 adapters сохранены только для совместимости. В этапе 6 введена единая внутренняя read-only projection-модель и централизованы topology/traversal views; полный этап не объявляется завершённым до отдельного удаления legacy adapters. В этапе 7 Parser и Metrics получили независимые test boundaries и AST architecture gates; удаление legacy adapters по-прежнему остаётся отдельным версионированным изменением.
 
 ## Приоритет доработок
 
-1. Закрепить этап 7 независимыми Parser/Metrics test boundaries и статическими запретами на новые cross-import и legacy topology/resolution paths.
+1. Расширять marker-based architecture gate при появлении новых compatibility helpers; он фиксирует известные legacy-механизмы и не заменяет архитектурное ревью принципиально новых эвристик.
 2. После отдельного решения о сроке совместимости удалить v1-v5 legacy adapters версионированным изменением, не затрагивая `starter()` без явного решения.

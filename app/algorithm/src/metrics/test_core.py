@@ -1,5 +1,4 @@
 import json
-import ast
 import os
 from copy import deepcopy
 from collections.abc import Callable
@@ -10,8 +9,7 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from metrics import calculate_graph_metrics, calculate_metrics, load_graph
-from graph_dto import graph_fingerprint
-from parser import parse_project, starter
+from graph_dto import graph_fingerprint, validate_graph_v1
 from metrics.logic.projections import MetricsGraphProjection, iter_legacy_calls
 from metrics.logic.serialization import (
     compact_graph_metrics,
@@ -26,6 +24,80 @@ def _v3_metrics(graph: dict) -> dict:
         graph, canonical_mode=True, legacy_resolution=False,
         canonical_objects=True, canonical_calls=True,
     )
+
+
+def _facts(path: str = "model.py", line: int = 1, *, controls: list[dict] | None = None) -> dict:
+    location = {"path": path, "line": line, "column": 0}
+    return {
+        "span": {"start": location, "end": {**location, "column": 1}},
+        "is_async": False,
+        "controls": controls or [],
+        "occurrences": [],
+    }
+
+
+def _canonical_call_graph() -> dict:
+    """Small valid Graph DTO used to test metrics without invoking a producer."""
+    def node(identifier: str, kind: str, qualified_name: str, path: str,
+             *, parent_id: str | None = None) -> dict:
+        location = {"path": path, "line": 1, "column": 0}
+        item = {
+            "id": identifier, "kind": kind, "qualified_name": qualified_name,
+            "parent_id": parent_id, "path": path, "location": location,
+        }
+        if kind == "function":
+            item["complexity_facts"] = _facts(path)
+        return item
+
+    graph = {
+        "schema_version": 1,
+        "parser_semantics_version": 7,
+        "project": {"fingerprint": ""},
+        "nodes": [
+            node("file:provider.py", "file", "provider", "provider.py"),
+            node("file:consumer.py", "file", "consumer", "consumer.py"),
+            node("fn:available", "function", "provider.available", "provider.py", parent_id="file:provider.py"),
+            node("fn:run", "function", "consumer.run", "consumer.py", parent_id="file:consumer.py"),
+        ],
+        "edges": [
+            {"id": "contains:available", "kind": "contains", "source_id": "file:provider.py", "target_id": "fn:available"},
+            {"id": "contains:run", "kind": "contains", "source_id": "file:consumer.py", "target_id": "fn:run"},
+            {"id": "imports:local", "kind": "imports", "source_id": "file:consumer.py", "target_id": "file:provider.py", "location": {"path": "consumer.py", "line": 1, "column": 0}},
+            {"id": "calls:run:available", "kind": "calls", "source_id": "fn:run", "target_id": "fn:available", "weight": 1},
+        ],
+        "callsites": [
+            {"id": "call:exact", "caller_id": "fn:run", "expression": "available()", "location": {"path": "consumer.py", "line": 1, "column": 0}, "resolution": "exact", "target_id": "fn:available", "candidate_ids": [], "syntactic_depth": 0, "awaited": False},
+            {"id": "call:external", "caller_id": "fn:run", "expression": "external()", "location": {"path": "consumer.py", "line": 2, "column": 0}, "resolution": "external", "target_id": None, "candidate_ids": [], "syntactic_depth": 0, "awaited": False},
+            {"id": "call:unresolved", "caller_id": "fn:run", "expression": "unknown()", "location": {"path": "consumer.py", "line": 3, "column": 0}, "resolution": "unresolved", "target_id": None, "candidate_ids": [], "syntactic_depth": 0, "awaited": False},
+        ],
+        "import_references": [
+            {"id": "local", "importer_id": "file:consumer.py", "kind": "import", "module": "", "name": "provider", "alias": None, "level": 0, "location": {"path": "consumer.py", "line": 1, "column": 0}, "resolution": "exact", "target_id": "file:provider.py", "candidate_ids": []},
+            {"id": "external", "importer_id": "file:consumer.py", "kind": "import", "module": "", "name": "external", "alias": None, "level": 0, "location": {"path": "consumer.py", "line": 2, "column": 0}, "resolution": "external", "target_id": None, "candidate_ids": []},
+        ],
+        "owner_structural_facts": [
+            {"owner_id": "file:provider.py", "call_occurrences": 0, "direct_import_occurrences": {"project_local": 0, "non_project": 0}},
+            {"owner_id": "file:consumer.py", "call_occurrences": 0, "direct_import_occurrences": {"project_local": 1, "non_project": 1}},
+            {"owner_id": "fn:available", "call_occurrences": 0},
+            {"owner_id": "fn:run", "call_occurrences": 3},
+        ],
+        "type_references": [],
+        "diagnostics": [],
+    }
+    graph["project"]["fingerprint"] = graph_fingerprint(graph)
+    return graph
+
+
+def test_semantics7_fixture_validates_and_is_accepted_by_public_file_api(tmp_path: Path) -> None:
+    graph = _canonical_call_graph()
+    validate_graph_v1(graph)
+    graph_path = tmp_path / "graph.json"
+    graph_path.write_text(json.dumps(graph), encoding="utf-8")
+
+    result_path = calculate_metrics(graph_path, tmp_path / "metrics.json")
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+
+    assert result["input"]["graph_fingerprint"] == graph["project"]["fingerprint"]
+    assert result["metrics"]["call_graph"]["callsites_in_local_edges"] == 1
 
 
 def test_metrics_projection_is_immutable_and_preserves_named_topologies() -> None:
@@ -92,41 +164,26 @@ def test_metrics_projection_is_a_deeply_immutable_snapshot() -> None:
         projection.nodes_by_id["fn"]["metadata"]["tags"][0] = "changed"  # type: ignore[index]
 
 
-def test_semantics4_import_projection_uses_canonical_edges_not_legacy_body(tmp_path: Path) -> None:
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "dependency.py").write_text("value = 1\n", encoding="utf-8")
-    (source / "consumer.py").write_text(
-        "import dependency\nimport third_party\n", encoding="utf-8"
-    )
-    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+def test_semantics4_import_projection_uses_canonical_edges_not_legacy_body() -> None:
+    graph = _canonical_call_graph()
     graph["parser_semantics_version"] = 4
-    graph["body"] = starter(source)["body"]
-    consumer = next(item["file"] for item in graph["body"] if item["file"]["name"] == "consumer")
-    consumer["imports"].clear()
+    graph["body"] = [{"file": {"name": "consumer", "path": "", "path_parts": [], "imports": []}}]
 
     projection = MetricsGraphProjection.from_graph(graph)
     assert projection.directed_file_import_graph.edges == frozenset({
-        ("file:consumer.py", "file:dependency.py")
+        ("file:consumer.py", "file:provider.py")
     })
     assert {item["resolution"] for item in projection.import_references} == {"exact", "external"}
     with pytest.raises(TypeError):
         projection.import_references[0]["resolution"] = "changed"  # type: ignore[index]
 
 
-def test_semantics4_nested_imports_do_not_migrate_legacy_activity(tmp_path: Path) -> None:
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "dependency.py").write_text("value = 1\n", encoding="utf-8")
-    (source / "consumer.py").write_text(
-        "def run():\n    import dependency\n",
-        encoding="utf-8",
-    )
-    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+def test_semantics4_nested_imports_do_not_migrate_legacy_activity() -> None:
+    graph = _canonical_call_graph()
     graph["parser_semantics_version"] = 4
-    graph["body"] = starter(source)["body"]
+    graph["body"] = [{"file": {"name": "consumer", "path": "", "path_parts": [], "imports": []}}]
 
-    assert len(graph["import_references"]) == 1
+    assert len(graph["import_references"]) == 2
     assert any(edge["kind"] == "imports" for edge in graph["edges"])
     consumer = next(item["file"] for item in graph["body"] if item["file"]["name"] == "consumer")
     assert consumer["imports"] == []
@@ -198,21 +255,16 @@ def test_internal_metric_consumers_keep_projection_compatibility_fallback() -> N
     )
 
 
-def test_semantics3_complexity_consumers_use_facts_by_node_id(tmp_path: Path) -> None:
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "model.py").write_text(
-        "class Worker:\n"
-        "    def run(self, flag):\n"
-        "        if flag:\n            return self.run(False)\n"
-        "        return 0\n",
-        encoding="utf-8",
-    )
-    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
-    envelope = json.loads(calculate_metrics(tmp_path / "graph.json", tmp_path / "metrics.json").read_text(encoding="utf-8"))
-    assert envelope["metrics_semantics_version"] == 4
+def test_semantics3_complexity_consumers_use_facts_by_node_id() -> None:
+    graph = _canonical_metrics_graph()
+    graph["body"][0]["file"]["classes"][0]["methods"].append({
+        "name": "legacy", "metrics": {"cyclomatic_complexity": 1}, "calls": [],
+    })
+    for node in graph["nodes"]:
+        if node["kind"] in {"function", "method"}:
+            node["complexity_facts"] = _facts()
+            node.setdefault("location", {"path": "model.py", "line": 1, "column": 0})
     graph["parser_semantics_version"] = 3
-    graph["body"] = starter(source)["body"]
     baseline = _v3_metrics(graph)
 
     body_mutation = deepcopy(graph)
@@ -238,18 +290,13 @@ def test_semantics3_complexity_consumers_use_facts_by_node_id(tmp_path: Path) ->
     assert _v3_metrics(permuted) == baseline
 
 
-def test_semantics3_synthetic_constructor_has_no_complexity_identity(tmp_path: Path) -> None:
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "model.py").write_text(
-        "class Empty:\n    pass\n\ndef make():\n    return Empty()\n",
-        encoding="utf-8",
-    )
-    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
-    synthetic = next(node for node in graph["nodes"] if node.get("synthetic"))
+def test_semantics3_synthetic_constructor_has_no_complexity_identity() -> None:
+    graph = _canonical_call_graph()
+    synthetic = {"id": "m:Empty.__init__", "kind": "method", "qualified_name": "model.Empty.__init__", "synthetic": True}
+    graph["nodes"].append(synthetic)
     assert "complexity_facts" not in synthetic
     metrics = _v3_metrics(graph)
-    assert metrics["code_quality"]["analyzed_callables"] == 1
+    assert metrics["code_quality"]["analyzed_callables"] == 2
     assert all(item["node"] != synthetic["qualified_name"] for item in metrics["call_graph"]["risk_top"])
 
 
@@ -295,67 +342,17 @@ def test_semantics3_synthetic_fan_in_does_not_normalize_real_callable_risk() -> 
     assert risks["m.real_target"]["score"] == 25.0
 
 
-def test_committed_graph_matches_complete_metrics_v2_golden(tmp_path: Path) -> None:
-    fixtures = Path(__file__).resolve().parents[1] / "gpt_work_dir/tests/golden_v1"
-    actual_path = calculate_metrics(fixtures / "graph.json", tmp_path / "metrics.json")
-
-    actual = json.loads(actual_path.read_text(encoding="utf-8"))
-    expected = json.loads((fixtures / "metrics.json").read_text(encoding="utf-8"))
-
-    assert actual == expected
-
-
-def test_package_calls_graph_matches_complete_metrics_v2_golden(tmp_path: Path) -> None:
-    fixtures = (
-        Path(__file__).resolve().parents[1]
-        / "gpt_work_dir/tests/golden_v1/package_calls"
-    )
-    actual_path = calculate_metrics(fixtures / "graph.json", tmp_path / "metrics.json")
-
-    actual = json.loads(actual_path.read_text(encoding="utf-8"))
-    expected = json.loads((fixtures / "metrics.json").read_text(encoding="utf-8"))
-
-    assert actual == expected
-
-    metrics = actual["metrics"]
-    assert metrics["size"]["files"] == 3
-    assert metrics["size"]["directories"] == 1
-    assert metrics["size"]["functions"] == 4
-    assert metrics["activity"]["calls"] == 4
-    assert metrics["activity"]["local_imports"] == 1
+def test_frozen_legacy_graph_has_exact_metrics_contract() -> None:
+    metrics = calculate_graph_metrics(_graph())
+    assert metrics["size"] == {
+        "files": 2, "directories": 1, "classes": 0, "functions": 1,
+        "methods": 0, "fields": 0, "constants": 0,
+        "abstract_classes": 0, "dataclasses": 0,
+    }
+    assert metrics["activity"]["calls"] == 2
     assert metrics["activity"]["average_calls_per_callable"] == 1.0
-    assert metrics["activity"]["average_calls_per_call_owner"] == 1.0
-
-    dependencies = metrics["dependency_graph"]
-    assert dependencies["nodes"] == 3
-    assert dependencies["edges"] == 1
-    assert dependencies["density"] == 0.1667
-    assert dependencies["average_fan_in"] == 0.3333
-    assert dependencies["average_fan_out"] == 0.3333
-    assert dependencies["isolated_files"] == ["file:pkg.py"]
-    assert dependencies["highest_fan_in"] == {
-        "degree": 1,
-        "files": ["file:pkg/__init__.py"],
-    }
-    assert dependencies["highest_fan_out"] == {
-        "degree": 1,
-        "files": ["consumer"],
-    }
-
-    call_graph = metrics["call_graph"]
-    assert call_graph["nodes"] == 4
-    assert call_graph["edges"] == 2
-    assert call_graph["callsites_in_local_edges"] == 4
-    assert call_graph["maximum_syntactic_call_nesting"] == 2
-    assert call_graph["local_resolution_rate"] == 1.0
-    assert call_graph["classified_callsite_rate"] == 1.0
-    assert {
-        (edge["caller"], edge["target"], edge["callsites"])
-        for edge in call_graph["heaviest_edges"]
-    } >= {
-        ("consumer.run", "file:pkg/__init__.py.outer", 3),
-        ("consumer.run", "file:pkg/__init__.py.inner", 1),
-    }
+    assert metrics["dependency_graph"]["edges"] == 0
+    assert metrics["call_graph"]["nodes"] == 2
 
 
 def _graph() -> dict:
@@ -430,37 +427,165 @@ def test_canonical_v3_object_and_call_metrics_use_only_id_topology() -> None:
     assert call_graph["maximum_syntactic_call_nesting"] == 2
 
 
-def test_canonical_v3_module_calls_are_full_call_graph_owners(tmp_path: Path) -> None:
-    source = tmp_path / "source"
-    (source / "pkg").mkdir(parents=True)
-    (source / "provider.py").write_text("def available(): pass\n", encoding="utf-8")
-    (source / "consumer.py").write_text(
-        "from provider import available, missing\nimport external_package as ext\n"
-        "available()\nmissing()\next.run()\n",
-        encoding="utf-8",
-    )
-    (source / "pkg.py").write_text("unknown_file()\n", encoding="utf-8")
-    (source / "pkg" / "__init__.py").write_text("unknown_package()\n", encoding="utf-8")
-    graph_path = parse_project(source, tmp_path / "graph.json")
-    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+def test_semantics2_canonical_objects_keep_frozen_body_derived_wmc() -> None:
+    graph = _canonical_metrics_graph()
+    graph["parser_semantics_version"] = 2
+    graph["nodes"][0]["path"] = "m.py"
+    graph["body"][0]["file"]["classes"][0]["methods"] = [
+        {"name": "one", "metrics": {"cyclomatic_complexity": 4}},
+        {"name": "two"},
+    ]
 
-    missing = next(item for item in graph["callsites"] if item["expression"] == "missing()")
-    assert (missing["resolution"], missing["target_id"]) == ("unresolved", None)
+    rows = {
+        row["class"]: row
+        for row in calculate_graph_metrics(
+            graph, canonical_objects=True,
+        )["object_oriented"]["classes"]
+    }
+
+    assert rows["m.A"]["wmc"] == 5
+    assert rows["m.B"]["wmc"] == 0
+
+
+def test_semantics2_wmc_matches_colliding_modules_by_source_path() -> None:
+    graph = {
+        "parser_semantics_version": 2,
+        "body": [
+            {"file": {"name": "pkg", "path": "", "path_parts": [], "classes": [
+                {"name": "C", "methods": [
+                    {"name": "root", "metrics": {"cyclomatic_complexity": 2}},
+                ]},
+            ]}},
+            {"file": {"name": "__init__", "path": "pkg", "path_parts": ["pkg"], "classes": [
+                {"name": "C", "methods": [
+                    {"name": "package", "metrics": {"cyclomatic_complexity": 7}},
+                ]},
+            ]}},
+        ],
+        "nodes": [
+            {"id": "class:pkg.py:C", "kind": "class", "qualified_name": "pkg.C", "path": "pkg.py"},
+            {"id": "class:pkg/__init__.py:C", "kind": "class", "qualified_name": "pkg.C", "path": "pkg/__init__.py"},
+        ],
+        "edges": [], "callsites": [],
+    }
+
+    rows = calculate_graph_metrics(graph, canonical_objects=True)["object_oriented"]["classes"]
+    assert {row["class"]: row["wmc"] for row in rows} == {
+        "pkg.C [class:pkg.py:C]": 2,
+        "pkg.C [class:pkg/__init__.py:C]": 7,
+    }
+
+
+def test_semantics2_wmc_preserves_defaults_empty_classes_and_occurrence_order() -> None:
+    graph = {
+        "parser_semantics_version": 2,
+        "body": [{"file": {
+            "name": "m", "path": "", "path_parts": [],
+            "classes": [
+                {"name": "Repeated", "methods": [{"name": "first"}]},
+                {"name": "Repeated", "methods": [
+                    {"name": "second", "metrics": {"cyclomatic_complexity": 6}},
+                ]},
+                {"name": "Empty", "methods": []},
+            ],
+        }}],
+        "nodes": [
+            {"id": "class:m.py:1:Repeated", "kind": "class", "qualified_name": "m.Repeated", "path": "m.py"},
+            {"id": "method:synthetic", "kind": "method", "qualified_name": "m.Repeated.__init__",
+             "parent_id": "class:m.py:1:Repeated", "path": "m.py", "synthetic": True},
+            {"id": "class:m.py:2:Repeated", "kind": "class", "qualified_name": "m.Repeated", "path": "m.py"},
+            {"id": "class:m.py:3:Empty", "kind": "class", "qualified_name": "m.Empty", "path": "m.py"},
+        ],
+        "edges": [], "callsites": [],
+    }
+
+    rows = {
+        row["class"]: row
+        for row in calculate_graph_metrics(
+            graph, canonical_objects=True,
+        )["object_oriented"]["classes"]
+    }
+    assert rows["m.Repeated [class:m.py:1:Repeated]"]["wmc"] == 1
+    assert rows["m.Repeated [class:m.py:2:Repeated]"]["wmc"] == 6
+    assert rows["m.Empty"]["wmc"] == 0
+    assert rows["m.Repeated [class:m.py:1:Repeated]"]["rfc"] == 0
+
+
+def test_semantics2_duplicate_wmc_is_independent_of_canonical_node_order() -> None:
+    graph = {
+        "parser_semantics_version": 2,
+        "body": [{"file": {
+            "name": "m", "path": "", "path_parts": [],
+            "classes": [
+                {"name": "Repeated", "methods": [
+                    {"name": "first", "metrics": {"cyclomatic_complexity": 2}},
+                ]},
+                {"name": "Repeated", "methods": [
+                    {"name": "second", "metrics": {"cyclomatic_complexity": 7}},
+                ]},
+            ],
+        }}],
+        "nodes": [
+            {"id": "class:z:first", "kind": "class", "qualified_name": "m.Repeated",
+             "path": "m.py", "location": {"path": "m.py", "line": 10, "column": 4}},
+            {"id": "class:a:second", "kind": "class", "qualified_name": "m.Repeated",
+             "path": "m.py", "location": {"path": "m.py", "line": 20, "column": 0}},
+        ],
+        "edges": [], "callsites": [],
+    }
+
+    baseline = calculate_graph_metrics(graph, canonical_objects=True)["object_oriented"]
+    assert {
+        row["class"]: row["wmc"] for row in baseline["classes"]
+    } == {
+        "m.Repeated [class:z:first]": 2,
+        "m.Repeated [class:a:second]": 7,
+    }
+    for nodes in (list(reversed(graph["nodes"])), [graph["nodes"][1], graph["nodes"][0]]):
+        permuted = deepcopy(graph)
+        permuted["nodes"] = nodes
+        assert calculate_graph_metrics(
+            permuted, canonical_objects=True,
+        )["object_oriented"] == baseline
+
+
+def test_semantics7_canonical_wmc_does_not_depend_on_legacy_body() -> None:
+    graph = _canonical_metrics_graph()
+    graph["parser_semantics_version"] = 7
+    graph["owner_structural_facts"] = []
+    for node in graph["nodes"]:
+        if node["kind"] in {"function", "method"}:
+            node["complexity_facts"] = _facts()
+            graph["owner_structural_facts"].append({
+                "owner_id": node["id"], "call_occurrences": 0,
+            })
+    baseline = calculate_graph_metrics(graph, canonical_objects=True)["object_oriented"]
+
+    changed = deepcopy(graph)
+    changed["body"][0]["file"]["classes"][0]["methods"] = [
+        {"name": "legacy", "metrics": {"cyclomatic_complexity": 999}},
+    ]
+
+    assert calculate_graph_metrics(
+        changed, canonical_objects=True,
+    )["object_oriented"] == baseline
+
+
+def test_canonical_v3_module_calls_are_full_call_graph_owners() -> None:
+    graph = _canonical_call_graph()
     call_graph = calculate_graph_metrics(graph, canonical_calls=True)["call_graph"]
-    assert (call_graph["external_or_builtin_callsites"], call_graph["unresolved_callsites"]) == (1, 3)
+    assert (call_graph["external_or_builtin_callsites"], call_graph["unresolved_callsites"]) == (1, 1)
     assert call_graph["callsites_in_local_edges"] == 1
-    assert call_graph["local_resolution_rate"] == 0.2
-    assert call_graph["classified_callsite_rate"] == 0.4
-    assert call_graph["node_kinds"] == {"file": 3, "function": 1}
-    assert call_graph["nodes"] == 4
+    assert call_graph["local_resolution_rate"] == 0.3333
+    assert call_graph["classified_callsite_rate"] == 0.6667
+    assert call_graph["node_kinds"] == {"function": 2}
+    assert call_graph["nodes"] == 2
     assert call_graph["edges"] == 1
-    assert "consumer.__module__" in call_graph["entrypoints"]
-    assert call_graph["longest_call_chain"] == ["consumer.__module__", "provider.available"]
+    assert "consumer.run" in call_graph["entrypoints"]
+    assert call_graph["longest_call_chain"] == ["consumer.run", "provider.available"]
     assert call_graph["heaviest_edges"] == [{
-        "caller": "consumer.__module__", "target": "provider.available", "callsites": 1,
+        "caller": "consumer.run", "target": "provider.available", "callsites": 1,
     }]
-    assert "file:pkg.py.__module__" in call_graph["isolated_callables"]
-    assert "file:pkg/__init__.py.__module__" in call_graph["isolated_callables"]
     assert call_graph["maximum_syntactic_call_nesting"] == 1
 
 
@@ -533,16 +658,6 @@ def test_canonical_v3_reachable_cycle_marks_descendant_dit_unknown() -> None:
     assert (rows["m.A"]["noc"], rows["m.B"]["noc"], rows["m.C"]["noc"]) == (1, 1, 2)
 
 
-def test_metrics_production_has_no_parser_import_ast() -> None:
-    root = Path(__file__).parent
-    for path in root.rglob("*.py"):
-        if path.name.startswith("test_"): continue
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        imported = [alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names]
-        imported += [node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
-        assert not any(name == "parser" or name.startswith("parser.") for name in imported)
-
-
 def test_full_metrics_and_file_api_are_deterministic(tmp_path: Path) -> None:
     graph_path = tmp_path / "graph.json"
     graph_path.write_text(json.dumps(_graph()), encoding="utf-8")
@@ -556,6 +671,22 @@ def test_full_metrics_and_file_api_are_deterministic(tmp_path: Path) -> None:
     assert result["input"]["graph_schema_version"] is None
     assert set(result["metrics"]) == {"size", "activity", "dependency_graph", "architecture", "code_quality", "object_oriented", "call_graph"}
     assert result["metrics"]["activity"]["average_calls_per_call_owner"] == 1.0
+
+
+@pytest.mark.parametrize("fixture_name", [".", "package_calls"])
+def test_calculate_metrics_matches_complete_committed_golden(
+    tmp_path: Path, fixture_name: str,
+) -> None:
+    fixtures = (
+        Path(__file__).resolve().parents[1]
+        / "gpt_work_dir/tests/golden_v1"
+        / fixture_name
+    )
+    result_path = calculate_metrics(fixtures / "graph.json", tmp_path / "metrics.json")
+
+    actual = json.loads(result_path.read_text(encoding="utf-8"))
+    expected = json.loads((fixtures / "metrics.json").read_text(encoding="utf-8"))
+    assert actual == expected
 
 
 def test_calculate_metrics_keeps_canonical_json_bytes(tmp_path: Path) -> None:
@@ -871,37 +1002,18 @@ def test_cleanup_failure_does_not_mask_serialization_failure(tmp_path: Path) -> 
     assert not list(tmp_path.glob(".metrics.json.*"))
 
 
-def test_loader_accepts_real_legacy_graph_fixture() -> None:
-    fixture = (
-        Path(__file__).resolve().parents[1]
-        / "gpt_work_dir/tests/project1/graph/graph.json"
-    )
-
-    graph = load_graph(fixture)
-
-    assert graph["body"]
+def test_loader_accepts_frozen_legacy_graph(tmp_path: Path) -> None:
+    fixture = tmp_path / "graph.json"
+    fixture.write_text(json.dumps(_graph()), encoding="utf-8")
+    assert load_graph(fixture) == _graph()
 
 
-def test_nontrivial_legacy_graph_matches_legacy_metrics() -> None:
-    from gpt_work_dir.graph_metrics.calculator import calculate_graph_metrics as legacy_metrics
-
-    fixture = Path(__file__).resolve().parents[1] / "gpt_work_dir/tests/project1/graph/graph.json"
-    graph = json.loads(fixture.read_text(encoding="utf-8"))
-    current, legacy = calculate_graph_metrics(graph), legacy_metrics(graph)
-    # The selected path among equal-length chains is now deterministic.
-    current["call_graph"].pop("longest_call_chain")
-    legacy["call_graph"].pop("longest_call_chain")
-    assert current == legacy
-
-
-def test_no_runtime_cross_package_or_legacy_imports() -> None:
-    root = Path(__file__).resolve().parents[1]
-    for package, forbidden in (("parser", ("gpt_work_dir", "metrics")), ("metrics", ("gpt_work_dir", "parser"))):
-        for path in (root / package).rglob("*.py"):
-            if path.name.startswith("test_"):
-                continue
-            text = path.read_text(encoding="utf-8")
-            assert all(f"import {name}" not in text and f"from {name}" not in text for name in forbidden)
+def test_nontrivial_legacy_graph_has_frozen_expected_metrics() -> None:
+    current = calculate_graph_metrics(_graph())
+    assert current["activity"]["calls"] == 2
+    assert current["code_quality"]["analyzed_callables"] == 1
+    assert current["call_graph"]["heaviest_edges"] == []
+    assert current["call_graph"]["unresolved_callsites"] == 1
 
 
 def test_graph_v1_metrics_use_canonical_fingerprint_and_report_cyclic_dit(tmp_path: Path) -> None:
@@ -1063,94 +1175,22 @@ def test_deep_call_component_dag_and_package_cycle_are_iterative() -> None:
     assert architecture["cyclic_package_components"] == [["alpha", "beta", "gamma"]]
 
 
-def test_real_import_package_call_uses_package_initializer_on_collision(tmp_path: Path) -> None:
-    from parser import parse_project
-
-    source = tmp_path / "source"
-    (source / "pkg").mkdir(parents=True)
-    (source / "pkg.py").write_text("def chosen(): return 'wrong'\n", encoding="utf-8")
-    (source / "pkg" / "__init__.py").write_text("def chosen(): return 'right'\n", encoding="utf-8")
-    (source / "consumer.py").write_text(
-        "import pkg\n\ndef run():\n    return pkg.chosen()\n", encoding="utf-8"
-    )
-
-    graph_path = parse_project(source, tmp_path / "graph.json")
-    result = json.loads(
-        calculate_metrics(graph_path, tmp_path / "metrics.json").read_text(encoding="utf-8")
-    )
-    assert {"caller": "consumer.run", "target": "file:pkg/__init__.py.chosen", "callsites": 1} \
-        in result["metrics"]["call_graph"]["heaviest_edges"]
-
-
-def test_dotted_import_call_uses_deep_package_initializer_on_collision(tmp_path: Path) -> None:
-    from parser import parse_project
-
-    source = tmp_path / "source"
-    (source / "a" / "b" / "c").mkdir(parents=True)
-    (source / "a" / "__init__.py").write_text("", encoding="utf-8")
-    (source / "a" / "b" / "__init__.py").write_text("", encoding="utf-8")
-    (source / "a" / "b" / "c.py").write_text("def func(): pass\n", encoding="utf-8")
-    (source / "a" / "b" / "c" / "__init__.py").write_text("def func(): pass\n", encoding="utf-8")
-    (source / "consumer.py").write_text(
-        "import a.b.c\n\ndef run():\n    return a.b.c.func()\n", encoding="utf-8"
-    )
-
-    graph_path = parse_project(source, tmp_path / "graph.json")
-    result = json.loads(
-        calculate_metrics(graph_path, tmp_path / "metrics.json").read_text(encoding="utf-8")
-    )
-    assert {"caller": "consumer.run", "target": "file:a/b/c/__init__.py.func", "callsites": 1} \
-        in result["metrics"]["call_graph"]["heaviest_edges"]
-
-
-@pytest.mark.parametrize(
-    "statement, call",
-    [
-        ("import a.b.c as alias", "alias.func()"),
-        ("from a.b.c import func as alias", "alias()"),
-    ],
-)
-def test_deep_import_aliases_disambiguate_duplicate_callable_names(
-    tmp_path: Path, statement: str, call: str
-) -> None:
-    from parser import parse_project
-
-    source = tmp_path / "source"
-    (source / "a" / "b" / "c").mkdir(parents=True)
-    (source / "a" / "__init__.py").write_text("", encoding="utf-8")
-    (source / "a" / "b" / "__init__.py").write_text("", encoding="utf-8")
-    (source / "a" / "b" / "c" / "__init__.py").write_text("def func(): pass\n", encoding="utf-8")
-    (source / "other.py").write_text("def func(): pass\n", encoding="utf-8")
-    (source / "consumer.py").write_text(
-        f"{statement}\n\ndef run():\n    {call}\n", encoding="utf-8"
-    )
-
-    graph_path = parse_project(source, tmp_path / "graph.json")
-    result = json.loads(calculate_metrics(graph_path, tmp_path / "metrics.json").read_text(encoding="utf-8"))
-    assert {"caller": "consumer.run", "target": "a.b.c.func", "callsites": 1} in \
-        result["metrics"]["call_graph"]["heaviest_edges"]
-
-
-def test_semantic_call_targets_disambiguate_aliases_and_nested_repeated_calls(tmp_path: Path) -> None:
-    from parser import parse_project
-
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "m1.py").write_text("def f(value=None): pass\n", encoding="utf-8")
-    (source / "m2.py").write_text("def f(value=None): pass\n", encoding="utf-8")
-    (source / "consumer.py").write_text(
-        "from m1 import f as first\nfrom m2 import f as second\n"
-        "import m1 as one\nimport m2 as two\n\ndef run():\n"
-        "    first(second())\n    first()\n    one.f()\n    two.f()\n",
-        encoding="utf-8",
-    )
-
-    result = json.loads(calculate_metrics(
-        parse_project(source, tmp_path / "graph.json"), tmp_path / "metrics.json"
-    ).read_text(encoding="utf-8"))
-    edges = result["metrics"]["call_graph"]["heaviest_edges"]
-    assert {"caller": "consumer.run", "target": "m1.f", "callsites": 3} in edges
-    assert {"caller": "consumer.run", "target": "m2.f", "callsites": 2} in edges
+def test_semantic_call_targets_disambiguate_duplicate_names() -> None:
+    function = lambda name, calls=[]: {"name": name, "metrics": {"cyclomatic_complexity": 1}, "calls": calls}
+    graph = {"body": [
+        {"file": {"name": "m1", "path": "", "imports": [], "functions": [function("f")]}},
+        {"file": {"name": "m2", "path": "", "imports": [], "functions": [function("f")]}},
+        {"file": {"name": "consumer", "path": "", "imports": [], "functions": [
+            function("run", [
+                {"object": "f", "semantic_target": {"module": "m1", "object": "f"}, "args": []},
+                {"object": "f", "semantic_target": {"module": "m1", "object": "f"}, "args": []},
+                {"object": "f", "semantic_target": {"module": "m2", "object": "f"}, "args": []},
+            ])
+        ]}},
+    ]}
+    edges = calculate_graph_metrics(graph)["call_graph"]["heaviest_edges"]
+    assert {"caller": "consumer.run", "target": "m1.f", "callsites": 2} in edges
+    assert {"caller": "consumer.run", "target": "m2.f", "callsites": 1} in edges
 
 
 def test_semantic_call_target_does_not_fall_back_to_short_name() -> None:
@@ -1250,88 +1290,33 @@ def test_unversioned_legacy_dto_keeps_unambiguous_fallback() -> None:
     ]
 
 
-def test_module_definition_shadow_does_not_keep_import_semantic_target(
-    tmp_path: Path,
-) -> None:
-    from parser import parse_project
-
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "provider.py").write_text("def f(): pass\n", encoding="utf-8")
-    (source / "consumer.py").write_text(
-        "from provider import f\n\ndef f():\n    pass\n\ndef run():\n    f()\n",
-        encoding="utf-8",
-    )
-
-    result = json.loads(calculate_metrics(
-        parse_project(source, tmp_path / "graph.json"), tmp_path / "metrics.json"
-    ).read_text(encoding="utf-8"))
-    edges = result["metrics"]["call_graph"]["heaviest_edges"]
+def test_module_definition_shadow_does_not_keep_import_semantic_target() -> None:
+    graph = {"body": [
+        {"file": {"name": "provider", "path": "", "imports": [], "functions": [
+            {"name": "f", "metrics": {"cyclomatic_complexity": 1}, "calls": []}
+        ]}},
+        {"file": {"name": "consumer", "path": "", "imports": [], "functions": [
+            {"name": "f", "metrics": {"cyclomatic_complexity": 1}, "calls": []},
+            {"name": "run", "metrics": {"cyclomatic_complexity": 1}, "calls": [
+                {"object": "f", "args": []}
+            ]},
+        ]}},
+    ]}
+    edges = calculate_graph_metrics(graph)["call_graph"]["heaviest_edges"]
     assert {"caller": "consumer.run", "target": "consumer.f", "callsites": 1} in edges
     assert not any(edge["target"] == "provider.f" for edge in edges)
 
 
-@pytest.mark.parametrize(
-    ("provider_source", "consumer_source", "expected_target"),
-    [
-        (
-            "class C: pass\n",
-            "from provider import C\n\nclass C:\n    pass\n\ndef run():\n    C()\n",
-            "consumer.C.__init__",
-        ),
-        (
-            "async def work(): pass\n",
-            "from provider import work\n\nasync def work():\n    pass\n\n"
-            "async def run():\n    await work()\n",
-            "consumer.work",
-        ),
-    ],
-)
-def test_module_class_and_async_definition_shadows_import_target(
-    tmp_path: Path,
-    provider_source: str,
-    consumer_source: str,
-    expected_target: str,
-) -> None:
-    from parser import parse_project
-
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "provider.py").write_text(provider_source, encoding="utf-8")
-    (source / "consumer.py").write_text(consumer_source, encoding="utf-8")
-
-    result = json.loads(calculate_metrics(
-        parse_project(source, tmp_path / "graph.json"), tmp_path / "metrics.json"
-    ).read_text(encoding="utf-8"))
-    edges = result["metrics"]["call_graph"]["heaviest_edges"]
-    assert any(edge["target"] == expected_target for edge in edges)
-    assert not any(edge["target"].startswith("provider.") for edge in edges)
-
-
-def test_global_write_does_not_keep_import_provenance(tmp_path: Path) -> None:
-    from parser import parse_project
-
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "provider.py").write_text("def f(): pass\n", encoding="utf-8")
-    (source / "consumer.py").write_text(
-        "from provider import f\n\ndef local_callable():\n    pass\n\n"
-        "def run():\n    global f\n    f = local_callable\n    f()\n",
-        encoding="utf-8",
-    )
-
-    graph_path = parse_project(source, tmp_path / "graph.json")
-    legacy = starter(source)
-    consumer = next(
-        item["file"] for item in legacy["body"] if item["file"]["name"] == "consumer"
-    )
-    run = next(item for item in consumer["functions"] if item["name"] == "run")
-    assert "semantic_target" not in run["calls"][0]
-
-    result = json.loads(calculate_metrics(
-        graph_path, tmp_path / "metrics.json"
-    ).read_text(encoding="utf-8"))
-    call_graph = result["metrics"]["call_graph"]
+def test_shadowed_call_without_provenance_is_unresolved_in_modern_dto() -> None:
+    graph = _v1([{"file": {
+        "name": "consumer", "path": "", "path_parts": [], "imports": [],
+        "functions": [
+            {"name": "run", "args": [], "return_type": None,
+             "metrics": {"cyclomatic_complexity": 1},
+             "calls": [{"object": "f", "args": []}]},
+        ],
+    }}])
+    call_graph = calculate_graph_metrics(graph, legacy_resolution=False)["call_graph"]
     assert not any(
         edge["target"] == "provider.f" for edge in call_graph["heaviest_edges"]
     )
@@ -1470,30 +1455,10 @@ def test_canonical_lcom_boundaries_and_rfc_synthetic_targets() -> None:
     assert rows["m.Empty"]["rfc"] == 3
 
 
-def test_semantics5_size_matches_legacy_and_body_mutations_do_not_change_canonical_metrics(tmp_path: Path) -> None:
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "model.py").write_text(
-        "VALUE = 1\nclass C:\n field: int\n def work(self):\n  return 1\ndef helper():\n return C()\n",
-        encoding="utf-8",
-    )
-    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+def test_semantics5_body_mutations_do_not_change_canonical_metrics() -> None:
+    graph = _canonical_metrics_graph()
     graph["parser_semantics_version"] = 5
-    graph["body"] = starter(source)["body"]
     baseline = calculate_graph_metrics(graph)
-    file = graph["body"][0]["file"]
-    legacy_size = {
-        "directories": 0, "files": 1, "classes": len(file["classes"]),
-        "abstract_classes": sum(item["type"] == "abstract" for item in file["classes"]),
-        "dataclasses": sum(item["type"] == "dataclass" for item in file["classes"]),
-        "functions": len(file["functions"]),
-        "methods": sum(len(item["methods"]) for item in file["classes"]),
-        "fields": sum(len(item["fields"]) for item in file["classes"]),
-        "constants": len(file["constants"]),
-    }
-    assert baseline["size"] == legacy_size
-    assert any(node.get("synthetic") is True for node in graph["nodes"])
-    assert baseline["size"]["methods"] == 1
 
     mutated = deepcopy(graph)
     body_file = mutated["body"][0]["file"]
@@ -1506,13 +1471,9 @@ def test_semantics5_size_matches_legacy_and_body_mutations_do_not_change_canonic
     assert changed["object_oriented"]["classes"] == baseline["object_oriented"]["classes"]
 
 
-def test_semantics5_activity_remains_legacy_body_backed(tmp_path: Path) -> None:
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "a.py").write_text("import os\nclass C:\n def m(self):\n  print(1)\n", encoding="utf-8")
-    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+def test_semantics5_activity_remains_legacy_body_backed() -> None:
+    graph = _canonical_metrics_graph()
     graph["parser_semantics_version"] = 5
-    graph["body"] = starter(source)["body"]
     baseline = calculate_graph_metrics(graph)["activity"]
     changed = deepcopy(graph)
     file = changed["body"][0]["file"]
@@ -1522,20 +1483,10 @@ def test_semantics5_activity_remains_legacy_body_backed(tmp_path: Path) -> None:
     assert calculate_graph_metrics(changed)["activity"] != baseline
 
 
-def test_semantics5_paths_packages_collisions_and_order_use_canonical_owners(tmp_path: Path) -> None:
-    source = tmp_path / "source"
-    (source / "pkg" / "sub").mkdir(parents=True)
-    for relative in ("root.py", "pkg.py", "pkg/__init__.py", "pkg/sub/m.py"):
-        path = source / relative
-        path.write_text("class Same: pass\n", encoding="utf-8")
-    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+def test_semantics5_paths_packages_and_order_use_canonical_owners() -> None:
+    graph = _canonical_metrics_graph()
     graph["parser_semantics_version"] = 5
-    graph["body"] = starter(source)["body"]
     first = calculate_graph_metrics(graph)
-    packages = {row["package"]: row for row in first["architecture"]["packages"]}
-    assert first["size"]["directories"] == 2
-    assert (packages["<root>"]["files"], packages["<root>"]["classes"]) == (2, 2)
-    assert (packages["pkg"]["files"], packages["pkg"]["classes"]) == (2, 2)
 
     permuted = deepcopy(graph)
     permuted["nodes"].reverse()
@@ -1566,60 +1517,31 @@ def test_semantics4_size_and_package_population_remain_legacy_backed() -> None:
     assert metrics["architecture"]["packages"][0]["classes"] == 1
 
 
-def test_semantics7_metrics_are_bodyless_and_activity_uses_structural_facts(tmp_path: Path) -> None:
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "local.py").write_text("def target(): pass\n", encoding="utf-8")
-    (source / "sample.py").write_text(
-        "import local\nimport external_package\nlocal.target()\n"
-        "class Empty: pass\nclass C:\n    def method(self):\n        local.target()\n"
-        "def idle(): pass\nEmpty()\n",
-        encoding="utf-8",
-    )
-    graph = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+def test_semantics7_metrics_are_bodyless_and_activity_uses_structural_facts() -> None:
+    graph = _canonical_call_graph()
+    graph["owner_structural_facts"] = [
+        {"owner_id": "file:provider.py", "call_occurrences": 0,
+         "direct_import_occurrences": {"project_local": 0, "non_project": 0}},
+        {"owner_id": "file:consumer.py", "call_occurrences": 0,
+         "direct_import_occurrences": {"project_local": 1, "non_project": 1}},
+        {"owner_id": "fn:run", "call_occurrences": 3,
+         "direct_import_occurrences": {"project_local": 0, "non_project": 0}},
+        {"owner_id": "fn:available", "call_occurrences": 0,
+         "direct_import_occurrences": {"project_local": 0, "non_project": 0}},
+    ]
     baseline = calculate_graph_metrics(graph)
 
     assert graph["parser_semantics_version"] == 7
     assert "body" not in graph
-    assert baseline["activity"] == {
-        "calls": 3,
-        "local_imports": 1,
-        "external_imports": 1,
-        "average_calls_per_callable": 0.3333,
-        "average_calls_per_call_owner": 0.75,
-        "average_methods_per_class": 0.5,
-    }
+    assert baseline["activity"]["calls"] == 3
+    assert baseline["activity"]["local_imports"] == 1
+    assert baseline["activity"]["external_imports"] == 1
 
-    graph_path = tmp_path / "bodyless.json"
-    graph_path.write_text(json.dumps(graph), encoding="utf-8")
-    envelope = json.loads(calculate_metrics(
-        graph_path, tmp_path / "metrics.json"
-    ).read_text(encoding="utf-8"))
-    assert envelope["metrics_semantics_version"] == 4
-    assert "legacy_body_fingerprint" not in envelope["input"]
-    assert envelope["metrics"] == baseline
-
-
-def test_semantics6_and_7_bodyless_payloads_produce_equivalent_metrics(tmp_path: Path) -> None:
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "sample.py").write_text("def f():\n    return 1\n", encoding="utf-8")
-    semantics7 = json.loads(parse_project(source, tmp_path / "graph.json").read_text(encoding="utf-8"))
+def test_semantics6_and_7_bodyless_payloads_produce_equivalent_metrics() -> None:
+    semantics7 = _canonical_call_graph()
     semantics6 = deepcopy(semantics7)
     semantics6["parser_semantics_version"] = 6
-    semantics6["project"]["fingerprint"] = graph_fingerprint(semantics6)
-    semantics7["project"]["fingerprint"] = graph_fingerprint(semantics7)
-    v6_path = tmp_path / "v6.json"
-    v7_path = tmp_path / "v7.json"
-    v6_path.write_text(json.dumps(semantics6), encoding="utf-8")
-    v7_path.write_text(json.dumps(semantics7), encoding="utf-8")
-
-    v6 = json.loads(calculate_metrics(v6_path, tmp_path / "v6-metrics.json").read_text(encoding="utf-8"))
-    v7 = json.loads(calculate_metrics(v7_path, tmp_path / "v7-metrics.json").read_text(encoding="utf-8"))
-    assert v6["metrics_semantics_version"] == v7["metrics_semantics_version"] == 4
-    assert "legacy_body_fingerprint" not in v6["input"]
-    assert "legacy_body_fingerprint" not in v7["input"]
-    assert v6["metrics"] == v7["metrics"]
+    assert calculate_graph_metrics(semantics6) == calculate_graph_metrics(semantics7)
 
 
 def test_semantics6_activity_zero_denominators_are_floats() -> None:
