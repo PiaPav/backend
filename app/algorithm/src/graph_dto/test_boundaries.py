@@ -323,6 +323,32 @@ def test_canonical_call_graph_and_complexity_calculators_are_projection_only() -
         assert not function.args.kwarg
 
 
+def test_internal_metrics_calculators_are_projection_only() -> None:
+    calculators = (
+        ("calculator.py", "_calculate_graph_metrics"),
+        ("quality.py", "_callable_metrics"),
+        ("quality.py", "_calculate_quality_metrics"),
+        ("call_graph.py", "_calculate_call_graph_metrics"),
+        ("call_graph.py", "_calculate_legacy_call_graph_metrics"),
+        ("object_metrics.py", "_calculate_legacy_object_metrics"),
+        ("object_metrics.py", "_calculate_semantics_v2_object_metrics"),
+    )
+    forbidden_helpers = {
+        "from_graph", "graph_files", "legacy_file_id", "effective_module_ids",
+    }
+    forbidden_roots = {
+        "body", "nodes", "edges", "callsites", "import_references",
+        "owner_structural_facts", "parser_semantics_version",
+    }
+    for filename, name in calculators:
+        function = _function(ROOT / "metrics/logic" / filename, name)
+        positional = [*function.args.posonlyargs, *function.args.args]
+        assert positional and positional[0].arg == "projection"
+        assert "graph" not in {argument.arg for argument in positional}
+        assert not (_called_names(function) & forbidden_helpers)
+        assert not (_literal_root_mapping_keys(function, {"graph"}) & forbidden_roots)
+
+
 def test_canonical_object_metrics_cannot_read_raw_edges() -> None:
     function = _function(
         ROOT / "metrics/logic/object_metrics.py",
@@ -368,9 +394,9 @@ def test_known_legacy_resolution_markers_stay_in_compatibility_functions() -> No
     identity = ROOT / "metrics/logic/identity.py"
     markers = {"suffix_index", "local_symbols", "by_short", "legacy_inheritance_depth"}
     allowed = {
-        (call_graph, "calculate_call_graph_metrics"),
+        (call_graph, "_calculate_legacy_call_graph_metrics"),
         (call_graph, "resolve"),
-        (object_metrics, "calculate_object_metrics"),
+        (object_metrics, "_calculate_legacy_object_metrics"),
         (object_metrics, "resolve"),
         (object_metrics, "legacy_inheritance_depth"),
         (identity, "legacy_file_id"),

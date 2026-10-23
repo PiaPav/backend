@@ -7,13 +7,13 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from .architecture import calculate_architecture_metrics
-from .call_graph import calculate_call_graph_metrics
+from .call_graph import _calculate_call_graph_metrics
 from .object_metrics import (
     _calculate_canonical_object_metrics,
-    calculate_object_metrics,
-    calculate_semantics_v2_object_metrics,
+    _calculate_legacy_object_metrics,
+    _calculate_semantics_v2_object_metrics,
 )
-from .quality import calculate_quality_metrics
+from .quality import _calculate_quality_metrics
 from .graph_algorithms import strong_components as _strong_components
 from .projections import MetricsGraphProjection, iter_legacy_calls
 
@@ -93,6 +93,19 @@ def calculate_graph_metrics(
 ) -> dict[str, Any]:
     """Return deterministic size, coupling, density and connectivity metrics."""
     projection = MetricsGraphProjection.from_graph(graph)
+    return _calculate_graph_metrics(
+        projection, canonical_mode=canonical_mode,
+        legacy_resolution=legacy_resolution, canonical_objects=canonical_objects,
+        canonical_calls=canonical_calls,
+    )
+
+
+def _calculate_graph_metrics(
+    projection: MetricsGraphProjection, *, canonical_mode: bool = False,
+    legacy_resolution: bool | None = None, canonical_objects: bool = False,
+    canonical_calls: bool = False,
+) -> dict[str, Any]:
+    """Calculate all metric sections from a single immutable projection."""
     semantics_v5_plus = projection.parser_semantics_version in {5, 6, 7}
     bodyless_semantics = projection.parser_semantics_version in {6, 7}
     files = [file.data for file in projection.legacy_files]
@@ -173,13 +186,13 @@ def calculate_graph_metrics(
                    if bodyless_semantics else len(classes))
     if canonical_objects or semantics_v5_plus:
         object_metrics = (
-            calculate_semantics_v2_object_metrics(graph, projection=projection)
+            _calculate_semantics_v2_object_metrics(projection)
             if projection.parser_semantics_version == 2
             else _calculate_canonical_object_metrics(projection)
         )
     else:
-        object_metrics = calculate_object_metrics(
-            graph, cyclic_dit_is_none=canonical_mode, projection=projection,
+        object_metrics = _calculate_legacy_object_metrics(
+            projection, cyclic_dit_is_none=canonical_mode,
         )
     density_denominator = node_count * (node_count - 1)
 
@@ -236,12 +249,11 @@ def calculate_graph_metrics(
             "highest_fan_out": _degree_peak(fan_out),
         },
         "architecture": calculate_architecture_metrics(projection),
-        "code_quality": calculate_quality_metrics(graph, projection=projection),
+        "code_quality": _calculate_quality_metrics(projection),
         "object_oriented": object_metrics,
-        "call_graph": calculate_call_graph_metrics(
-            graph, legacy_resolution=legacy_resolution,
+        "call_graph": _calculate_call_graph_metrics(
+            projection, legacy_resolution=legacy_resolution,
             canonical=canonical_calls or semantics_v5_plus,
-            projection=projection,
         ),
     }
 

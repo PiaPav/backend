@@ -11,6 +11,7 @@ import pytest
 from metrics import calculate_graph_metrics, calculate_metrics, load_graph
 from graph_dto import graph_fingerprint, validate_graph_v1
 from metrics.logic.projections import MetricsGraphProjection, iter_legacy_calls
+from metrics.logic.calculator import _calculate_graph_metrics
 from metrics.logic.serialization import (
     compact_graph_metrics,
     restore_graph_metrics,
@@ -1819,3 +1820,27 @@ def test_semantics6_activity_zero_denominators_are_floats() -> None:
     assert activity["average_calls_per_callable"] == 0.0
     assert activity["average_calls_per_call_owner"] == 0.0
     assert activity["average_methods_per_class"] == 0.0
+
+
+def test_aggregate_gateway_builds_projection_exactly_once() -> None:
+    graph = _canonical_call_graph()
+    projection = MetricsGraphProjection.from_graph(graph)
+    expected = _calculate_graph_metrics(projection)
+
+    with patch(
+        "metrics.logic.calculator.MetricsGraphProjection.from_graph",
+        return_value=projection,
+    ) as build_projection:
+        assert calculate_graph_metrics(graph) == expected
+
+    build_projection.assert_called_once_with(graph)
+
+
+@pytest.mark.parametrize("graph", [
+    pytest.param(_graph(), id="legacy"),
+    pytest.param(_canonical_metrics_graph(), id="canonical"),
+    pytest.param(_canonical_call_graph(), id="bodyless"),
+])
+def test_raw_gateway_equals_internal_projection_path(graph: dict) -> None:
+    projection = MetricsGraphProjection.from_graph(graph)
+    assert calculate_graph_metrics(graph) == _calculate_graph_metrics(projection)

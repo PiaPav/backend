@@ -78,7 +78,11 @@ node ID. Semantics v1-v3 retain their prior compatibility behavior.
 String, import-suffix and annotation-name resolution is confined to legacy v1/v2
 compatibility branches.
 
-Metric calculation constructs one internal read-only `MetricsGraphProjection`.
+The aggregate raw-graph gateway constructs exactly one internal read-only
+`MetricsGraphProjection`; its internal orchestrator and metric-section
+calculators consume only that projection. Public section-level raw-graph APIs
+remain compatibility gateways and honor a caller-supplied projection before
+building one themselves.
 It exposes collision-safe legacy file identity and effective semantic modules,
 canonical nodes/callsites, directed file and package imports in the explicit
 `dependent -> dependency` direction, normalized undirected file pairs, and an
@@ -98,11 +102,11 @@ Canonical size, complexity, quality, object WMC and call-graph risk read node
 attributes, complexity facts and parser semantics version from that same
 snapshot. Once a projection has been built, later mutation of the input mapping
 cannot mix declaration data from one graph state with topology from another.
-The canonical callable-complexity calculator and the private canonical
-call-graph and object-metrics calculators accept only this projection. Raw graph
-mappings are converted at their compatibility gateways when no projection is
-supplied, so canonical calculators cannot read declaration data and topology
-from different snapshots during one calculation.
+Private quality, call-graph, object-metrics and aggregate calculators accept
+only this projection, including the legacy v1/v2 compatibility branches. Raw
+graph mappings are converted at their public compatibility gateways when no
+projection is supplied, so calculators cannot read declaration data and
+topology from different snapshots during one calculation.
 For parser semantics v4 and later, import references are exposed as an immutable snapshot
 and import topology is independent of legacy `body[*].file.imports`; older
 parser semantics retain the compatibility projection.

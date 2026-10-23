@@ -7,8 +7,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from .complexity import canonical_callable_metrics
-from .quality import callable_metrics
-from .identity import effective_module_ids, graph_files, legacy_file_id
+from .quality import _callable_metrics
 from .graph_algorithms import strong_components as _strong_components
 from .projections import MetricsGraphProjection, iter_legacy_calls
 
@@ -20,10 +19,6 @@ BUILTIN_CALLS = {
     "reversed", "round", "set", "setattr", "sorted", "str", "sum", "super",
     "tuple", "type", "zip",
 }
-
-
-def _graph_files(graph: Mapping[str, Any]) -> list[dict[str, Any]]:
-    return graph_files(graph)
 
 
 def _longest_component_indices(
@@ -162,18 +157,32 @@ def calculate_call_graph_metrics(
     graph: Mapping[str, Any], *, legacy_resolution: bool | None = None,
     canonical: bool = False, projection: MetricsGraphProjection | None = None,
 ) -> dict[str, Any]:
-    """Build a qualified call graph and calculate vertex-oriented metrics."""
+    """Compatibility gateway for call-graph metrics."""
+    projection = projection or MetricsGraphProjection.from_graph(graph)
+    return _calculate_call_graph_metrics(
+        projection, legacy_resolution=legacy_resolution, canonical=canonical,
+    )
+
+
+def _calculate_call_graph_metrics(
+    projection: MetricsGraphProjection, *, legacy_resolution: bool | None = None,
+    canonical: bool = False,
+) -> dict[str, Any]:
     if canonical:
-        projection = projection or MetricsGraphProjection.from_graph(graph)
         return _calculate_canonical_call_graph_metrics(projection)
-    files = [file.data for file in projection.legacy_files] if projection else _graph_files(graph)
-    module_ids = projection.effective_module_ids if projection else effective_module_ids(files)
+    return _calculate_legacy_call_graph_metrics(
+        projection, legacy_resolution=legacy_resolution,
+    )
+
+
+def _calculate_legacy_call_graph_metrics(
+    projection: MetricsGraphProjection, *, legacy_resolution: bool | None = None,
+) -> dict[str, Any]:
+    """Build the compatibility call graph from the projection's legacy view."""
+    files = projection.legacy_files
+    module_ids = projection.effective_module_ids
     use_legacy_resolution = (
-        (
-            projection.parser_semantics_version is None
-            if projection is not None
-            else graph.get("parser_semantics_version") is None
-        )
+        projection.parser_semantics_version is None
         if legacy_resolution is None
         else legacy_resolution
     )
@@ -184,8 +193,9 @@ def calculate_call_graph_metrics(
     external_roots: dict[str, set[str]] = {}
     owners: list[tuple[str, str, str | None, list[Any]]] = []
 
-    for file in files:
-        module = legacy_file_id(file)
+    for legacy_file in files:
+        file = legacy_file.data
+        module = legacy_file.file_id
         imports[module] = {}
         external_roots[module] = set()
         for imported in file.get("imports", []):
@@ -366,7 +376,7 @@ def calculate_call_graph_metrics(
     peak_reach = max(reach.values(), default=0)
     pagerank = _pagerank(nodes, edges)
     betweenness = _betweenness(nodes, edges)
-    complexity = callable_metrics(graph, projection=projection)
+    complexity = _callable_metrics(projection)
     complexity_raw = {
         node: max(0, int(item.get("cyclomatic_complexity", 1)) - 1)
         + int(item.get("cognitive_complexity", 0))

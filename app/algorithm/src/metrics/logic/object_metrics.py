@@ -6,7 +6,6 @@ from collections import Counter, defaultdict, deque
 from collections.abc import Mapping
 from itertools import combinations
 from typing import Any
-from .identity import graph_files, legacy_file_id
 from .complexity import canonical_callable_metrics
 from .projections import MetricsGraphProjection, iter_legacy_calls
 
@@ -57,10 +56,20 @@ def calculate_object_metrics(
     graph: Mapping[str, Any], *, cyclic_dit_is_none: bool = False,
     projection: MetricsGraphProjection | None = None,
 ) -> dict[str, Any]:
+    """Compatibility gateway for legacy object metrics."""
+    projection = projection or MetricsGraphProjection.from_graph(graph)
+    return _calculate_legacy_object_metrics(
+        projection, cyclic_dit_is_none=cyclic_dit_is_none,
+    )
+
+
+def _calculate_legacy_object_metrics(
+    projection: MetricsGraphProjection, *, cyclic_dit_is_none: bool = False,
+) -> dict[str, Any]:
     classes: list[tuple[str, str, Mapping[str, Any]]] = []
-    files = [file.data for file in projection.legacy_files] if projection else graph_files(graph)
-    for file in files:
-        module = legacy_file_id(file)
+    for legacy_file in projection.legacy_files:
+        file = legacy_file.data
+        module = legacy_file.file_id
         for class_info in file.get("classes", []):
             if isinstance(class_info, Mapping):
                 name = str(class_info.get("name"))
@@ -319,6 +328,13 @@ def calculate_semantics_v2_object_metrics(
 ) -> dict[str, Any]:
     """Compatibility adapter for the semantics-v2 body-derived WMC."""
     projection = projection or MetricsGraphProjection.from_graph(graph)
+    return _calculate_semantics_v2_object_metrics(projection)
+
+
+def _calculate_semantics_v2_object_metrics(
+    projection: MetricsGraphProjection,
+) -> dict[str, Any]:
+    """Calculate semantics-v2 object metrics from one projection snapshot."""
     legacy_wmc: dict[tuple[str, str], deque[int]] = defaultdict(deque)
     for legacy_file in projection.legacy_files:
         file = legacy_file.data

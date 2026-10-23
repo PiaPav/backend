@@ -5,21 +5,19 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Mapping
 from typing import Any
-from .identity import legacy_file_id
 from .complexity import canonical_callable_metrics
 from .projections import MetricsGraphProjection
 
 
-def callable_metrics(
-    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None
+def _callable_metrics(
+    projection: MetricsGraphProjection,
 ) -> dict[str, dict[str, Any]]:
-    projection = projection or MetricsGraphProjection.from_graph(graph)
     if projection.parser_semantics_version in {3, 4, 5, 6, 7}:
         return canonical_callable_metrics(projection)
     result: dict[str, dict[str, Any]] = {}
-    files = [file.data for file in projection.legacy_files]
-    for file in files:
-        module = legacy_file_id(file)
+    for legacy_file in projection.legacy_files:
+        file = legacy_file.data
+        module = legacy_file.file_id
         for function in file.get("functions", []):
             if isinstance(function, Mapping) and isinstance(function.get("metrics"), Mapping):
                 result[f"{module}.{function.get('name')}"] = dict(function["metrics"])
@@ -33,14 +31,22 @@ def callable_metrics(
     return result
 
 
+def callable_metrics(
+    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None
+) -> dict[str, dict[str, Any]]:
+    """Compatibility gateway for callable metrics."""
+    projection = projection or MetricsGraphProjection.from_graph(graph)
+    return _callable_metrics(projection)
+
+
 def _average(items: list[float]) -> float:
     return round(sum(items) / len(items), 4) if items else 0.0
 
 
-def calculate_quality_metrics(
-    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None
+def _calculate_quality_metrics(
+    projection: MetricsGraphProjection,
 ) -> dict[str, Any]:
-    metrics = callable_metrics(graph, projection=projection)
+    metrics = _callable_metrics(projection)
     raised: Counter[str] = Counter()
     caught: Counter[str] = Counter()
     broad_handlers: list[dict[str, Any]] = []
@@ -130,3 +136,11 @@ def calculate_quality_metrics(
             ),
         },
     }
+
+
+def calculate_quality_metrics(
+    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None
+) -> dict[str, Any]:
+    """Compatibility gateway for aggregate quality metrics."""
+    projection = projection or MetricsGraphProjection.from_graph(graph)
+    return _calculate_quality_metrics(projection)
