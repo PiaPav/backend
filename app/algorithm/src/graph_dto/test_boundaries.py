@@ -289,7 +289,7 @@ def test_canonical_consumers_cannot_read_projection_root_keys_from_raw_graph() -
         (ROOT / "metrics/logic/complexity.py", "canonical_callable_metrics"),
         (ROOT / "metrics/logic/calculator.py", "_canonical_size"),
         (ROOT / "metrics/logic/calculator.py", "calculate_graph_metrics"),
-        (ROOT / "metrics/logic/object_metrics.py", "calculate_canonical_object_metrics"),
+        (ROOT / "metrics/logic/object_metrics.py", "_calculate_canonical_object_metrics"),
         (ROOT / "metrics/logic/call_graph.py", "_calculate_canonical_call_graph_metrics"),
     )
     violations = []
@@ -326,9 +326,27 @@ def test_canonical_call_graph_and_complexity_calculators_are_projection_only() -
 def test_canonical_object_metrics_cannot_read_raw_edges() -> None:
     function = _function(
         ROOT / "metrics/logic/object_metrics.py",
-        "calculate_canonical_object_metrics",
+        "_calculate_canonical_object_metrics",
     )
     assert "edges" not in _literal_mapping_keys(function)
+
+
+def test_canonical_object_metrics_calculator_is_projection_only() -> None:
+    function = _function(
+        ROOT / "metrics/logic/object_metrics.py",
+        "_calculate_canonical_object_metrics",
+    )
+    positional = [*function.args.posonlyargs, *function.args.args]
+    assert [argument.arg for argument in positional] == ["projection"]
+    assert not function.args.defaults
+    assert [argument.arg for argument in function.args.kwonlyargs] == [
+        "wmc_by_class_id"
+    ]
+    assert len(function.args.kw_defaults) == 1
+    assert isinstance(function.args.kw_defaults[0], ast.Constant)
+    assert function.args.kw_defaults[0].value is None
+    assert not function.args.vararg
+    assert not function.args.kwarg
 
 
 def test_architecture_metrics_is_projection_only_and_avoids_raw_helpers() -> None:
@@ -375,7 +393,7 @@ def test_known_legacy_resolution_markers_stay_in_compatibility_functions() -> No
     assert not violations, "legacy resolution escaped compatibility functions: " + ", ".join(violations)
 
     canonical_call = _function(call_graph, "_calculate_canonical_call_graph_metrics")
-    canonical_objects = _function(object_metrics, "calculate_canonical_object_metrics")
+    canonical_objects = _function(object_metrics, "_calculate_canonical_object_metrics")
     canonical_functions = (canonical_call, canonical_objects)
     legacy_helpers = {
         "legacy_file_id", "semantic_module_name", "effective_module_ids",

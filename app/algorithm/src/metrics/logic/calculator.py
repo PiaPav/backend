@@ -9,7 +9,7 @@ from typing import Any
 from .architecture import calculate_architecture_metrics
 from .call_graph import calculate_call_graph_metrics
 from .object_metrics import (
-    calculate_canonical_object_metrics,
+    _calculate_canonical_object_metrics,
     calculate_object_metrics,
     calculate_semantics_v2_object_metrics,
 )
@@ -175,7 +175,7 @@ def calculate_graph_metrics(
         object_metrics = (
             calculate_semantics_v2_object_metrics(graph, projection=projection)
             if projection.parser_semantics_version == 2
-            else calculate_canonical_object_metrics(graph, projection=projection)
+            else _calculate_canonical_object_metrics(projection)
         )
     else:
         object_metrics = calculate_object_metrics(

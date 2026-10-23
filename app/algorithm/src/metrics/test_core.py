@@ -221,18 +221,17 @@ def test_canonical_relation_projections_filter_deduplicate_and_snapshot() -> Non
 
 
 def test_canonical_object_metrics_use_detached_relation_projections() -> None:
-    from metrics.logic.object_metrics import calculate_canonical_object_metrics
+    from metrics.logic.object_metrics import _calculate_canonical_object_metrics
 
     graph = _canonical_metrics_graph()
     projection = MetricsGraphProjection.from_graph(graph)
     wmc = {"c:A": 2, "c:B": 1, "c:C": 0}
-    expected = calculate_canonical_object_metrics(
-        graph, projection=projection, wmc_by_class_id=wmc,
-    )
+    expected = _calculate_canonical_object_metrics(projection, wmc_by_class_id=wmc)
     graph["edges"].clear()
+    graph["nodes"].clear()
 
-    assert calculate_canonical_object_metrics(
-        graph, projection=projection, wmc_by_class_id=wmc,
+    assert _calculate_canonical_object_metrics(
+        projection, wmc_by_class_id=wmc,
     ) == expected
 
 
@@ -442,6 +441,7 @@ def test_canonical_consumers_use_one_detached_snapshot_after_raw_mutation() -> N
 
 def test_canonical_compatibility_gateways_build_projection_at_most_once() -> None:
     from metrics.logic.call_graph import calculate_call_graph_metrics
+    from metrics.logic.object_metrics import calculate_canonical_object_metrics
     from metrics.logic.quality import callable_metrics
 
     graph = _canonical_call_graph()
@@ -450,6 +450,9 @@ def test_canonical_compatibility_gateways_build_projection_at_most_once() -> Non
         lambda supplied=None: callable_metrics(graph, projection=supplied),
         lambda supplied=None: calculate_call_graph_metrics(
             graph, canonical=True, projection=supplied,
+        ),
+        lambda supplied=None: calculate_canonical_object_metrics(
+            graph, projection=supplied,
         ),
     )
     for gateway in gateways:

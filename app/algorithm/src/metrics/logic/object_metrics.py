@@ -190,12 +190,11 @@ def calculate_object_metrics(
     return result
 
 
-def calculate_canonical_object_metrics(
-    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None,
+def _calculate_canonical_object_metrics(
+    projection: MetricsGraphProjection, *,
     wmc_by_class_id: Mapping[str, int] | None = None,
 ) -> dict[str, Any]:
     """Calculate object metrics exclusively from canonical ID relations."""
-    projection = projection or MetricsGraphProjection.from_graph(graph)
     nodes = projection.nodes_by_id
     class_ids = set(projection.node_ids_by_kind.get("class", ()))
     method_ids = set(projection.node_ids_by_kind.get("method", ()))
@@ -304,6 +303,17 @@ def calculate_canonical_object_metrics(
     return result
 
 
+def calculate_canonical_object_metrics(
+    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None,
+    wmc_by_class_id: Mapping[str, int] | None = None,
+) -> dict[str, Any]:
+    """Compatibility gateway for canonical object metrics."""
+    projection = projection or MetricsGraphProjection.from_graph(graph)
+    return _calculate_canonical_object_metrics(
+        projection, wmc_by_class_id=wmc_by_class_id,
+    )
+
+
 def calculate_semantics_v2_object_metrics(
     graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None,
 ) -> dict[str, Any]:
@@ -352,6 +362,6 @@ def calculate_semantics_v2_object_metrics(
         class_name = str(node.get("qualified_name") or identifier).rsplit(".", 1)[-1]
         occurrences = legacy_wmc.get((str(node.get("path") or ""), class_name))
         wmc_by_class_id[identifier] = occurrences.popleft() if occurrences else 0
-    return calculate_canonical_object_metrics(
-        graph, projection=projection, wmc_by_class_id=wmc_by_class_id,
+    return _calculate_canonical_object_metrics(
+        projection, wmc_by_class_id=wmc_by_class_id,
     )
