@@ -9,14 +9,6 @@ from .graph_algorithms import strong_components
 from .projections import MetricsGraphProjection
 
 
-def _package(file: Mapping[str, Any]) -> str:
-    parts = file.get("path_parts")
-    if isinstance(parts, list) and parts:
-        return str(parts[0])
-    path = str(file.get("path") or "")
-    return path.split(".", 1)[0] if path else "<root>"
-
-
 def _critical_topology(
     nodes: set[str], edges: set[tuple[str, str]]
 ) -> tuple[list[str], list[list[str]]]:
@@ -79,42 +71,18 @@ def _cyclic_components(
 
 
 def calculate_architecture_metrics(
-    files: list[dict[str, Any]],
-    nodes: set[str],
-    edges: set[tuple[str, str]],
-    file_id,
-    *,
-    projection: MetricsGraphProjection | None = None,
+    projection: MetricsGraphProjection,
 ) -> dict[str, Any]:
-    if projection is not None and projection.parser_semantics_version in {5, 6, 7}:
+    package_of = projection.package_by_file_id
+    package_graph = projection.directed_package_import_graph
+    packages = set(package_of.values()) | set(package_graph.nodes)
+    package_edges = set(package_graph.edges)
+    semantics_v5_plus = int(projection.parser_semantics_version or 0) >= 5
+    if semantics_v5_plus:
         root_ids = (
             projection.node_ids_by_kind.get("file", frozenset())
             | projection.node_ids_by_kind.get("module", frozenset())
         )
-        package_of = {
-            root_id: (
-                str(projection.nodes_by_id[root_id].get("path") or "").split("/", 1)[0]
-                if "/" in str(projection.nodes_by_id[root_id].get("path") or "")
-                else "<root>"
-            )
-            for root_id in root_ids
-        }
-    else:
-        package_of = (
-            {file.file_id: file.package for file in projection.legacy_files}
-            if projection is not None
-            else {_file_id: _package(file) for file in files if (_file_id := file_id(file))}
-        )
-    packages = set(package_of.values())
-    package_edges = (
-        set(projection.directed_package_import_graph.edges)
-        if projection is not None
-        else {
-            (package_of[source], package_of[target])
-            for source, target in edges
-            if package_of[source] != package_of[target]
-        }
-    )
     incoming = {package: set() for package in packages}
     outgoing = {package: set() for package in packages}
     for source, target in package_edges:
@@ -123,7 +91,7 @@ def calculate_architecture_metrics(
 
     class_counts = {package: 0 for package in packages}
     abstract_counts = {package: 0 for package in packages}
-    if projection is not None and projection.parser_semantics_version in {5, 6, 7}:
+    if semantics_v5_plus:
         # Constants first appear in semantics v5, whose package populations are
         # canonical and keyed by owning root IDs rather than module names.
         canonical_nodes = projection.nodes_by_id
@@ -136,9 +104,9 @@ def calculate_architecture_metrics(
             class_counts[package] += 1
             abstract_counts[package] += class_node.get("class_kind") == "abstract"
     else:
-        for file in files:
-            package = package_of[file_id(file)]
-            for class_info in file.get("classes", []):
+        for file in projection.legacy_files:
+            package = package_of[file.file_id]
+            for class_info in file.data.get("classes", []):
                 if not isinstance(class_info, Mapping):
                     continue
                 class_counts[package] += 1
@@ -171,11 +139,10 @@ def calculate_architecture_metrics(
             }
         )
 
-    undirected_edges = (
-        set(projection.undirected_file_import_graph.edges)
-        if projection is not None else edges
+    undirected_graph = projection.undirected_file_import_graph
+    articulation, bridges = _critical_topology(
+        set(undirected_graph.nodes), set(undirected_graph.edges)
     )
-    articulation, bridges = _critical_topology(nodes, undirected_edges)
     return {
         "packages": package_metrics,
         "package_edges": len(package_edges),

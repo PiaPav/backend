@@ -99,6 +99,7 @@ def _canonical_package(path: Any) -> str:
 class MetricsGraphProjection:
     parser_semantics_version: int | None
     legacy_files: tuple[LegacyFileProjection, ...]
+    package_by_file_id: Mapping[str, str]
     effective_module_ids: Mapping[str, str]
     nodes_by_id: Mapping[str, Mapping[str, Any]]
     node_ids_by_kind: Mapping[str, frozenset[str]]
@@ -152,12 +153,18 @@ class MetricsGraphProjection:
                     if target in file_nodes and target != file.file_id:
                         file_edges.add((file.file_id, target))
 
-        package_of = {file.file_id: file.package for file in files}
+        legacy_package_of = {file.file_id: file.package for file in files}
+        package_of = legacy_package_of
         if canonical_imports:
             package_of = {
                 identifier: _canonical_package(node.get("path"))
                 for identifier, node in raw_nodes.items() if identifier in file_nodes
             }
+        architecture_package_of = (
+            package_of
+            if int(graph.get("parser_semantics_version") or 0) >= 5
+            else legacy_package_of
+        )
         packages = frozenset(package_of.values())
         package_edges = frozenset(
             (package_of[source], package_of[target])
@@ -208,6 +215,7 @@ class MetricsGraphProjection:
         return cls(
             parser_semantics_version=graph.get("parser_semantics_version"),
             legacy_files=files,
+            package_by_file_id=MappingProxyType(dict(architecture_package_of)),
             effective_module_ids=MappingProxyType(dict(module_ids)),
             nodes_by_id=MappingProxyType(raw_nodes),
             node_ids_by_kind=MappingProxyType({

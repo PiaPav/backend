@@ -129,12 +129,19 @@ def test_metrics_projection_is_immutable_and_preserves_named_topologies() -> Non
         ("app.consumer", "file:pkg/__init__.py")
     })
     assert projection.directed_package_import_graph.edges == frozenset({("app", "pkg")})
+    assert dict(projection.package_by_file_id) == {
+        "file:pkg.py": "<root>",
+        "file:pkg/__init__.py": "pkg",
+        "app.consumer": "app",
+    }
     assert projection.undirected_file_import_graph.edges == frozenset({
         ("app.consumer", "file:pkg/__init__.py")
     })
     assert projection.directed_canonical_call_graph.edge_weights[("file", "fn")] == 3
     with pytest.raises(TypeError):
         projection.nodes_by_id["other"] = {}  # type: ignore[index]
+    with pytest.raises(TypeError):
+        projection.package_by_file_id["app.consumer"] = "changed"  # type: ignore[index]
     with pytest.raises(TypeError):
         projection.directed_canonical_call_graph.edge_weights[("fn", "file")] = 1  # type: ignore[index]
     with pytest.raises(FrozenInstanceError):
@@ -282,6 +289,69 @@ def test_semantics4_package_projection_uses_first_path_segment_and_deduplicates(
     assert len(projection.import_references) == 2
 
 
+@pytest.mark.parametrize(
+    ("semantics_version", "expected"),
+    [
+        (None, {"legacy.module": "legacy"}),
+        (4, {"legacy.module": "legacy"}),
+        (5, {"file:canonical.py": "canonical"}),
+        (6, {"file:canonical.py": "canonical"}),
+        (7, {"file:canonical.py": "canonical"}),
+    ],
+)
+def test_package_ownership_projection_preserves_version_boundary(
+    semantics_version: int | None, expected: dict[str, str],
+) -> None:
+    graph = {
+        "body": [{"file": {
+            "name": "module", "path": "legacy", "path_parts": ["legacy"],
+            "imports": [],
+        }}],
+        "nodes": [{
+            "id": "file:canonical.py", "kind": "file", "path": "canonical/item.py",
+        }],
+        "edges": [],
+    }
+    if semantics_version is not None:
+        graph["parser_semantics_version"] = semantics_version
+
+    assert dict(MetricsGraphProjection.from_graph(graph).package_by_file_id) == expected
+
+
+def test_semantics4_architecture_combines_canonical_topology_with_legacy_population() -> None:
+    graph = {
+        "parser_semantics_version": 4,
+        "body": [{"file": {
+            "name": "module", "path": "legacy", "path_parts": ["legacy"],
+            "imports": [],
+            "classes": [{"name": "Legacy", "type": "abstract", "methods": []}],
+        }}],
+        "nodes": [
+            {"id": "file:canonical/a.py", "kind": "file", "path": "canonical/a.py"},
+            {"id": "file:target/b.py", "kind": "file", "path": "target/b.py"},
+        ],
+        "edges": [{
+            "kind": "imports", "source_id": "file:canonical/a.py",
+            "target_id": "file:target/b.py",
+        }],
+        "callsites": [], "import_references": [],
+    }
+
+    projection = MetricsGraphProjection.from_graph(graph)
+    assert projection.directed_package_import_graph.nodes == frozenset({
+        "canonical", "target",
+    })
+    assert projection.directed_package_import_graph.edges == frozenset({
+        ("canonical", "target"),
+    })
+    assert dict(projection.package_by_file_id) == {"legacy.module": "legacy"}
+
+    architecture = calculate_graph_metrics(graph)["architecture"]
+    assert architecture["package_edges"] == 1
+    legacy = next(row for row in architecture["packages"] if row["package"] == "legacy")
+    assert (legacy["files"], legacy["classes"], legacy["abstract_classes"]) == (1, 1, 1)
+
+
 def test_shared_legacy_call_traversal_keeps_order_depth_and_consumers_equal() -> None:
     calls = [{"object": "outer", "args": [
         {"value": {"type": "call", "object": "left", "args": [
@@ -321,6 +391,7 @@ def test_internal_metric_consumers_keep_projection_compatibility_fallback() -> N
 
 
 def test_canonical_consumers_use_one_detached_snapshot_after_raw_mutation() -> None:
+    from metrics.logic.architecture import calculate_architecture_metrics
     from metrics.logic.call_graph import calculate_call_graph_metrics
     from metrics.logic.calculator import _canonical_size
     from metrics.logic.complexity import canonical_callable_metrics
@@ -344,6 +415,7 @@ def test_canonical_consumers_use_one_detached_snapshot_after_raw_mutation() -> N
         "objects": calculate_canonical_object_metrics(graph, projection=projection),
         "calls": calculate_call_graph_metrics(graph, canonical=True, projection=projection),
         "size": _canonical_size(projection),
+        "architecture": calculate_architecture_metrics(projection),
     }
     assert canonical_callable_metrics(graph) == expected["complexity"]
     assert calculate_quality_metrics(graph) == expected["quality"]
@@ -364,6 +436,7 @@ def test_canonical_consumers_use_one_detached_snapshot_after_raw_mutation() -> N
         graph, canonical=True, projection=projection,
     ) == expected["calls"]
     assert _canonical_size(projection) == expected["size"]
+    assert calculate_architecture_metrics(projection) == expected["architecture"]
     assert expected["objects"]["classes"][0]["wmc"] > 0
     assert expected["calls"]["risk_top"]
 
@@ -1683,8 +1756,11 @@ def test_semantics4_size_and_package_population_remain_legacy_backed() -> None:
     metrics = calculate_graph_metrics(graph)
     assert metrics["size"]["classes"] == 1
     assert metrics["size"]["methods"] == 0
-    assert metrics["architecture"]["packages"][0]["package"] == "legacy"
-    assert metrics["architecture"]["packages"][0]["classes"] == 1
+    packages = {
+        row["package"]: row for row in metrics["architecture"]["packages"]
+    }
+    assert packages["legacy"]["classes"] == 1
+    assert (packages["<root>"]["files"], packages["<root>"]["classes"]) == (0, 0)
 
 
 def test_semantics7_metrics_are_bodyless_and_activity_uses_structural_facts() -> None:

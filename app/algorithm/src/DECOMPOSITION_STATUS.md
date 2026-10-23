@@ -1,6 +1,6 @@
 # Статус декомпозиции
 
-Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `graph_dto/test_boundaries.py`, `parser/test_core.py` и `metrics/test_core.py`: 216 passed, 0 failed, 0 skipped.
+Статус получен сопоставлением `DECOMPOSITION_PLAN.md` с кодом и тестами. Последний подтверждённый независимым tester совместный прогон `graph_dto/test_contract.py`, `graph_dto/test_boundaries.py`, `parser/test_core.py` и `metrics/test_core.py`: 223 passed, 0 failed, 0 skipped.
 
 ## Общий итог
 
@@ -67,16 +67,16 @@ Parser semantics v7 прекращает emission legacy `body` из файло�
 
 ## Этап 6. Централизовать аналитические проекции
 
-1. **Выполнен текущий инкремент.** `metrics/logic/projections.py::MetricsGraphProjection` один раз строится фасадом расчёта и предоставляет frozen/slots DTO, immutable topology collections, legacy files/effective modules, canonical nodes и callsites. Canonical size, complexity, quality, object WMC и call-graph risk используют nodes, facts и parser semantics version из этого же snapshot. Прямые вызовы внутренних consumers сохраняют fallback с самостоятельным построением или прежними аргументами.
+1. **Выполнен текущий инкремент.** `metrics/logic/projections.py::MetricsGraphProjection` один раз строится фасадом расчёта и предоставляет frozen/slots DTO, immutable topology collections, legacy files/effective modules, canonical nodes и callsites. Canonical size, complexity, quality, object WMC, call-graph risk и architecture metrics используют declaration data, facts, topology и parser semantics version из этого же snapshot. Package ownership централизован отдельно от package import topology: semantics v4 сохраняет legacy population при canonical topology, а v5+ использует canonical ownership. Прямые вызовы остальных внутренних consumers сохраняют fallback с самостоятельным построением.
 2. **Выполнен текущий инкремент.** Локальные wrappers `_file_id` удалены; единый `iter_legacy_calls` обслуживает activity, syntactic call nesting и legacy RFC. `identity.py` и legacy adapters сохранены.
-3. **Выполнен текущий инкремент.** Именованы и централизованы directed file/package imports (`dependent -> dependency`), normalized undirected file imports, weighted ID-only canonical `calls`/`awaits`, а также canonical object relations `inherits`, `field_type` и `accesses_field`. Calculator, architecture, canonical call graph и canonical object topology переведены на эти immutable views.
+3. **Выполнен текущий инкремент.** Именованы и централизованы directed file/package imports (`dependent -> dependency`), normalized undirected file imports, immutable package ownership, weighted ID-only canonical `calls`/`awaits`, а также canonical object relations `inherits`, `field_type` и `accesses_field`. Calculator, projection-only architecture consumer, canonical call graph и canonical object topology переведены на эти immutable views.
 4. **Выполнен для parser semantics v2.** Canonical object/call branches используют только готовые IDs, typed edges и resolution statuses. Строковые `resolve`-эвристики сохранены исключительно внутри versioned legacy compatibility path. Остаток полного этапа связан с общей projection-моделью и последующим удалением legacy adapter.
 
 ## Этап 7. Закрепить независимость
 
 1. **Выполнен для Parser test boundary.** `parser/test_core.py` больше не импортирует Metrics: complexity facts и legacy projection проверяются собственными точными ожиданиями Parser.
 2. **Выполнен для Metrics test boundary.** `metrics/test_core.py` не импортирует и не запускает Parser или legacy calculator. Metrics проверяется на статических Graph DTO, включая два полных golden-сравнения файлового API и валидный bodyless semantics-v7 fixture.
-3. **Выполнен текущий статический gate.** `graph_dto/test_boundaries.py` через AST запрещает cross-imports между Parser, Metrics и Graph DTO в production и тестах, включая литеральные dynamic imports и их aliases. Отдельный marker/helper/key guard ограничивает известные legacy topology/name-resolution paths compatibility-функциями, запрещает их canonical calculators и не допускает прямого чтения raw root collections canonical size/complexity/object/call consumers.
+3. **Выполнен текущий статический gate.** `graph_dto/test_boundaries.py` через AST запрещает cross-imports между Parser, Metrics и Graph DTO в production и тестах, включая литеральные dynamic imports и их aliases. Отдельный marker/helper/key guard ограничивает известные legacy topology/name-resolution paths compatibility-функциями, запрещает их canonical calculators и не допускает прямого чтения raw root collections canonical size/complexity/object/call consumers. Architecture gate закрепляет projection-only сигнатуру и запрещает возврат к параллельным raw topology/identity helpers.
 4. **Выполнен ранее.** Файловые контракты Parser, Metrics и Graph DTO документированы отдельно в соответствующих `CONTRACT.md`.
 5. **Не выполнялся по плану перехода.** Legacy adapters v1-v5 сохранены; их удаление требует отдельного версионированного решения.
 

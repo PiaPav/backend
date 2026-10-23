@@ -311,6 +311,19 @@ def test_canonical_object_metrics_cannot_read_raw_edges() -> None:
     assert "edges" not in _literal_mapping_keys(function)
 
 
+def test_architecture_metrics_is_projection_only_and_avoids_raw_helpers() -> None:
+    path = ROOT / "metrics/logic/architecture.py"
+    function = _function(path, "calculate_architecture_metrics")
+    assert [argument.arg for argument in function.args.args] == ["projection"]
+    assert not function.args.kwonlyargs
+    assert not function.args.vararg
+    assert not function.args.kwarg
+    assert not (_called_names(function) & {
+        "effective_module_ids", "graph_files", "legacy_file_id",
+        "semantic_module_name", "_package", "_canonical_package",
+    })
+
+
 def test_known_legacy_resolution_markers_stay_in_compatibility_functions() -> None:
     call_graph = ROOT / "metrics/logic/call_graph.py"
     object_metrics = ROOT / "metrics/logic/object_metrics.py"

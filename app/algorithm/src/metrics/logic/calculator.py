@@ -14,33 +14,12 @@ from .object_metrics import (
     calculate_semantics_v2_object_metrics,
 )
 from .quality import calculate_quality_metrics
-from .identity import effective_module_ids, graph_files, legacy_file_id
 from .graph_algorithms import strong_components as _strong_components
 from .projections import MetricsGraphProjection, iter_legacy_calls
 
 
-def _files(graph: Mapping[str, Any]) -> list[dict[str, Any]]:
-    return graph_files(graph)
-
-
 def _calls_in(items: Iterable[Any]) -> int:
     return sum(1 for _ in iter_legacy_calls(items))
-
-
-def _dependency_edges(
-    files: list[dict[str, Any]], nodes: set[str]
-) -> set[tuple[str, str]]:
-    edges: set[tuple[str, str]] = set()
-    modules = effective_module_ids(files)
-    for file in files:
-        source = legacy_file_id(file)
-        for imported in file.get("imports", []):
-            if not isinstance(imported, Mapping) or imported.get("from_lib") is not False:
-                continue
-            target = modules.get(str(imported.get("path") or ""), str(imported.get("path") or ""))
-            if target in nodes and target != source:
-                edges.add((source, target))
-    return edges
 
 
 def _weak_components(
@@ -256,9 +235,7 @@ def calculate_graph_metrics(
             "highest_fan_in": _degree_peak(fan_in),
             "highest_fan_out": _degree_peak(fan_out),
         },
-        "architecture": calculate_architecture_metrics(
-            files, nodes, edges, legacy_file_id, projection=projection
-        ),
+        "architecture": calculate_architecture_metrics(projection),
         "code_quality": calculate_quality_metrics(graph, projection=projection),
         "object_oriented": object_metrics,
         "call_graph": calculate_call_graph_metrics(

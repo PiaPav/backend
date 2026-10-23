@@ -82,7 +82,12 @@ Metric calculation constructs one internal read-only `MetricsGraphProjection`.
 It exposes collision-safe legacy file identity and effective semantic modules,
 canonical nodes/callsites, directed file and package imports in the explicit
 `dependent -> dependency` direction, normalized undirected file pairs, and an
-ID-only weighted `calls`/`awaits` graph. Canonical object topology is exposed
+immutable file-to-package ownership view. Architecture metrics consume these
+file, package and undirected topology views from the same projection; for
+parser semantics v4 the canonical package topology intentionally coexists with
+legacy package populations, while v5 and later use canonical ownership.
+Topology-only packages therefore have zero structural population. An ID-only
+weighted `calls`/`awaits` graph and canonical object topology are exposed
 through separate directed `inherits` (`class -> class`), `field_type`
 (`field -> class`), and `accesses_field` (`method -> field`) views. Its DTOs are
 frozen and its topology collections are immutable. This is an internal
