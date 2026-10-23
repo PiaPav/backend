@@ -144,8 +144,8 @@ def validate_graph_v1(graph: Mapping[str, Any], *, verify_fingerprint: bool = Tr
     if type(graph.get("parser_semantics_version")) is not int or graph["parser_semantics_version"] not in {1, 2, 3, 4, 5, 6, 7}:
         _error(f"Unsupported parser_semantics_version {graph.get('parser_semantics_version')!r}")
     semantics = graph["parser_semantics_version"]
-    if semantics == 5 and not isinstance(graph.get("body"), list):
-        _error("body must be an array for parser semantics v5")
+    if semantics in {1, 2, 3, 4, 5} and not isinstance(graph.get("body"), list):
+        _error("body must be an array for parser semantics v1-v5")
     if semantics == 6 and "body" in graph and not isinstance(graph["body"], list):
         _error("body must be an array when present for parser semantics v6")
     if semantics == 7 and "body" in graph:

@@ -66,6 +66,19 @@ def test_semantics1_remains_compatible_without_type_references():
     validate_graph_v1(_graph(), verify_fingerprint=False)
 
 
+@pytest.mark.parametrize("semantics", range(1, 6))
+@pytest.mark.parametrize("body", [None, {}, "legacy"])
+def test_semantics1_through_5_require_body_array(semantics, body):
+    graph = _graph()
+    graph["parser_semantics_version"] = semantics
+    if body is None:
+        del graph["body"]
+    else:
+        graph["body"] = body
+    with pytest.raises(ValueError, match="body must be an array for parser semantics v1-v5"):
+        validate_graph_v1(graph, verify_fingerprint=False)
+
+
 def test_semantics2_requires_type_references_collection():
     graph = _graph()
     graph["parser_semantics_version"] = 2

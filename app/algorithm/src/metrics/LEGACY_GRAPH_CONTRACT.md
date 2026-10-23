@@ -1,21 +1,18 @@
-# Legacy Graph compatibility contract
+# Removed legacy Graph compatibility contract
 
-This document freezes the actual unversioned `body` input consumed by Metrics
-during migration to canonical Graph DTO edges. `metrics/core.py` validates this
-projection, and `metrics/logic/identity.py` supplies its shared file identity.
-Every legacy field also affects the legacy-body fingerprint even when no
-formula reads it. Therefore `unused` below means "unused by metric formulas",
-not "safe to remove".
+This document is an archival description of the unversioned `body` adapter and
+parser semantics v1-v5 that the new `metrics` package accepted during migration.
+That adapter, its identity helpers, string-based resolution and legacy-body
+fingerprint were removed in the canonical-only Metrics increment. Current
+Metrics accepts only Graph DTO schema v1 / parser semantics 6 or 7 and never
+reads `body`.
 
-For parser semantics v5, structural `size`, package file/class/abstract
-populations, quality, WMC, object metrics and call-graph metrics use canonical
-facts. The legacy fields listed below remain validated and fingerprinted;
-activity and its historical denominators still consume them. Older parser
-semantics retain the compatibility consumers documented in the tables.
-Parser semantics v6 and v7 no longer consume or validate this projection: all metric
-sections, including activity, use canonical nodes, relations and
-`owner_structural_facts`. Semantics v6 may carry an optional ignored `body`;
-semantics v7 forbids it. Metrics produces no `legacy_body_fingerprint` for either.
+The tables below describe historical consumers and are retained as migration
+evidence, not as an active input contract. Projects holding one of these graphs
+must regenerate it with `parser.parse_project()`. The separate
+`parser.starter()` compatibility result and the implementation under
+`gpt_work_dir` remain legacy facilities; they are not accepted by current
+Metrics.
 
 ## Root and files
 
@@ -115,6 +112,5 @@ compatibility projection. Its presence disables unsafe short-name fallbacks in
 `serialization.py` consumes calculated Metrics output, so neither reads Graph
 JSON fields directly.
 
-This matrix must be updated whenever the legacy serializer, validator, or any
-compatibility consumer changes. Removing a field requires a separately
-versioned migration because fingerprints and/or metric results can change.
+This matrix is frozen at adapter removal. Future changes to canonical Metrics do
+not update these historical consumers.

@@ -6,7 +6,9 @@ with canonical file, class, field, module-constant and callable nodes; containme
 inheritance, field-type, field-access and call edges; callsites, type references,
 diagnostics and structural owner facts, then returns the resolved output path.
 The file DTO does not contain `body`. `starter()` keeps returning the unchanged
-unversioned legacy graph, including `body`, for compatibility.
+unversioned legacy graph, including `body`, for compatibility. That `starter()`
+result is not an input to the canonical Metrics core; Metrics accepts only
+Graph DTO schema v1 / parser semantics 6 or 7.
 
 Every real function/method node carries canonical `complexity_facts`: callable
 span and async status, ordered structural controls with parent indices and

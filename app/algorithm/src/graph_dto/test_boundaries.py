@@ -329,9 +329,6 @@ def test_internal_metrics_calculators_are_projection_only() -> None:
         ("quality.py", "_callable_metrics"),
         ("quality.py", "_calculate_quality_metrics"),
         ("call_graph.py", "_calculate_call_graph_metrics"),
-        ("call_graph.py", "_calculate_legacy_call_graph_metrics"),
-        ("object_metrics.py", "_calculate_legacy_object_metrics"),
-        ("object_metrics.py", "_calculate_semantics_v2_object_metrics"),
     )
     forbidden_helpers = {
         "from_graph", "graph_files", "legacy_file_id", "effective_module_ids",
@@ -347,6 +344,29 @@ def test_internal_metrics_calculators_are_projection_only() -> None:
         assert "graph" not in {argument.arg for argument in positional}
         assert not (_called_names(function) & forbidden_helpers)
         assert not (_literal_root_mapping_keys(function, {"graph"}) & forbidden_roots)
+
+
+def test_aggregate_and_public_gateway_signatures_are_canonical_only() -> None:
+    aggregate = _function(ROOT / "metrics/logic/calculator.py", "calculate_graph_metrics")
+    internal = _function(ROOT / "metrics/logic/calculator.py", "_calculate_graph_metrics")
+    assert [argument.arg for argument in aggregate.args.args] == ["graph"]
+    assert not aggregate.args.kwonlyargs
+    assert [argument.arg for argument in internal.args.args] == ["projection"]
+    assert not internal.args.kwonlyargs
+
+    gateways = (
+        ("call_graph.py", "calculate_call_graph_metrics"),
+        ("object_metrics.py", "calculate_object_metrics"),
+        ("object_metrics.py", "calculate_canonical_object_metrics"),
+        ("quality.py", "callable_metrics"),
+        ("quality.py", "calculate_quality_metrics"),
+    )
+    for filename, name in gateways:
+        function = _function(ROOT / "metrics/logic" / filename, name)
+        assert [argument.arg for argument in function.args.args] == ["graph"]
+        assert [argument.arg for argument in function.args.kwonlyargs] == ["projection"]
+        assert not function.args.vararg
+        assert not function.args.kwarg
 
 
 def test_canonical_object_metrics_cannot_read_raw_edges() -> None:
@@ -388,34 +408,32 @@ def test_architecture_metrics_is_projection_only_and_avoids_raw_helpers() -> Non
     })
 
 
-def test_known_legacy_resolution_markers_stay_in_compatibility_functions() -> None:
+def test_production_metrics_contains_no_legacy_resolution_markers() -> None:
     call_graph = ROOT / "metrics/logic/call_graph.py"
     object_metrics = ROOT / "metrics/logic/object_metrics.py"
-    identity = ROOT / "metrics/logic/identity.py"
-    markers = {"suffix_index", "local_symbols", "by_short", "legacy_inheritance_depth"}
-    allowed = {
-        (call_graph, "_calculate_legacy_call_graph_metrics"),
-        (call_graph, "resolve"),
-        (object_metrics, "_calculate_legacy_object_metrics"),
-        (object_metrics, "resolve"),
-        (object_metrics, "legacy_inheritance_depth"),
-        (identity, "legacy_file_id"),
-        (identity, "semantic_module_name"),
-        (identity, "effective_module_ids"),
-        (identity, "graph_files"),
+    markers = {
+        "legacy_files", "effective_module_ids", "iter_legacy_calls",
+        "legacy_file_id", "semantic_target", "suffix_index", "local_symbols",
+        "by_short", "legacy_inheritance_depth", "canonical_mode",
+        "canonical_objects", "canonical_calls", "legacy_resolution",
     }
-    for path, name in allowed:
-        _function(path, name)
     violations = []
     for path in (ROOT / "metrics").rglob("*.py"):
         if path.name.startswith("test_"):
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            if _loaded_names(node) & markers and (path, node.name) not in allowed:
-                violations.append(f"{path.relative_to(ROOT)}:{node.name}")
+        identifiers = _loaded_names(tree) | {
+            node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)
+        }
+        identifiers.update(
+            node.value for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        )
+        found = identifiers & markers
+        if found:
+            violations.append(
+                f"{path.relative_to(ROOT)} -> {', '.join(sorted(found))}"
+            )
     assert not violations, "legacy resolution escaped compatibility functions: " + ", ".join(violations)
 
     canonical_call = _function(call_graph, "_calculate_canonical_call_graph_metrics")
@@ -432,3 +450,22 @@ def test_known_legacy_resolution_markers_stay_in_compatibility_functions() -> No
         assert not (_loaded_names(function) & (markers | {"legacy_resolution"}))
         assert not (_called_names(function) & legacy_helpers)
         assert not (_literal_subscript_keys(function) & legacy_topology_keys)
+
+
+def test_production_metrics_never_reads_body_or_imports_identity_module() -> None:
+    violations = []
+    for path in (ROOT / "metrics").rglob("*.py"):
+        if path.name.startswith("test_"):
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        if "body" in _literal_mapping_keys(tree):
+            violations.append(f"{path.relative_to(ROOT)} reads body")
+        imports = _imports(path)
+        if any(
+            imported == "metrics.logic.identity"
+            or imported.endswith(".identity")
+            or imported == "identity"
+            for imported in imports
+        ):
+            violations.append(f"{path.relative_to(ROOT)} imports identity")
+    assert not violations, "forbidden Metrics dependencies:\n" + "\n".join(violations)

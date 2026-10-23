@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 from .graph_algorithms import strong_components
@@ -77,12 +76,8 @@ def calculate_architecture_metrics(
     package_graph = projection.directed_package_import_graph
     packages = set(package_of.values()) | set(package_graph.nodes)
     package_edges = set(package_graph.edges)
-    semantics_v5_plus = int(projection.parser_semantics_version or 0) >= 5
-    if semantics_v5_plus:
-        root_ids = (
-            projection.node_ids_by_kind.get("file", frozenset())
-            | projection.node_ids_by_kind.get("module", frozenset())
-        )
+    root_ids = (projection.node_ids_by_kind.get("file", frozenset())
+                | projection.node_ids_by_kind.get("module", frozenset()))
     incoming = {package: set() for package in packages}
     outgoing = {package: set() for package in packages}
     for source, target in package_edges:
@@ -91,26 +86,12 @@ def calculate_architecture_metrics(
 
     class_counts = {package: 0 for package in packages}
     abstract_counts = {package: 0 for package in packages}
-    if semantics_v5_plus:
-        # Constants first appear in semantics v5, whose package populations are
-        # canonical and keyed by owning root IDs rather than module names.
-        canonical_nodes = projection.nodes_by_id
-        for class_id in projection.node_ids_by_kind.get("class", frozenset()):
-            class_node = canonical_nodes[class_id]
-            owner = class_node.get("parent_id")
-            if owner not in root_ids:
-                continue
-            package = package_of[str(owner)]
-            class_counts[package] += 1
-            abstract_counts[package] += class_node.get("class_kind") == "abstract"
-    else:
-        for file in projection.legacy_files:
-            package = package_of[file.file_id]
-            for class_info in file.data.get("classes", []):
-                if not isinstance(class_info, Mapping):
-                    continue
-                class_counts[package] += 1
-                abstract_counts[package] += class_info.get("type") == "abstract"
+    canonical_nodes = projection.nodes_by_id
+    for class_id in projection.node_ids_by_kind.get("class", frozenset()):
+        class_node = canonical_nodes[class_id]; owner = class_node.get("parent_id")
+        if owner not in root_ids: continue
+        package = package_of[str(owner)]; class_counts[package] += 1
+        abstract_counts[package] += class_node.get("class_kind") == "abstract"
 
     package_metrics = []
     for package in sorted(packages):

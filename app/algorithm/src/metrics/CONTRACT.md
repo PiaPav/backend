@@ -1,121 +1,92 @@
 # Metrics file contract
 
-`calculate_metrics(graph_path: Path, output_path: Path) -> Path` accepts a
-legacy unversioned parser graph or a validated Graph DTO v1. Parser semantics
-v1-v5 retain the required legacy `body` compatibility adapter. Semantics v6 and
-v7 are calculated entirely from canonical content; v6 may carry an ignored
-optional `body`, while v7 forbids it. Canonical identity and fingerprint always come only from
-canonical v1 content. Compatibility results include
-`input.legacy_body_fingerprint`; semantics-v6/v7 results do not. Output is atomic.
-The canonical writer stores UTF-8 JSON with LF line endings,
-`ensure_ascii=False`, two-space indentation, sorted keys and exactly one final
-newline. It writes a temporary file beside the target and publishes it with
-`os.replace`; failures preserve an existing target and trigger best-effort
-temporary-file cleanup without masking the original error. The compatibility full and compact writers use the same atomic delivery
-while retaining their established key order and compact encoding.
-The exhaustive field-to-consumer matrix for this compatibility projection is
-maintained in [`LEGACY_GRAPH_CONTRACT.md`](LEGACY_GRAPH_CONTRACT.md).
-Version dispatch is explicit:
+`calculate_metrics(graph_path: Path, output_path: Path) -> Path` accepts only a
+validated Graph DTO with `schema_version: 1` and `parser_semantics_version` 6 or
+7. Unversioned graphs and parser semantics 1-5 are no longer Metrics inputs;
+callers must regenerate them with `parser.parse_project()`. The shared Graph DTO
+validator still recognizes the historical versions independently of this
+consumer policy.
 
-- unversioned legacy input uses metrics semantics v1;
-- Graph DTO v1 / parser semantics v1 uses metrics semantics v2 and the legacy
-  topology adapter;
-- Graph DTO v1 / parser semantics v2 uses metrics semantics v3.
-- Graph DTO v1 / parser semantics v3 uses metrics semantics v4.
-- Graph DTO v1 / parser semantics v4 uses metrics semantics v4; formulas are
-  unchanged, while file import topology comes from canonical exact import edges.
-- Graph DTO v1 / parser semantics v5 uses metrics semantics v4; formulas remain
-  unchanged, while structural size and package class populations use canonical
-  declaration nodes.
-- Graph DTO v1 / parser semantics v6 uses metrics semantics v4; activity also
-  uses canonical structural owner facts and the entire calculation is bodyless.
-- Graph DTO v1 / parser semantics v7 uses the same metrics semantics v4 and
-  bodyless formulas; the input contract no longer permits `body`.
+Semantics 6 and 7 contain all declarations, typed relations, complexity facts
+and structural owner facts required by Metrics. Semantics 6 may carry an
+optional `body`, but Metrics never reads it and the canonical fingerprint
+ignores it. Semantics 7 forbids `body`. The in-memory
+`calculate_graph_metrics(graph)` gateway applies the same version and structural
+validation as the file API.
 
-Semantics v3 builds object and call topology exclusively from canonical node IDs,
-typed edges, callsites and type references.
-Semantics v4 derives callable complexity from canonical facts keyed by node ID.
-Quality, WMC and call-graph risk use that projection; transitional body mutation
-cannot affect them. Synthetic constructors are excluded from those populations.
-Parser semantics v5-v7 additionally derive `size` and package file/class/abstract
-populations from canonical roots, declaration nodes and `class_kind`. Synthetic
-constructors do not increase structural method counts. In semantics v6 and v7,
-activity derives call and direct-import occurrences from
-`owner_structural_facts`; body mutation or omission cannot affect it.
+The output envelope is:
 
-Current metrics semantics v1-v4 intentionally preserve the historical hybrid denominator
-of `activity.average_calls_per_call_owner`: every declared function and method
-is counted, whether or not it contains a call, and a module is counted only
-when it contains at least one module-level call. In symbols, the denominator is
-`functions + methods + modules_with_calls`. The name "call owner" must not be
-read as "active owner" for these versions. Changing to active owners only would
-change metric values and therefore requires a new metrics semantics version.
+```json
+{
+  "schema_version": 1,
+  "metrics_semantics_version": 4,
+  "input": {
+    "graph_schema_version": 1,
+    "graph_fingerprint": "..."
+  },
+  "metrics": {}
+}
+```
 
-`input.graph_fingerprint` is calculated from canonical decoded legacy DTO
-content, including a canonical order exclusively for the root graph `body`
-file collection, rather than from the source JSON bytes. All nested lists,
-including values of nested keys named `body`, retain their order during the
-compatibility period.
+Removing support for older inputs does not change formulas, thresholds,
+rounding or output structure, so the mathematical semantics remains version 4.
+The v6 and v7 canonical-equivalent payloads produce equal `metrics`; their full
+input fingerprints differ because the parser semantics version is part of the
+canonical envelope. `legacy_body_fingerprint` is no longer emitted.
 
-Semantics-v3 object metrics use these project-internal definitions:
+Malformed JSON, non-object roots, unsupported schema versions and unsupported
+parser semantics are rejected before output publication. Rejection preserves an
+existing target. Successful output is written atomically as UTF-8 JSON with LF
+line endings, `ensure_ascii=False`, two-space indentation, sorted keys and one
+final newline. A temporary file is created beside the target and published with
+`os.replace`; failures preserve the target and trigger best-effort cleanup.
+
+## Canonical projection
+
+Each aggregate calculation builds one immutable `MetricsGraphProjection`.
+Internal calculators consume only this projection; public section gateways may
+accept a caller-supplied projection and otherwise validate and project their raw
+graph argument. The projection contains only canonical nodes, callsites,
+occurrence-level import references, structural owner facts and typed topology.
+There is no legacy file identity, nested-body traversal or string-based target
+resolution in production Metrics.
+
+Import edges are directed `dependent -> dependency`. Repeated import
+occurrences affect activity facts but not the deduplicated file/package
+topology. Canonical call topology uses ID-only `calls`/`awaits` edges; edge
+weights preserve callsite multiplicity, while SCC, reachability, PageRank and
+betweenness use the unweighted topology. `inherits`, `field_type` and
+`accesses_field` relations drive object metrics exclusively by node ID.
+
+## Preserved metrics semantics
+
+Structural size is derived from canonical declaration nodes. Synthetic methods
+do not increase the method population. Activity is derived from
+`owner_structural_facts`; import counts are occurrences, not graph degrees.
+
+`activity.average_calls_per_call_owner` retains the historical hybrid
+denominator: every real function and method is counted whether active or not,
+and a file/module root is counted only when it has at least one root-level call.
+In symbols, the denominator is `real callables + roots with calls`. Changing it
+requires a new metrics semantics version.
+
+Object metrics use these definitions:
 
 - DIT is the longest exact `inherits` path and is `null` when ancestry reaches a
   cycle;
 - NOC counts distinct direct exact children;
-- CBO is the distinct union of exact parent, owned-field type, and called-method
-  owner class IDs, excluding self-coupling;
+- CBO is the distinct union of exact parents, owned-field class types and owner
+  classes of exact callable targets, excluding self-coupling;
 - RFC is the union of declared non-synthetic method IDs and their distinct exact
   callable targets;
-- LCOM preserves the normalized pairwise formula over canonical field IDs.
+- LCOM preserves the normalized pairwise formula over canonical field IDs;
+- WMC sums canonical cyclomatic complexity of non-synthetic methods.
 
-External, ambiguous, dynamic and unresolved facts do not create metric topology.
-Canonical call-graph topology uses only `calls`/`awaits`; callsite resolution
-provides classification and zero-based depth is reported as one-based nesting.
-Declared functions and methods remain graph vertices; file/module vertices are
-included only when they own a canonical callsite or an outgoing canonical call
-edge. In semantics v4 `risk_top` joins canonical complexity to topology only by
-node ID. Semantics v1-v3 retain their prior compatibility behavior.
-String, import-suffix and annotation-name resolution is confined to legacy v1/v2
-compatibility branches.
+External, ambiguous, dynamic and unresolved facts never create topology.
+Risk remains a relative heuristic in `[0, 100]` with weights
+`0.35/0.25/0.20/0.20`, not a probability. Package instability,
+abstractness and distance use canonical root ownership and `class_kind`.
 
-The aggregate raw-graph gateway constructs exactly one internal read-only
-`MetricsGraphProjection`; its internal orchestrator and metric-section
-calculators consume only that projection. Public section-level raw-graph APIs
-remain compatibility gateways and honor a caller-supplied projection before
-building one themselves.
-It exposes collision-safe legacy file identity and effective semantic modules,
-canonical nodes/callsites, directed file and package imports in the explicit
-`dependent -> dependency` direction, normalized undirected file pairs, and an
-immutable file-to-package ownership view. Architecture metrics consume these
-file, package and undirected topology views from the same projection; for
-parser semantics v4 the canonical package topology intentionally coexists with
-legacy package populations, while v5 and later use canonical ownership.
-Topology-only packages therefore have zero structural population. An ID-only
-weighted `calls`/`awaits` graph and canonical object topology are exposed
-through separate directed `inherits` (`class -> class`), `field_type`
-(`field -> class`), and `accesses_field` (`method -> field`) views. Its DTOs are
-frozen and its topology collections are immutable. This is an internal
-data/topology view: it does not change formulas or perform legacy string
-resolution. The transitional `body` adapter remains only for parser semantics
-v1-v5.
-Canonical size, complexity, quality, object WMC and call-graph risk read node
-attributes, complexity facts and parser semantics version from that same
-snapshot. Once a projection has been built, later mutation of the input mapping
-cannot mix declaration data from one graph state with topology from another.
-Private quality, call-graph, object-metrics and aggregate calculators accept
-only this projection, including the legacy v1/v2 compatibility branches. Raw
-graph mappings are converted at their public compatibility gateways when no
-projection is supplied, so calculators cannot read declaration data and
-topology from different snapshots during one calculation.
-For parser semantics v4 and later, import references are exposed as an immutable snapshot
-and import topology is independent of legacy `body[*].file.imports`; older
-parser semantics retain the compatibility projection.
-
-Legacy nested calls have one compatibility traversal. A root mapping call has
-depth 1; recursion follows only `args[*].value` mappings whose `type` is
-`call`, preserving argument order. Activity, legacy call nesting, and RFC call
-name collection consume that same traversal.
-
-When a legacy call record contains the parser's transitional `semantic_target`,
-local call resolution uses it exclusively. Records without it retain the legacy
-short-name fallback.
+The removed legacy contract is retained only as migration history in
+[`LEGACY_GRAPH_CONTRACT.md`](LEGACY_GRAPH_CONTRACT.md). It is not an active
+Metrics input contract.

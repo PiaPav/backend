@@ -6,6 +6,9 @@ The envelope requires `schema_version: 1`, a supported
 Parser semantics 2-7 additionally require `type_references`; semantics 4-7
 also require occurrence-level `import_references`. Semantics 6 and 7 additionally
 require `owner_structural_facts`.
+Validation support is broader than consumer support: the shared validator keeps
+historical semantics 1-7 readable, while the current Metrics core accepts only
+the self-contained semantics 6 and 7. Current Parser output uses semantics 7.
 Canonical collections are sorted before serialization. The SHA-256 fingerprint
 is calculated over the envelope without `project.fingerprint` and without the
 transitional `body` mirror; it is therefore independent of collection order.

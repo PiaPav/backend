@@ -2,46 +2,12 @@
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict, deque
+from collections import Counter
 from collections.abc import Mapping
 from itertools import combinations
 from typing import Any
 from .complexity import canonical_callable_metrics
-from .projections import MetricsGraphProjection, iter_legacy_calls
-
-
-BUILTIN_TYPES = {
-    "Any", "None", "bool", "bytes", "dict", "float", "int", "list",
-    "object", "set", "str", "tuple", "Optional", "Union", "Literal",
-}
-
-
-def _type_names(value: Any) -> set[str]:
-    if isinstance(value, str):
-        current = ""
-        result: set[str] = set()
-        for char in value:
-            if char.isalnum() or char in "_.":
-                current += char
-            elif current:
-                result.add(current)
-                current = ""
-        if current:
-            result.add(current)
-        return {name.rsplit(".", 1)[-1] for name in result} - BUILTIN_TYPES
-    if isinstance(value, Mapping):
-        return set().union(*(_type_names(item) for item in value.values()))
-    if isinstance(value, (list, tuple)):
-        return set().union(*(_type_names(item) for item in value))
-    return set()
-
-
-def _call_names(calls: Any) -> set[str]:
-    return {
-        name
-        for item in iter_legacy_calls(calls if isinstance(calls, (list, tuple)) else ())
-        if (name := str(item.call.get("object") or ""))
-    }
+from .projections import MetricsGraphProjection
 
 
 def _top(rows: list[dict[str, Any]], key: str, *, reverse: bool = True) -> list[dict[str, Any]]:
@@ -53,150 +19,14 @@ def _top(rows: list[dict[str, Any]], key: str, *, reverse: bool = True) -> list[
 
 
 def calculate_object_metrics(
-    graph: Mapping[str, Any], *, cyclic_dit_is_none: bool = False,
-    projection: MetricsGraphProjection | None = None,
+    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None,
 ) -> dict[str, Any]:
-    """Compatibility gateway for legacy object metrics."""
-    projection = projection or MetricsGraphProjection.from_graph(graph)
-    return _calculate_legacy_object_metrics(
-        projection, cyclic_dit_is_none=cyclic_dit_is_none,
-    )
-
-
-def _calculate_legacy_object_metrics(
-    projection: MetricsGraphProjection, *, cyclic_dit_is_none: bool = False,
-) -> dict[str, Any]:
-    classes: list[tuple[str, str, Mapping[str, Any]]] = []
-    for legacy_file in projection.legacy_files:
-        file = legacy_file.data
-        module = legacy_file.file_id
-        for class_info in file.get("classes", []):
-            if isinstance(class_info, Mapping):
-                name = str(class_info.get("name"))
-                classes.append((f"{module}.{name}", module, class_info))
-
-    by_short: dict[str, list[str]] = {}
-    for qualified, _, class_info in classes:
-        by_short.setdefault(str(class_info.get("name")), []).append(qualified)
-    class_names = {qualified for qualified, _, _ in classes}
-
-    def resolve(name: str, module: str) -> str | None:
-        if "." in name:
-            # A qualified external/imported base must never bind to an unrelated
-            # local class merely because its final component happens to match.
-            return name if name in class_names else None
-        short = name.rsplit(".", 1)[-1]
-        local = f"{module}.{short}"
-        if local in class_names:
-            return local
-        matches = by_short.get(short, [])
-        return matches[0] if len(matches) == 1 else None
-
-    parents: dict[str, set[str]] = {}
-    children: Counter[str] = Counter()
-    for qualified, module, class_info in classes:
-        raw = class_info.get("parent")
-        parent_names = raw if isinstance(raw, (list, tuple)) else ([raw] if raw else [])
-        parents[qualified] = {
-            resolved
-            for name in parent_names
-            if (resolved := resolve(str(name), module)) is not None
-        }
-        children.update(parents[qualified])
-
-    def legacy_inheritance_depth(name: str, visiting: set[str] | None = None) -> int | None:
-        visiting = visiting or set()
-        if name in visiting:
-            return 0
-        if not parents.get(name):
-            return 0
-        depths = [legacy_inheritance_depth(parent, visiting | {name}) for parent in parents[name]]
-        return 1 + max(depths)  # type: ignore[arg-type]
-
-    depths: dict[str, int | None] = {}
-    if cyclic_dit_is_none:
-        # Explicit DFS frames avoid Python recursion limits.  A repeated active
-        # node poisons the cycle and every class that depends on it.
-        for root in sorted(parents):
-            if root in depths: continue
-            active: set[str] = set(); stack = [(root, False)]
-            while stack:
-                name, complete = stack.pop()
-                if name in depths: continue
-                if complete:
-                    active.discard(name)
-                    values = [depths[parent] for parent in parents.get(name, ())]
-                    depths[name] = None if any(value is None for value in values) else (1 + max(values) if values else 0)  # type: ignore[arg-type]
-                    continue
-                if name in active:
-                    depths[name] = None
-                    continue
-                active.add(name); stack.append((name, True))
-                for parent in sorted(parents.get(name, ()), reverse=True):
-                    if parent in active:
-                        depths[parent] = None
-                    elif parent not in depths:
-                        stack.append((parent, False))
-
-    rows: list[dict[str, Any]] = []
-    for qualified, module, class_info in classes:
-        methods = [item for item in class_info.get("methods", []) if isinstance(item, Mapping)]
-        fields = {
-            str(item.get("name"))
-            for item in class_info.get("fields", [])
-            if isinstance(item, Mapping)
-        }
-        weighted_methods = sum(
-            int(method.get("metrics", {}).get("cyclomatic_complexity", 1))
-            for method in methods
-        )
-        response = set().union(*(_call_names(method.get("calls", [])) for method in methods))
-        dependencies = set(parents[qualified])
-        for field in class_info.get("fields", []):
-            if isinstance(field, Mapping):
-                for type_name in _type_names(field.get("type")):
-                    if target := resolve(type_name, module):
-                        dependencies.add(target)
-        for call_name in response:
-            if target := resolve(call_name.split(".", 1)[0], module):
-                dependencies.add(target)
-        dependencies.discard(qualified)
-
-        method_fields = [
-            set(map(str, method.get("metrics", {}).get("self_attribute_accesses", [])))
-            & fields
-            for method in methods
-        ]
-        pairs = list(combinations(method_fields, 2))
-        lack_of_cohesion = (
-            sum(not (left & right) for left, right in pairs) / len(pairs)
-            if pairs and fields
-            else None
-        )
-        rows.append(
-            {
-                "class": qualified,
-                "wmc": weighted_methods,
-                "cbo": len(dependencies),
-                "rfc": len(methods) + len(response),
-                "lcom": round(lack_of_cohesion, 4) if lack_of_cohesion is not None else None,
-                "dit": depths.get(qualified) if cyclic_dit_is_none else legacy_inheritance_depth(qualified),
-                "noc": children[qualified],
-            }
-        )
-
-    result = {
-        "classes_analyzed": len(rows),
-        "highest_weighted_method_complexity": _top(rows, "wmc"),
-        "highest_class_coupling": _top(rows, "cbo"),
-        "largest_response_sets": _top(rows, "rfc"),
-        "lowest_cohesion": _top(rows, "lcom"),
-        "deepest_inheritance": _top(rows, "dit"),
-        "most_direct_children": _top(rows, "noc"),
-    }
-    if cyclic_dit_is_none:
-        result["classes"] = sorted(rows, key=lambda row: row["class"])
-    return result
+    """Canonical gateway for object metrics."""
+    if projection is None:
+        from .calculator import validate_metrics_graph
+        validate_metrics_graph(graph)
+        projection = MetricsGraphProjection.from_graph(graph)
+    return _calculate_canonical_object_metrics(projection)
 
 
 def _calculate_canonical_object_metrics(
@@ -314,70 +144,10 @@ def _calculate_canonical_object_metrics(
 
 def calculate_canonical_object_metrics(
     graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None,
-    wmc_by_class_id: Mapping[str, int] | None = None,
 ) -> dict[str, Any]:
-    """Compatibility gateway for canonical object metrics."""
-    projection = projection or MetricsGraphProjection.from_graph(graph)
-    return _calculate_canonical_object_metrics(
-        projection, wmc_by_class_id=wmc_by_class_id,
-    )
-
-
-def calculate_semantics_v2_object_metrics(
-    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None,
-) -> dict[str, Any]:
-    """Compatibility adapter for the semantics-v2 body-derived WMC."""
-    projection = projection or MetricsGraphProjection.from_graph(graph)
-    return _calculate_semantics_v2_object_metrics(projection)
-
-
-def _calculate_semantics_v2_object_metrics(
-    projection: MetricsGraphProjection,
-) -> dict[str, Any]:
-    """Calculate semantics-v2 object metrics from one projection snapshot."""
-    legacy_wmc: dict[tuple[str, str], deque[int]] = defaultdict(deque)
-    for legacy_file in projection.legacy_files:
-        file = legacy_file.data
-        path_parts = tuple(str(part) for part in file.get("path_parts", ()))
-        source_path = "/".join((*path_parts, f"{file.get('name')}.py"))
-        for class_info in file.get("classes", []):
-            if not isinstance(class_info, Mapping):
-                continue
-            class_name = str(class_info.get("name") or "")
-            legacy_wmc[(source_path, class_name)].append(sum(
-                int(method.get("metrics", {}).get("cyclomatic_complexity", 1))
-                for method in class_info.get("methods", [])
-                if isinstance(method, Mapping)
-            ))
-
-    def source_occurrence(item: tuple[str, Mapping[str, Any]]) -> tuple[str, int, int, str]:
-        identifier, node = item
-        location = node.get("location")
-        if not isinstance(location, Mapping):
-            location = {}
-        path = str(node.get("path") or location.get("path") or "")
-        line = location.get("line")
-        column = location.get("column")
-        return (
-            path,
-            int(line) if isinstance(line, int) else 2**63 - 1,
-            int(column) if isinstance(column, int) else 2**63 - 1,
-            identifier,
-        )
-
-    canonical_classes = sorted(
-        (
-            (identifier, node)
-            for identifier, node in projection.nodes_by_id.items()
-            if node.get("kind") == "class"
-        ),
-        key=source_occurrence,
-    )
-    wmc_by_class_id: dict[str, int] = {}
-    for identifier, node in canonical_classes:
-        class_name = str(node.get("qualified_name") or identifier).rsplit(".", 1)[-1]
-        occurrences = legacy_wmc.get((str(node.get("path") or ""), class_name))
-        wmc_by_class_id[identifier] = occurrences.popleft() if occurrences else 0
-    return _calculate_canonical_object_metrics(
-        projection, wmc_by_class_id=wmc_by_class_id,
-    )
+    """Canonical gateway for object metrics."""
+    if projection is None:
+        from .calculator import validate_metrics_graph
+        validate_metrics_graph(graph)
+        projection = MetricsGraphProjection.from_graph(graph)
+    return _calculate_canonical_object_metrics(projection)
