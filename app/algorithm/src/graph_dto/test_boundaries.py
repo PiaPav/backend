@@ -303,6 +303,26 @@ def test_canonical_consumers_cannot_read_projection_root_keys_from_raw_graph() -
     assert not violations, "canonical consumers read raw graph roots:\n" + "\n".join(violations)
 
 
+def test_canonical_call_graph_and_complexity_calculators_are_projection_only() -> None:
+    functions = (
+        _function(
+            ROOT / "metrics/logic/complexity.py",
+            "canonical_callable_metrics",
+        ),
+        _function(
+            ROOT / "metrics/logic/call_graph.py",
+            "_calculate_canonical_call_graph_metrics",
+        ),
+    )
+    for function in functions:
+        positional = [*function.args.posonlyargs, *function.args.args]
+        assert [argument.arg for argument in positional] == ["projection"]
+        assert not function.args.defaults
+        assert not function.args.kwonlyargs
+        assert not function.args.vararg
+        assert not function.args.kwarg
+
+
 def test_canonical_object_metrics_cannot_read_raw_edges() -> None:
     function = _function(
         ROOT / "metrics/logic/object_metrics.py",

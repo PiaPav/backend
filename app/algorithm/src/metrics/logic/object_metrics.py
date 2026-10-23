@@ -258,7 +258,7 @@ def calculate_canonical_object_metrics(
                 elif parent not in depths: stack.append((parent, False))
 
     if wmc_by_class_id is None:
-        callable_metrics = canonical_callable_metrics(graph, projection=projection)
+        callable_metrics = canonical_callable_metrics(projection)
         wmc_by_class_id = {
             class_id: sum(
                 int(callable_metrics[method]["cyclomatic_complexity"])

@@ -15,7 +15,7 @@ def callable_metrics(
 ) -> dict[str, dict[str, Any]]:
     projection = projection or MetricsGraphProjection.from_graph(graph)
     if projection.parser_semantics_version in {3, 4, 5, 6, 7}:
-        return canonical_callable_metrics(graph, projection=projection)
+        return canonical_callable_metrics(projection)
     result: dict[str, dict[str, Any]] = {}
     files = [file.data for file in projection.legacy_files]
     for file in files:

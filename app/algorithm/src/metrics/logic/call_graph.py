@@ -6,6 +6,7 @@ from collections import Counter, deque
 from collections.abc import Mapping
 from typing import Any
 
+from .complexity import canonical_callable_metrics
 from .quality import callable_metrics
 from .identity import effective_module_ids, graph_files, legacy_file_id
 from .graph_algorithms import strong_components as _strong_components
@@ -163,7 +164,8 @@ def calculate_call_graph_metrics(
 ) -> dict[str, Any]:
     """Build a qualified call graph and calculate vertex-oriented metrics."""
     if canonical:
-        return _calculate_canonical_call_graph_metrics(graph, projection=projection)
+        projection = projection or MetricsGraphProjection.from_graph(graph)
+        return _calculate_canonical_call_graph_metrics(projection)
     files = [file.data for file in projection.legacy_files] if projection else _graph_files(graph)
     module_ids = projection.effective_module_ids if projection else effective_module_ids(files)
     use_legacy_resolution = (
@@ -455,10 +457,9 @@ def calculate_call_graph_metrics(
 
 
 def _calculate_canonical_call_graph_metrics(
-    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None
+    projection: MetricsGraphProjection,
 ) -> dict[str, Any]:
     """Build v3 topology from IDs and classify only canonical callsites."""
-    projection = projection or MetricsGraphProjection.from_graph(graph)
     all_nodes = projection.nodes_by_id
     callable_ids = {identifier for identifier, item in all_nodes.items() if item.get("kind") in {"function", "method"}}
     file_nodes = {
@@ -560,7 +561,7 @@ def _calculate_canonical_call_graph_metrics(
     peak_reach = max(reach.values(), default=0)
     pagerank = _pagerank(call_owner_ids, edges); betweenness = _betweenness(call_owner_ids, edges)
     semantics_v3 = projection.parser_semantics_version in {3, 4, 5, 6, 7}
-    complexity = callable_metrics(graph, projection=projection) if semantics_v3 else {}
+    complexity = canonical_callable_metrics(projection) if semantics_v3 else {}
     # ID-keyed complexity and its risk projection belong to parser semantics
     # v3.  Semantics v2 keeps its established empty canonical risk list.
     risk_nodes = {

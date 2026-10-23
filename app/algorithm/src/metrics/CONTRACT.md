@@ -98,6 +98,11 @@ Canonical size, complexity, quality, object WMC and call-graph risk read node
 attributes, complexity facts and parser semantics version from that same
 snapshot. Once a projection has been built, later mutation of the input mapping
 cannot mix declaration data from one graph state with topology from another.
+The canonical callable-complexity calculator and the private canonical
+call-graph calculator accept only this projection. Raw graph mappings are
+converted at their compatibility gateways when no projection is supplied, so
+canonical calculators cannot read declaration data and topology from different
+snapshots during one calculation.
 For parser semantics v4 and later, import references are exposed as an immutable snapshot
 and import topology is independent of legacy `body[*].file.imports`; older
 parser semantics retain the compatibility projection.

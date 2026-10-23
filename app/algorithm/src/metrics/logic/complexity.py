@@ -56,13 +56,9 @@ def metrics_from_facts(facts: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def canonical_callable_metrics(
-    graph: Mapping[str, Any], *, projection: MetricsGraphProjection | None = None,
+    projection: MetricsGraphProjection,
 ) -> dict[str, dict[str, Any]]:
     """Return metrics keyed exclusively by stable callable node ID."""
-    if projection is None:
-        from .projections import MetricsGraphProjection
-
-        projection = MetricsGraphProjection.from_graph(graph)
     return {
         str(node["id"]): metrics_from_facts(node["complexity_facts"])
         for node in projection.nodes_by_id.values()

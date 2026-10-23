@@ -410,14 +410,13 @@ def test_canonical_consumers_use_one_detached_snapshot_after_raw_mutation() -> N
             }])
     projection = MetricsGraphProjection.from_graph(graph)
     expected = {
-        "complexity": canonical_callable_metrics(graph, projection=projection),
+        "complexity": canonical_callable_metrics(projection),
         "quality": calculate_quality_metrics(graph, projection=projection),
         "objects": calculate_canonical_object_metrics(graph, projection=projection),
         "calls": calculate_call_graph_metrics(graph, canonical=True, projection=projection),
         "size": _canonical_size(projection),
         "architecture": calculate_architecture_metrics(projection),
     }
-    assert canonical_callable_metrics(graph) == expected["complexity"]
     assert calculate_quality_metrics(graph) == expected["quality"]
     assert calculate_canonical_object_metrics(graph) == expected["objects"]
     assert calculate_call_graph_metrics(graph, canonical=True) == expected["calls"]
@@ -429,7 +428,7 @@ def test_canonical_consumers_use_one_detached_snapshot_after_raw_mutation() -> N
     graph["nodes"].clear()
     graph["parser_semantics_version"] = 2
 
-    assert canonical_callable_metrics(graph, projection=projection) == expected["complexity"]
+    assert canonical_callable_metrics(projection) == expected["complexity"]
     assert calculate_quality_metrics(graph, projection=projection) == expected["quality"]
     assert calculate_canonical_object_metrics(graph, projection=projection) == expected["objects"]
     assert calculate_call_graph_metrics(
@@ -441,18 +440,30 @@ def test_canonical_consumers_use_one_detached_snapshot_after_raw_mutation() -> N
     assert expected["calls"]["risk_top"]
 
 
-def test_canonical_callable_fallback_builds_one_projection() -> None:
+def test_canonical_compatibility_gateways_build_projection_at_most_once() -> None:
+    from metrics.logic.call_graph import calculate_call_graph_metrics
     from metrics.logic.quality import callable_metrics
 
     graph = _canonical_call_graph()
-    with patch.object(
-        MetricsGraphProjection, "from_graph",
-        wraps=MetricsGraphProjection.from_graph,
-    ) as from_graph:
-        metrics = callable_metrics(graph)
+    projection = MetricsGraphProjection.from_graph(graph)
+    gateways = (
+        lambda supplied=None: callable_metrics(graph, projection=supplied),
+        lambda supplied=None: calculate_call_graph_metrics(
+            graph, canonical=True, projection=supplied,
+        ),
+    )
+    for gateway in gateways:
+        with patch.object(
+            MetricsGraphProjection, "from_graph",
+            wraps=MetricsGraphProjection.from_graph,
+        ) as from_graph:
+            fallback_result = gateway()
+        from_graph.assert_called_once_with(graph)
 
-    assert set(metrics) == {"fn:available", "fn:run"}
-    from_graph.assert_called_once_with(graph)
+        with patch.object(MetricsGraphProjection, "from_graph") as from_graph:
+            supplied_result = gateway(projection)
+        from_graph.assert_not_called()
+        assert supplied_result == fallback_result
 
 
 def test_semantics3_complexity_consumers_use_facts_by_node_id() -> None:
