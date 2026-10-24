@@ -1,6 +1,15 @@
-# Graph View DTO v1: `structure.declarations` v1
+# Graph profiles и Graph View DTO v1
 
-This package supports exactly profile ID `structure.declarations`, profile
+Публичный `materialize_graph_profile` поддерживает точные пары
+`canonical.full / 1` и `structure.declarations / 1`. Первый профиль возвращает
+глубокую копию полного Graph DTO schema 1 / Parser semantics 7 и не является
+Graph View: он не получает view envelope или новый fingerprint и остаётся
+допустимым входом Metrics Core. `project_graph_view` по-прежнему принимает
+только Graph View profiles.
+
+## `structure.declarations` v1
+
+The Graph View contract supports profile ID `structure.declarations`, profile
 version `1`, view schema `1`, and source Graph DTO schema `1` / Parser semantics
 `7`. There is no default, `latest`, version negotiation, or fallback.
 

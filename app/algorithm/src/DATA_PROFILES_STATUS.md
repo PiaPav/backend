@@ -1,8 +1,8 @@
 # Статус разработки профилей данных
 
 Статус сопоставлен с `DATA_PROFILES_PLAN.md`. На момент первичной фиксации
-реализация профилей данных ещё не была начата. В текущей первой итерации создан
-общий слой Graph View и реализован один ограниченный вертикальный профиль;
+реализация профилей данных ещё не была начата. В текущих итерациях создан
+общий слой Graph View, реализован один ограниченный view и canonical baseline;
 Parser и Metrics cores при этом не изменялись.
 
 Статусы подпунктов сопровождаются кратким описанием готового результата или
@@ -22,15 +22,17 @@ Parser и Metrics cores при этом не изменялись.
 
 ## Этап 0. Спецификация
 
-1. **Выполнен частично.** Базовые термины и список предлагаемых profile IDs
-   зафиксированы в плане, но ещё не оформлены как утверждённый общий контракт.
-2. **Выполнен частично.** Точный whitelist полей и relations определён только
-   для `structure.declarations` v1; остальные профили пока описаны на уровне
-   плана.
-3. **Не выполнен.** Необходимо составить матрицу canonical field -> profiles,
-   чтобы последующие whitelist-проекции не расходились между собой.
-4. **Не выполнен.** Необходимо сопоставить метрики с обязательными canonical
-   facts до реализации Metrics Views и профильных guarantees.
+1. **Выполнен для initial scope.** Термины, точные ID/version и виды артефактов
+   четырёх первых Graph profiles закреплены в
+   `DATA_PROFILES_INITIAL_CONTRACT.md`.
+2. **Выполнен для initial scope.** Зафиксированы whitelist/aggregate schemas для
+   `inventory.minimal`, `structure.declarations` и `dependency.files`; полный
+   профиль сохраняет canonical DTO без фильтрации.
+3. **Выполнен для initial scope.** Добавлена матрица canonical data -> первые
+   profiles.
+4. **Выполнен на уровне section basis.** Зафиксирована матрица Metrics section
+   -> обязательные canonical facts; детальные field-level зависимости будущих
+   Metrics Views остаются частью этапа 4.
 5. **Выполнен для текущей версии.** Graph View не имеет envelope Graph DTO v1 и
    отклоняется Metrics Core; это поведение закреплено регрессионным тестом.
 
@@ -41,8 +43,9 @@ Parser и Metrics cores при этом не изменялись.
 2. **Выполнен для Graph View v1.** Envelope содержит версии и fingerprint
    полного source graph; `view_fingerprint` связывает source, profile,
    completeness и payload.
-3. **Выполнен для зарегистрированных профилей.** Registry принимает только
-   точную пару `structure.declarations` / `1`; defaults, `latest` и fallback
+3. **Выполнен для зарегистрированных профилей.** Unified registry принимает
+   точные пары `canonical.full` / `1` и `structure.declarations` / `1`, а
+   Graph View metadata registry — только вторую; defaults, `latest` и fallback
    отсутствуют.
 4. **Выполнен полностью для текущего envelope.** Nodes и edges сортируются по
    ID, fingerprint строится по canonical compact JSON, а serializer выдаёт
@@ -50,15 +53,16 @@ Parser и Metrics cores при этом не изменялись.
 
 ## Этап 2. Первые безопасные Graph Views
 
-1. **Не выполнен.** `canonical.full` остаётся существующим canonical Graph DTO;
-   отдельный profile API и provenance baseline пока не оформлены.
-2. **Не выполнен.** Для `inventory.minimal` требуется зафиксировать точные
-   counters diagnostics и resolution statuses, после чего реализовать summary.
+1. **Выполнен полностью для v1.** `canonical.full` доступен через unified
+   profile API как глубокая identity-копия Graph DTO без view envelope; старый
+   Graph View API остаётся изолированным.
+2. **Контракт выполнен, реализация не выполнена.** Точные populations и
+   обязательные categories counters закреплены; summary projector отсутствует.
 3. **Выполнен полностью для v1.** `structure.declarations` сохраняет все
    canonical declaration nodes, ownership, canonical IDs, `class_kind` и
    synthetic methods, исключая несвязанные классы данных.
-4. **Не выполнен.** Перед `dependency.files` нужно формально разделить уникальную
-   file topology и occurrence-level import counts.
+4. **Контракт выполнен, реализация не выполнена.** Уникальная file topology,
+   aggregate edge IDs и occurrence-level import counts формально разделены.
 5. **Выполнен для текущего профиля.** Проектор копирует только явно разрешённые
    поля nodes и `contains` edges, поэтому новые canonical-поля не попадают в
    compact view автоматически.
@@ -134,8 +138,9 @@ Parser и Metrics cores при этом не изменялись.
 
 ## Текущая итерация
 
-Реализованы Graph View envelope schema v1 и `structure.declarations` profile v1
-для Graph DTO schema v1 / Parser semantics v7. Профиль сохраняет canonical IDs,
+Реализованы Graph View envelope schema v1, `structure.declarations` profile v1
+и unified API с globally lossless `canonical.full` profile v1 для Graph DTO
+schema v1 / Parser semantics v7. Structure profile сохраняет canonical IDs,
 declaration nodes и ownership, использует строгие whitelist-поля и явно
 описывает исключённые классы данных: callsites, callable complexity facts,
 diagnostics, import references, owner structural facts, type references, node
@@ -146,22 +151,19 @@ access relations. Fingerprint связывает payload с profile, completenes
 Проверены строгая валидация envelope, version checks, отсутствие fallback,
 referential closure, неизменность source, независимость от порядка canonical
 collections, защита registry от внешней мутации, границы импортов и отклонение
-Graph View ядром Metrics. Релевантный прогон: **155 passed, 0 failed, 0
+Graph View ядром Metrics, а также identity/immutability, version policy и
+Metrics-совместимость `canonical.full`. Релевантный прогон: **166 passed, 0 failed, 0
 skipped**.
 
-Остальные профили, общие матрицы спецификации, golden manifests, size budgets,
-Metrics Views, aggregates и consumer integration остаются в backlog.
+`inventory.minimal` и `dependency.files` имеют initial contracts, но ещё не
+реализованы. Golden manifests, size budgets, Metrics Views, aggregates и
+consumer integration остаются в backlog.
 
 ## Приоритет доработок
 
-1. Завершить этап 0 для первого набора профилей: утвердить glossary, точные
-   profile IDs и матрицу canonical field -> profiles. Отдельно зафиксировать
-   различие topology edges и occurrence counts для imports.
-2. Оформить `canonical.full` как identity/provenance baseline без превращения
-   его в сокращённый Graph View и определить его место в публичном API.
-3. Реализовать `inventory.minimal` v1 с точными counters по node kinds,
+1. Реализовать `inventory.minimal` v1 с точными counters по node kinds,
    diagnostics и resolution statuses, сохранив summary-семантику.
-4. Реализовать `dependency.files` v1 после фиксации import topology contract и
-   добавить fixtures exact, repeated, external и unresolved imports.
-5. Добавить golden manifest и size measurement для `structure.declarations`,
+2. Реализовать `dependency.files` v1 по зафиксированному import topology
+   contract и добавить fixtures exact, repeated, external и unresolved imports.
+3. Добавить golden manifest и size measurement для `structure.declarations`,
    затем проверить целевой бюджет на репрезентативном medium/large fixture.

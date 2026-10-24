@@ -23,6 +23,9 @@
 
 ## 2. Термины
 
+Точный versioned contract первого набора профилей, включая whitelist и
+population matrices, находится в `DATA_PROFILES_INITIAL_CONTRACT.md`.
+
 - **Canonical Graph DTO** — полный текущий Graph DTO v1.
 - **Graph View DTO** — сокращённая проекция canonical graph.
 - **Graph Summary DTO** — агрегированное представление, которое уже не является
@@ -144,7 +147,7 @@ Graph DTO v1, а не Graph View DTO.
 
 Содержит:
 
-- descriptors корневых файлов/modules: ID, kind, name, path;
+- descriptors корневых файлов/modules: ID, kind, qualified_name, path;
 - counts nodes по kind;
 - synthetic method count;
 - counts diagnostics по kind/status;
