@@ -1,11 +1,31 @@
 # Graph profiles и Graph View DTO v1
 
 Публичный `materialize_graph_profile` поддерживает точные пары
-`canonical.full / 1` и `structure.declarations / 1`. Первый профиль возвращает
+`canonical.full / 1`, `inventory.minimal / 1` и
+`structure.declarations / 1`. Первый профиль возвращает
 глубокую копию полного Graph DTO schema 1 / Parser semantics 7 и не является
 Graph View: он не получает view envelope или новый fingerprint и остаётся
 допустимым входом Metrics Core. `project_graph_view` по-прежнему принимает
 только Graph View profiles.
+
+## Graph Summary DTO v1: `inventory.minimal` v1
+
+`inventory.minimal` создаётся как отдельный `artifact_kind: graph_summary` с
+`summary_schema_version` и `summary_fingerprint`; это не Graph View и не Graph
+DTO. Специализированный gateway — `project_graph_summary`. Строгие публичные
+операции `validate_graph_summary_v1`, `graph_summary_fingerprint` и
+`serialize_graph_summary` не зависят от Graph View contract.
+
+Payload и populations определены в `DATA_PROFILES_INITIAL_CONTRACT.md`.
+Completeness маркирует one-way projection и явно перечисляет сохранённые counts
+и исключённые details/relations. Validator проверяет закрытые zero-filled
+categories, root descriptors, неотрицательные non-boolean counts, joint
+diagnostic distribution и summary fingerprint. Serialization использует
+sorted indented UTF-8 JSON, LF и один завершающий newline.
+
+Summary не содержит topology или occurrence details и отклоняется Metrics Core.
+Отсутствие relation/detail нельзя интерпретировать как ноль или отсутствие
+runtime relation.
 
 ## `structure.declarations` v1
 

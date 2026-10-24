@@ -5,7 +5,7 @@ import pytest
 from graph_dto import graph_fingerprint, validate_graph_v1
 from graph_dto.test_contract import _semantics7_graph
 from metrics import calculate_graph_metrics
-from views import materialize_graph_profile, project_graph_view
+from views import materialize_graph_profile, project_graph_summary, project_graph_view
 
 
 def _graph():
@@ -49,6 +49,8 @@ def test_canonical_full_is_a_graph_dto_consumable_by_metrics_without_view_envelo
     ("canonical.full", True),
     ("structure.declarations", 2),
     ("structure.declarations", True),
+    ("inventory.minimal", 2),
+    ("inventory.minimal", True),
     ("unknown", 1),
 ])
 def test_unified_api_has_no_profile_or_version_fallback(profile_id, version):
@@ -87,3 +89,27 @@ def test_unified_structure_profile_matches_existing_graph_view_api():
 def test_graph_view_api_continues_to_reject_canonical_profile():
     with pytest.raises(ValueError, match="Unsupported graph view profile"):
         project_graph_view(_graph(), profile_id="canonical.full", profile_version=1)
+
+
+def test_unified_inventory_profile_matches_summary_gateway():
+    graph = _graph()
+    assert materialize_graph_profile(
+        graph, profile_id="inventory.minimal", profile_version=1
+    ) == project_graph_summary(
+        graph, profile_id="inventory.minimal", profile_version=1
+    )
+
+
+def test_specialized_gateways_do_not_accept_the_other_artifact_kinds():
+    with pytest.raises(ValueError, match="Unsupported graph view profile"):
+        project_graph_view(_graph(), profile_id="inventory.minimal", profile_version=1)
+    with pytest.raises(ValueError, match="Unsupported graph summary profile"):
+        project_graph_summary(_graph(), profile_id="structure.declarations", profile_version=1)
+
+
+def test_metrics_rejects_graph_summary():
+    summary = project_graph_summary(
+        _graph(), profile_id="inventory.minimal", profile_version=1
+    )
+    with pytest.raises(ValueError, match="Unsupported graph schema_version"):
+        calculate_graph_metrics(summary)

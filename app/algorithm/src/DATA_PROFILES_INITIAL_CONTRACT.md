@@ -10,7 +10,7 @@ populations, обязательных полей или правил агрег�
 | Profile | Version | Artifact | Состояние |
 |---|---:|---|---|
 | `canonical.full` | 1 | Canonical Graph DTO | реализован |
-| `inventory.minimal` | 1 | Graph Summary DTO | контракт определён |
+| `inventory.minimal` | 1 | Graph Summary DTO | реализован |
 | `structure.declarations` | 1 | Graph View DTO | реализован |
 | `dependency.files` | 1 | Graph View DTO | контракт определён |
 
@@ -26,15 +26,22 @@ semantics 7 и возвращает независимую глубокую ко
 исходного DTO сохраняются. Identity означает равенство содержания, а не
 тождество mutable Python-объекта.
 
-Публичный gateway `materialize_graph_profile` поддерживает этот профиль и
-`structure.declarations`. Специализированный `project_graph_view` продолжает
-принимать только Graph View profiles.
+Публичный gateway `materialize_graph_profile` поддерживает `canonical.full`,
+`inventory.minimal` и `structure.declarations`. Специализированные gateway
+`project_graph_summary` и `project_graph_view` принимают только профили своего
+вида артефакта.
 
 ## `inventory.minimal` v1
 
 Это one-way summary без topology, declarations, locations, callsites и
 complexity facts. Root descriptor содержит только `id`, `kind`,
 `qualified_name` и `path`; неоднозначное производное поле `name` не создаётся.
+
+Summary envelope содержит `artifact_kind: graph_summary`,
+`summary_schema_version: 1`, точные profile/source metadata, `completeness`,
+`payload` и `summary_fingerprint`. Fingerprint является lowercase SHA-256
+compact canonical UTF-8 JSON всего envelope без самого fingerprint; roots
+канонизируются по ID, а diagnostic rows — по `(kind, status)`.
 
 Нормативный payload:
 

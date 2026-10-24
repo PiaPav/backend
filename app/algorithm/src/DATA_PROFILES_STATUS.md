@@ -13,7 +13,7 @@ Parser и Metrics cores при этом не изменялись.
 | Этап | Состояние |
 |---|---|
 | 0. Спецификация | **в работе** |
-| 1. Общий envelope | **выполнено для Graph View v1** |
+| 1. Общий envelope | **выполнено для Graph View v1 и Graph Summary v1** |
 | 2. Первые безопасные Graph Views | **в работе** |
 | 3. Domain Graph Views | **не выполнено** |
 | 4. Metrics Views | **не выполнено** |
@@ -44,20 +44,23 @@ Parser и Metrics cores при этом не изменялись.
    полного source graph; `view_fingerprint` связывает source, profile,
    completeness и payload.
 3. **Выполнен для зарегистрированных профилей.** Unified registry принимает
-   точные пары `canonical.full` / `1` и `structure.declarations` / `1`, а
-   Graph View metadata registry — только вторую; defaults, `latest` и fallback
-   отсутствуют.
+   точные пары `canonical.full` / `1`, `inventory.minimal` / `1` и
+   `structure.declarations` / `1`; специализированные metadata registries
+   разделяют Summary и View. Defaults, `latest` и fallback отсутствуют.
 4. **Выполнен полностью для текущего envelope.** Nodes и edges сортируются по
    ID, fingerprint строится по canonical compact JSON, а serializer выдаёт
    детерминированный UTF-8 JSON.
+5. **Выполнен для Graph Summary v1.** Добавлены отдельные строгие validator,
+   fingerprint и serializer; summary не смешивается с Graph View contract.
 
 ## Этап 2. Первые безопасные Graph Views
 
 1. **Выполнен полностью для v1.** `canonical.full` доступен через unified
    profile API как глубокая identity-копия Graph DTO без view envelope; старый
    Graph View API остаётся изолированным.
-2. **Контракт выполнен, реализация не выполнена.** Точные populations и
-   обязательные categories counters закреплены; summary projector отсутствует.
+2. **Выполнен полностью для v1.** `inventory.minimal` создаёт отдельный Graph
+   Summary с root descriptors, zero-filled node/status counts, synthetic method
+   count и joint diagnostic distribution.
 3. **Выполнен полностью для v1.** `structure.declarations` сохраняет все
    canonical declaration nodes, ownership, canonical IDs, `class_kind` и
    synthetic methods, исключая несвязанные классы данных.
@@ -138,9 +141,10 @@ Parser и Metrics cores при этом не изменялись.
 
 ## Текущая итерация
 
-Реализованы Graph View envelope schema v1, `structure.declarations` profile v1
-и unified API с globally lossless `canonical.full` profile v1 для Graph DTO
-schema v1 / Parser semantics v7. Structure profile сохраняет canonical IDs,
+Реализованы Graph View и Graph Summary envelope schema v1,
+`structure.declarations`, `inventory.minimal` и unified API с globally lossless
+`canonical.full` profile v1 для Graph DTO schema v1 / Parser semantics v7.
+Structure profile сохраняет canonical IDs,
 declaration nodes и ownership, использует строгие whitelist-поля и явно
 описывает исключённые классы данных: callsites, callable complexity facts,
 diagnostics, import references, owner structural facts, type references, node
@@ -152,18 +156,19 @@ access relations. Fingerprint связывает payload с profile, completenes
 referential closure, неизменность source, независимость от порядка canonical
 collections, защита registry от внешней мутации, границы импортов и отклонение
 Graph View ядром Metrics, а также identity/immutability, version policy и
-Metrics-совместимость `canonical.full`. Релевантный прогон: **166 passed, 0 failed, 0
-skipped**.
+Metrics-совместимость `canonical.full`. Для summary проверены обязательные
+нулевые categories, occurrence-level resolution counters, synthetic methods,
+joint diagnostics, fingerprint, специализированный dispatch и отклонение
+Metrics Core. Релевантный прогон: **186 passed, 0 failed, 0 skipped**.
 
-`inventory.minimal` и `dependency.files` имеют initial contracts, но ещё не
-реализованы. Golden manifests, size budgets, Metrics Views, aggregates и
-consumer integration остаются в backlog.
+`dependency.files` имеет initial contract, но ещё не реализован. Golden
+manifests, size budgets, Metrics Views, aggregates и consumer integration
+остаются в backlog.
 
 ## Приоритет доработок
 
-1. Реализовать `inventory.minimal` v1 с точными counters по node kinds,
-   diagnostics и resolution statuses, сохранив summary-семантику.
-2. Реализовать `dependency.files` v1 по зафиксированному import topology
+1. Реализовать `dependency.files` v1 по зафиксированному import topology
    contract и добавить fixtures exact, repeated, external и unresolved imports.
-3. Добавить golden manifest и size measurement для `structure.declarations`,
+2. Добавить golden manifest и size measurement для `structure.declarations` и
+   `inventory.minimal`,
    затем проверить целевой бюджет на репрезентативном medium/large fixture.
