@@ -136,13 +136,21 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    referential closure, whitelist, fingerprint changes и version policy для
    `structure.declarations` и `dependency.files`; общие свойства будущих
    профилей не покрыты.
-3. **Не выполнен.** Golden manifests с profile versions и size measurements
-   отсутствуют.
-4. **Не выполнен.** Size budget `structure.declarations <= 45%` и бюджеты
-   будущих профилей ещё не измерялись на medium/large fixtures.
+3. **Выполнен для первых compact profiles.** Golden manifest family v2 хранит
+    версии profiles, exact populations, fingerprints, compact UTF-8 bytes и
+    SHA-256 полного transferable artifact для medium/large fixtures.
+4. **V1 отклонён, V2 прошёл проверку.** Черновая family v1 дала medium
+    `13569 / 26258 = 51.6757%` и large `32619 / 57298 = 56.9287%`, то есть
+    провалила заранее заданные 45%. Причина — declarations масштабировались, а
+    calls/imports/types/diagnostics оставались фиксированными. V1 не является
+    acceptance family. Заранее специфицированная family v2 прошла неизменённый
+    target: medium `11994 / 37091 = 32.3367%`, large
+    `28680 / 91853 = 31.2238%`. `inventory.minimal` измерен как
+    `2003 / 37091 = 5.4002%` и `2811 / 91853 = 3.0603%`, но по-прежнему не имеет
+    threshold.
 5. **Выполнен частично.** Критерии envelope и первого профиля подтверждены, но
-   критерии Metrics Views, aggregates, golden fixtures и consumer integration
-   остаются открытыми.
+    критерии Metrics Views, aggregates, golden fixtures будущих profiles и
+    consumer integration остаются открытыми.
 
 ## Текущая итерация
 
@@ -167,17 +175,19 @@ Metrics-совместимость `canonical.full`. Для summary провер
 joint diagnostics, fingerprint, специализированный dispatch и отклонение
 Metrics Core. Для dependency profile дополнительно проверены exact topology,
 occurrence aggregation, reverse/self edges, non-exact counters, aggregate IDs,
-строгая валидация и API dispatch. Полный прогон: **274 passed, 0 failed,
+строгая валидация и API dispatch. Golden benchmark дополнительно проверяет
+детерминированные populations, provenance, full compact hashes и fixture-scoped
+size target. Полный прогон: **286 passed, 0 failed,
 0 skipped**.
 
-Первый набор безопасных Graph profiles реализован полностью. Golden manifests,
-size budgets, Metrics Views, aggregates и consumer integration остаются в
-backlog.
+Первый набор безопасных Graph profiles реализован полностью. Для первых двух
+compact profiles зафиксирована и проверена benchmark family v2. Отклонённый
+draft v1 исторически не прошёл 45% из-за дефекта состава fixture. Metrics Views,
+aggregates и consumer integration остаются в backlog.
 
 ## Приоритет доработок
 
-1. Добавить golden manifest и size measurement для `structure.declarations` и
-   `inventory.minimal`,
-   затем проверить целевой бюджет на репрезентативном medium/large fixture.
-2. Спроектировать общий Metrics View envelope и точные контракты начальных
+1. Спроектировать общий Metrics View envelope и точные контракты начальных
    профилей `metrics.overview` и `metrics.architecture`.
+2. После фиксации Metrics View contracts реализовать section-level copying и
+   exact-equality tests с полным Metrics DTO.

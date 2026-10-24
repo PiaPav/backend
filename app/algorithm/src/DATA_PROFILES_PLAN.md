@@ -562,12 +562,17 @@ Property/invariant tests:
 - содержательное изменение меняет view fingerprint.
 
 Golden fixtures для каждого profile хранят manifest с profile versions и size
-measurements.
+measurements. Переносимый артефакт измеряется целиком, включая его собственное
+поле fingerprint; hash размера не использует fingerprint canonical payload.
 
 ## 15. Size budgets
 
-Размер измеряется как compact UTF-8 JSON. Token count может быть benchmark, но
-не контрактом, поскольку зависит от tokenizer/version.
+Размер измеряется как полный object в compact UTF-8 JSON, включая fingerprint:
+`json.dumps(artifact, ensure_ascii=False, sort_keys=True,
+separators=(',', ':')).encode('utf-8')`. Один и тот же byte payload используется
+для размера и full-artifact SHA-256. Pretty serializers и canonical payload,
+из которого исключается fingerprint, для benchmark не используются. Token count
+может быть benchmark, но не контрактом, поскольку зависит от tokenizer/version.
 
 Предварительные цели для medium/large fixtures:
 
@@ -587,9 +592,10 @@ measurements.
 | section profile | <= 50% |
 | `metrics.aggregate` | <= 15% |
 
-Бюджеты являются product targets, а не математическими гарантиями. На маленьких
-fixtures envelope может быть больше payload. Size regression проверяется
-отдельно от semantic correctness.
+Бюджеты являются заранее заданными fixture-scoped product targets, а не
+математическими гарантиями. Состав fixture и target нельзя подгонять после
+измерения. На маленьких fixtures envelope может быть больше payload. Size
+regression проверяется отдельно от semantic correctness.
 
 ## 16. Критерии готовности
 
