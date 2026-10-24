@@ -182,6 +182,7 @@ def test_production_package_import_boundaries() -> None:
     _assert_no_imports(_python_files("parser", tests=False), {"metrics", "gpt_work_dir"})
     _assert_no_imports(_python_files("metrics", tests=False), {"parser", "gpt_work_dir"})
     _assert_no_imports(_python_files("graph_dto", tests=False), {"parser", "metrics", "gpt_work_dir"})
+    _assert_no_imports(_python_files("views", tests=False), {"parser", "metrics", "gpt_work_dir"})
 
 
 def test_test_package_import_boundaries() -> None:
