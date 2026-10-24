@@ -2,7 +2,7 @@
 
 Публичный `materialize_graph_profile` поддерживает точные пары
 `canonical.full / 1`, `inventory.minimal / 1` и
-`structure.declarations / 1`. Первый профиль возвращает
+`structure.declarations / 1` и `dependency.files / 1`. Первый профиль возвращает
 глубокую копию полного Graph DTO schema 1 / Parser semantics 7 и не является
 Graph View: он не получает view envelope или новый fingerprint и остаётся
 допустимым входом Metrics Core. `project_graph_view` по-прежнему принимает
@@ -64,6 +64,33 @@ The standalone validator checks exact shapes and fields, versions, lowercase
 SHA-256 values, POSIX-relative paths, sorted unique IDs, endpoint closure,
 ownership consistency, one `contains` edge per non-root, and an acyclic forest.
 Serialization is sorted, indented UTF-8 JSON with LF and one trailing newline.
+
+## `dependency.files` v1
+
+This Graph View profile uses the same strict envelope and exact source-version
+policy. Its payload is exactly `nodes`, `edges`, and
+`import_resolution_counts`. Nodes are all and only canonical `file`/`module`
+roots with exactly `id`, `kind`, `qualified_name`, and `path`. Each edge has
+exactly `id`, `kind: imports`, `source_id`, `target_id`, and a positive
+non-boolean `exact_occurrence_count`; endpoints must exist in the projected
+roots. Ordered endpoint pairs are unique. Reverse pairs remain distinct and
+self-loops are retained.
+
+The aggregate ID is `aggregate:imports:<sha256>`, where the digest input is the
+UTF-8 encoding of compact `ensure_ascii=false` JSON `[source_id,target_id]`.
+Both projector and validator use this rule. Nodes and edges are sorted by ID;
+duplicates, stale aggregate IDs, dangling endpoints, booleans as counts, and
+non-canonical ordering are rejected. The closed count object has exactly
+`exact`, `external`, and `unresolved`, each a nonnegative non-boolean integer,
+and the sum of edge occurrence counts equals `exact`.
+
+The query guarantee is lossless exact import topology between roots, including
+multiplicity, plus global import-resolution occurrence counts. External and
+unresolved references contribute to counters but never topology. No resolution
+is repeated by the projector. Occurrence IDs, source spelling, alias and
+location are omitted: for example, an edge count of two cannot answer whether
+either occurrence used an alias. Absence of a non-exact edge does not mean the
+source had no external or unresolved import; consult the counters.
 
 A Graph View DTO is **not Graph DTO v1**: required canonical collections have
 been omitted. It must not be passed to Metrics; Metrics continues to consume a

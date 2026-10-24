@@ -51,6 +51,8 @@ def test_canonical_full_is_a_graph_dto_consumable_by_metrics_without_view_envelo
     ("structure.declarations", True),
     ("inventory.minimal", 2),
     ("inventory.minimal", True),
+    ("dependency.files", 2),
+    ("dependency.files", True),
     ("unknown", 1),
 ])
 def test_unified_api_has_no_profile_or_version_fallback(profile_id, version):
@@ -105,6 +107,8 @@ def test_specialized_gateways_do_not_accept_the_other_artifact_kinds():
         project_graph_view(_graph(), profile_id="inventory.minimal", profile_version=1)
     with pytest.raises(ValueError, match="Unsupported graph summary profile"):
         project_graph_summary(_graph(), profile_id="structure.declarations", profile_version=1)
+    with pytest.raises(ValueError, match="Unsupported graph summary profile"):
+        project_graph_summary(_graph(), profile_id="dependency.files", profile_version=1)
 
 
 def test_metrics_rejects_graph_summary():

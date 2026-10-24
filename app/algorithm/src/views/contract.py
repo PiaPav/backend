@@ -18,6 +18,8 @@ _ROOT_KEYS = {
 }
 _NODE_REQUIRED = {"id", "kind", "qualified_name", "parent_id", "path"}
 _EDGE_KEYS = {"id", "kind", "source_id", "target_id"}
+_DEPENDENCY_NODE_KEYS = {"id", "kind", "qualified_name", "path"}
+_DEPENDENCY_EDGE_KEYS = _EDGE_KEYS | {"exact_occurrence_count"}
 
 
 def _error(message: str) -> None:
@@ -64,6 +66,73 @@ def graph_view_fingerprint(view: Mapping[str, Any]) -> str:
     return hashlib.sha256(_compact_content(view)).hexdigest()
 
 
+def aggregate_import_edge_id(source_id: str, target_id: str) -> str:
+    """Return the normative ID for one aggregate import endpoint pair."""
+    pair = json.dumps(
+        [source_id, target_id], ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+    return f"aggregate:imports:{hashlib.sha256(pair).hexdigest()}"
+
+
+def _validate_dependency_files(payload: Mapping[str, Any]) -> None:
+    payload = _object(payload, {"nodes", "edges", "import_resolution_counts"}, "payload")
+    if not isinstance(payload["nodes"], list) or not isinstance(payload["edges"], list):
+        _error("payload nodes and edges must be arrays")
+    nodes: dict[str, Mapping[str, Any]] = {}
+    node_ids: list[str] = []
+    for index, value in enumerate(payload["nodes"]):
+        where = f"payload.nodes[{index}]"
+        node = _object(value, _DEPENDENCY_NODE_KEYS, where)
+        identifier = node.get("id")
+        if not isinstance(identifier, str) or not identifier or identifier in nodes:
+            _error(f"{where}.id is missing or duplicate")
+        if node.get("kind") not in {"file", "module"}:
+            _error(f"{where}.kind must be 'file' or 'module'")
+        if not isinstance(node.get("qualified_name"), str):
+            _error(f"{where}.qualified_name must be a string")
+        _relative_path(node.get("path"), f"{where}.path")
+        nodes[identifier] = node
+        node_ids.append(identifier)
+    if node_ids != sorted(node_ids):
+        _error("payload.nodes must have unique lexicographically sorted IDs")
+
+    edge_ids: list[str] = []
+    pairs: set[tuple[str, str]] = set()
+    total = 0
+    for index, value in enumerate(payload["edges"]):
+        where = f"payload.edges[{index}]"
+        edge = _object(value, _DEPENDENCY_EDGE_KEYS, where)
+        identifier = edge.get("id")
+        if not isinstance(identifier, str) or not identifier or identifier in edge_ids:
+            _error(f"{where}.id is missing or duplicate")
+        if edge.get("kind") != "imports":
+            _error(f"{where}.kind must be 'imports'")
+        source_id, target_id = edge.get("source_id"), edge.get("target_id")
+        if source_id not in nodes or target_id not in nodes:
+            _error(f"{where} has a dangling endpoint")
+        pair = (source_id, target_id)
+        if pair in pairs:
+            _error(f"{where} duplicates an ordered endpoint pair")
+        pairs.add(pair)
+        if identifier != aggregate_import_edge_id(source_id, target_id):
+            _error(f"{where}.id does not match aggregate endpoint pair")
+        count = edge.get("exact_occurrence_count")
+        if type(count) is not int or count <= 0:
+            _error(f"{where}.exact_occurrence_count must be a positive integer")
+        total += count
+        edge_ids.append(identifier)
+    if edge_ids != sorted(edge_ids):
+        _error("payload.edges must have unique lexicographically sorted IDs")
+    counts = _object(
+        payload["import_resolution_counts"], {"exact", "external", "unresolved"},
+        "payload.import_resolution_counts",
+    )
+    if any(type(value) is not int or value < 0 for value in counts.values()):
+        _error("import resolution counts must be nonnegative integers")
+    if total != counts["exact"]:
+        _error("aggregate import edge counts must equal exact resolution count")
+
+
 def validate_graph_view_v1(
     view: Mapping[str, Any], *, verify_fingerprint: bool = True
 ) -> None:
@@ -94,6 +163,15 @@ def validate_graph_view_v1(
         _error("completeness preserves and omits must be arrays")
     if any(values != sorted(values) for values in (completeness["preserves"], completeness["omits"])):
         _error("completeness lists must be lexicographically sorted")
+
+    if profile["id"] == "dependency.files":
+        _validate_dependency_files(root.get("payload"))
+        fingerprint = root.get("view_fingerprint")
+        if not isinstance(fingerprint, str) or not _HEX_64.fullmatch(fingerprint):
+            _error("view_fingerprint must be lowercase SHA-256 hex")
+        if verify_fingerprint and fingerprint != graph_view_fingerprint(root):
+            _error("view_fingerprint does not match canonical content")
+        return
 
     payload = _object(root.get("payload"), {"nodes", "edges"}, "payload")
     if not isinstance(payload["nodes"], list) or not isinstance(payload["edges"], list):
@@ -189,4 +267,7 @@ def serialize_graph_view(view: Mapping[str, Any]) -> bytes:
     return (text + "\n").encode("utf-8")
 
 
-__all__ = ["graph_view_fingerprint", "serialize_graph_view", "validate_graph_view_v1"]
+__all__ = [
+    "aggregate_import_edge_id", "graph_view_fingerprint", "serialize_graph_view",
+    "validate_graph_view_v1",
+]

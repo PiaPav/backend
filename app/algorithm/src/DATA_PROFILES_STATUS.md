@@ -1,9 +1,9 @@
 # Статус разработки профилей данных
 
 Статус сопоставлен с `DATA_PROFILES_PLAN.md`. На момент первичной фиксации
-реализация профилей данных ещё не была начата. В текущих итерациях создан
-общий слой Graph View, реализован один ограниченный view и canonical baseline;
-Parser и Metrics cores при этом не изменялись.
+реализация профилей данных ещё не была начата. В текущих итерациях созданы
+общие слои Graph View и Graph Summary, реализованы начальные profiles и
+canonical baseline; Parser и Metrics cores при этом не изменялись.
 
 Статусы подпунктов сопровождаются кратким описанием готового результата или
 оставшейся работы.
@@ -45,7 +45,8 @@ Parser и Metrics cores при этом не изменялись.
    completeness и payload.
 3. **Выполнен для зарегистрированных профилей.** Unified registry принимает
    точные пары `canonical.full` / `1`, `inventory.minimal` / `1` и
-   `structure.declarations` / `1`; специализированные metadata registries
+   `structure.declarations` / `1` и `dependency.files` / `1`;
+   специализированные metadata registries
    разделяют Summary и View. Defaults, `latest` и fallback отсутствуют.
 4. **Выполнен полностью для текущего envelope.** Nodes и edges сортируются по
    ID, fingerprint строится по canonical compact JSON, а serializer выдаёт
@@ -64,8 +65,10 @@ Parser и Metrics cores при этом не изменялись.
 3. **Выполнен полностью для v1.** `structure.declarations` сохраняет все
    canonical declaration nodes, ownership, canonical IDs, `class_kind` и
    synthetic methods, исключая несвязанные классы данных.
-4. **Контракт выполнен, реализация не выполнена.** Уникальная file topology,
-   aggregate edge IDs и occurrence-level import counts формально разделены.
+4. **Выполнен полностью для v1.** `dependency.files` сохраняет все file/module
+   roots, агрегирует exact import occurrences по направленной паре, использует
+   нормативные aggregate edge IDs и отдельно считает exact/external/unresolved
+   occurrences.
 5. **Выполнен для текущего профиля.** Проектор копирует только явно разрешённые
    поля nodes и `contains` edges, поэтому новые canonical-поля не попадают в
    compact view автоматически.
@@ -125,12 +128,14 @@ Parser и Metrics cores при этом не изменялись.
 
 ## Проверки и критерии готовности
 
-1. **Выполнен частично.** Есть fixtures пустого graph, изолированного root и
-   declaration structure; import, call, inheritance, aggregate и truncation
-   scenarios из полного перечня ещё не добавлены.
+1. **Выполнен частично.** Есть fixtures пустого graph, изолированного root,
+   declaration structure, exact/repeated/reverse/self imports, а также external
+   и unresolved imports; call, inheritance, aggregate и truncation scenarios из
+   полного перечня ещё не добавлены.
 2. **Выполнен частично.** Проверены determinism, source immutability,
    referential closure, whitelist, fingerprint changes и version policy для
-   `structure.declarations`; общие свойства остальных профилей не покрыты.
+   `structure.declarations` и `dependency.files`; общие свойства будущих
+   профилей не покрыты.
 3. **Не выполнен.** Golden manifests с profile versions и size measurements
    отсутствуют.
 4. **Не выполнен.** Size budget `structure.declarations <= 45%` и бюджеты
@@ -143,7 +148,8 @@ Parser и Metrics cores при этом не изменялись.
 
 Реализованы Graph View и Graph Summary envelope schema v1,
 `structure.declarations`, `inventory.minimal` и unified API с globally lossless
-`canonical.full` profile v1 для Graph DTO schema v1 / Parser semantics v7.
+`canonical.full` profile v1 и `dependency.files` v1 для Graph DTO schema 1 /
+Parser semantics 7.
 Structure profile сохраняет canonical IDs,
 declaration nodes и ownership, использует строгие whitelist-поля и явно
 описывает исключённые классы данных: callsites, callable complexity facts,
@@ -159,16 +165,19 @@ Graph View ядром Metrics, а также identity/immutability, version poli
 Metrics-совместимость `canonical.full`. Для summary проверены обязательные
 нулевые categories, occurrence-level resolution counters, synthetic methods,
 joint diagnostics, fingerprint, специализированный dispatch и отклонение
-Metrics Core. Релевантный прогон: **186 passed, 0 failed, 0 skipped**.
+Metrics Core. Для dependency profile дополнительно проверены exact topology,
+occurrence aggregation, reverse/self edges, non-exact counters, aggregate IDs,
+строгая валидация и API dispatch. Полный прогон: **274 passed, 0 failed,
+0 skipped**.
 
-`dependency.files` имеет initial contract, но ещё не реализован. Golden
-manifests, size budgets, Metrics Views, aggregates и consumer integration
-остаются в backlog.
+Первый набор безопасных Graph profiles реализован полностью. Golden manifests,
+size budgets, Metrics Views, aggregates и consumer integration остаются в
+backlog.
 
 ## Приоритет доработок
 
-1. Реализовать `dependency.files` v1 по зафиксированному import topology
-   contract и добавить fixtures exact, repeated, external и unresolved imports.
-2. Добавить golden manifest и size measurement для `structure.declarations` и
+1. Добавить golden manifest и size measurement для `structure.declarations` и
    `inventory.minimal`,
    затем проверить целевой бюджет на репрезентативном medium/large fixture.
+2. Спроектировать общий Metrics View envelope и точные контракты начальных
+   профилей `metrics.overview` и `metrics.architecture`.

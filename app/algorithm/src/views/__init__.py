@@ -6,9 +6,13 @@ from typing import Any, Mapping
 
 from graph_dto import validate_graph_v1
 
-from .contract import graph_view_fingerprint, serialize_graph_view, validate_graph_view_v1
+from .contract import (
+    aggregate_import_edge_id, graph_view_fingerprint, serialize_graph_view,
+    validate_graph_view_v1,
+)
 from .summary_contract import graph_summary_fingerprint, serialize_graph_summary, validate_graph_summary_v1
 from .projections.inventory_minimal import _project_inventory_minimal_v1
+from .projections.dependency_files import _project_dependency_files_v1
 from .projections.structure_declarations import _project_structure_declarations_v1
 from .registry import profile_metadata, select_graph_profile, summary_profile_metadata
 
@@ -21,6 +25,8 @@ def materialize_graph_profile(
     profile_kind = select_graph_profile(profile_id, profile_version)
     if profile_id == "structure.declarations" and profile_kind == "graph_view":
         return _project_structure_declarations_v1(source_graph)
+    if profile_id == "dependency.files" and profile_kind == "graph_view":
+        return _project_dependency_files_v1(source_graph)
     if profile_id == "inventory.minimal" and profile_kind == "graph_summary":
         return _project_inventory_minimal_v1(source_graph)
     if profile_id == "canonical.full" and profile_kind == "canonical":
@@ -36,7 +42,11 @@ def project_graph_view(
     """Project an explicitly selected profile; no latest/default fallback exists."""
     validate_graph_v1(source_graph)
     profile_metadata(profile_id, profile_version)
-    return _project_structure_declarations_v1(source_graph)
+    if profile_id == "structure.declarations":
+        return _project_structure_declarations_v1(source_graph)
+    if profile_id == "dependency.files":
+        return _project_dependency_files_v1(source_graph)
+    raise ValueError(f"Unsupported graph view profile {profile_id!r}")
 
 
 def project_graph_summary(
@@ -49,7 +59,8 @@ def project_graph_summary(
 
 
 __all__ = [
-    "graph_summary_fingerprint", "graph_view_fingerprint", "materialize_graph_profile",
+    "aggregate_import_edge_id", "graph_summary_fingerprint", "graph_view_fingerprint",
+    "materialize_graph_profile",
     "project_graph_summary", "project_graph_view", "serialize_graph_summary",
     "serialize_graph_view", "validate_graph_summary_v1", "validate_graph_view_v1",
 ]

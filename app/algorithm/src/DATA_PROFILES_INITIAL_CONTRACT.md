@@ -12,7 +12,7 @@ populations, обязательных полей или правил агрег�
 | `canonical.full` | 1 | Canonical Graph DTO | реализован |
 | `inventory.minimal` | 1 | Graph Summary DTO | реализован |
 | `structure.declarations` | 1 | Graph View DTO | реализован |
-| `dependency.files` | 1 | Graph View DTO | контракт определён |
+| `dependency.files` | 1 | Graph View DTO | реализован |
 
 Выбор всегда требует точных `profile.id` и `profile.version`; default,
 `latest`, negotiation и fallback запрещены. Только `canonical.full` является
@@ -27,7 +27,7 @@ semantics 7 и возвращает независимую глубокую ко
 тождество mutable Python-объекта.
 
 Публичный gateway `materialize_graph_profile` поддерживает `canonical.full`,
-`inventory.minimal` и `structure.declarations`. Специализированные gateway
+`inventory.minimal`, `structure.declarations` и `dependency.files`. Специализированные gateway
 `project_graph_summary` и `project_graph_view` принимают только профили своего
 вида артефакта.
 
@@ -127,6 +127,16 @@ len(edges) <= import_resolution_counts.exact
 
 Non-exact references не создают topology. Профиль не сохраняет occurrence IDs,
 locations, aliases и source spelling.
+
+Payload имеет строго форму `nodes`, `edges`, `import_resolution_counts`.
+Root nodes имеют ровно `id`, `kind`, `qualified_name`, `path`; edges — ровно
+`id`, `kind`, `source_id`, `target_id`, `exact_occurrence_count`. Ordered endpoint
+pairs уникальны, self-loop допустим, а reverse pair является отдельной
+зависимостью. Все nodes/edges сортируются по ID. Гарантированный запрос:
+точные зависимости между canonical roots с числом exact occurrences и полное
+распределение всех import occurrences по трём resolution buckets. Например,
+по view нельзя восстановить строку `from x import y as z` или её location:
+две такие записи для одной пары представлены одним edge с count `2`.
 
 ## Матрица canonical data
 

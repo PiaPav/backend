@@ -1,8 +1,12 @@
 from copy import deepcopy
+import hashlib
 
 import pytest
 
-from views import graph_view_fingerprint, serialize_graph_view, validate_graph_view_v1
+from views import (
+    aggregate_import_edge_id, graph_view_fingerprint, serialize_graph_view,
+    validate_graph_view_v1,
+)
 from views.registry import profile_metadata
 
 
@@ -130,3 +134,105 @@ def test_profile_registry_metadata_cannot_be_mutated_through_a_returned_value():
         metadata.clear()
         metadata.update(expected)
     assert leaked == expected
+
+
+def _dependency_view():
+    source_id, target_id = "file:é.py", "module:包"
+    view = {
+        "artifact_kind": "graph_view", "view_schema_version": 1,
+        "profile": {"id": "dependency.files", "version": 1},
+        "source": {"graph_schema_version": 1, "parser_semantics_version": 7,
+                   "graph_fingerprint": "b" * 64},
+        "completeness": profile_metadata("dependency.files", 1),
+        "payload": {
+            "nodes": [
+                {"id": source_id, "kind": "file", "qualified_name": "é", "path": "é.py"},
+                {"id": target_id, "kind": "module", "qualified_name": "包", "path": "包/__init__.py"},
+            ],
+            "edges": [{
+                "id": aggregate_import_edge_id(source_id, target_id), "kind": "imports",
+                "source_id": source_id, "target_id": target_id,
+                "exact_occurrence_count": 1,
+            }],
+            "import_resolution_counts": {"exact": 1, "external": 1, "unresolved": 0},
+        }, "view_fingerprint": "0" * 64,
+    }
+    view["payload"]["nodes"].sort(key=lambda item: item["id"])
+    view["view_fingerprint"] = graph_view_fingerprint(view)
+    return view
+
+
+def test_dependency_contract_and_unicode_compact_aggregate_id():
+    view = _dependency_view()
+    validate_graph_view_v1(view)
+    expected = hashlib.sha256('["file:é.py","module:包"]'.encode()).hexdigest()
+    assert view["payload"]["edges"][0]["id"] == f"aggregate:imports:{expected}"
+
+
+def test_dependency_ordered_pairs_keep_reverse_and_self_edges_distinct():
+    view = _dependency_view()
+    first, second = (node["id"] for node in view["payload"]["nodes"])
+    for source_id, target_id in ((second, first), (first, first)):
+        view["payload"]["edges"].append({
+            "id": aggregate_import_edge_id(source_id, target_id), "kind": "imports",
+            "source_id": source_id, "target_id": target_id,
+            "exact_occurrence_count": 1,
+        })
+    view["payload"]["edges"].sort(key=lambda item: item["id"])
+    view["payload"]["import_resolution_counts"]["exact"] = 3
+    view["view_fingerprint"] = graph_view_fingerprint(view)
+    validate_graph_view_v1(view)
+
+
+@pytest.mark.parametrize("mutation,message", [
+    (lambda v: v["payload"]["nodes"][0].__setitem__("parent_id", None), "invalid fields"),
+    (lambda v: v["payload"]["nodes"][0].__setitem__("kind", "class"), "file.*module"),
+    (lambda v: v["payload"]["edges"][0].__setitem__("exact_occurrence_count", True), "positive"),
+    (lambda v: v["payload"]["edges"][0].__setitem__("target_id", "missing"), "dangling"),
+    (lambda v: v["payload"]["edges"][0].__setitem__("id", "aggregate:imports:wrong"), "aggregate"),
+    (lambda v: v["payload"]["import_resolution_counts"].__setitem__("external", False), "nonnegative"),
+    (lambda v: v["payload"]["import_resolution_counts"].__setitem__("exact", 2), "must equal"),
+])
+def test_dependency_contract_rejects_invalid_payloads(mutation, message):
+    view = _dependency_view()
+    mutation(view)
+    with pytest.raises(ValueError, match=message):
+        validate_graph_view_v1(view, verify_fingerprint=False)
+
+
+def test_dependency_contract_rejects_duplicate_pair_and_unsorted_edges():
+    view = _dependency_view()
+    duplicate = deepcopy(view["payload"]["edges"][0])
+    duplicate["id"] = aggregate_import_edge_id(
+        duplicate["source_id"], duplicate["target_id"]
+    )
+    view["payload"]["edges"].append(duplicate)
+    view["payload"]["import_resolution_counts"]["exact"] = 2
+    # A duplicate ordered pair necessarily has the same normative aggregate ID,
+    # so either strict duplicate guard may reject it first.
+    with pytest.raises(ValueError, match="duplicate"):
+        validate_graph_view_v1(view, verify_fingerprint=False)
+
+    view = _dependency_view()
+    first, second = (node["id"] for node in view["payload"]["nodes"])
+    reverse = {
+        "id": aggregate_import_edge_id(second, first), "kind": "imports",
+        "source_id": second, "target_id": first, "exact_occurrence_count": 1,
+    }
+    view["payload"]["edges"].append(reverse)
+    view["payload"]["import_resolution_counts"]["exact"] = 2
+    view["payload"]["edges"].sort(key=lambda edge: edge["id"], reverse=True)
+    with pytest.raises(ValueError, match="sorted"):
+        validate_graph_view_v1(view, verify_fingerprint=False)
+
+
+def test_dependency_contract_rejects_stale_fingerprint_and_payload_shape_types():
+    view = _dependency_view()
+    view["payload"]["nodes"][0]["qualified_name"] = "changed"
+    with pytest.raises(ValueError, match="does not match"):
+        validate_graph_view_v1(view)
+
+    view = _dependency_view()
+    view["payload"]["edges"] = tuple(view["payload"]["edges"])
+    with pytest.raises(ValueError, match="arrays"):
+        validate_graph_view_v1(view, verify_fingerprint=False)
