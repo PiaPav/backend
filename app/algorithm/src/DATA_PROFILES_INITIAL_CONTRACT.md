@@ -13,10 +13,17 @@ populations, обязательных полей или правил агрег�
 | `inventory.minimal` | 1 | Graph Summary DTO | реализован |
 | `structure.declarations` | 1 | Graph View DTO | реализован |
 | `dependency.files` | 1 | Graph View DTO | реализован |
+| `metrics.overview` | 1 | Metrics View DTO | реализован |
+| `metrics.architecture` | 1 | Metrics View DTO | реализован |
 
 Выбор всегда требует точных `profile.id` и `profile.version`; default,
 `latest`, negotiation и fallback запрещены. Только `canonical.full` является
 globally lossless и допустим как вход Metrics Core.
+
+Точный field-level контракт начальных Metrics profiles, включая populations,
+denominators и package grouping, находится в
+`DATA_PROFILES_METRICS_CONTRACT.md`. Metrics Views строятся только из полного
+Metrics DTO schema 1 / semantics 4 и не являются входом Metrics Core.
 
 ## `canonical.full` v1
 

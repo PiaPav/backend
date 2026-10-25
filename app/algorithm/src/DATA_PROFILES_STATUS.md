@@ -13,10 +13,10 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 | Этап | Состояние |
 |---|---|
 | 0. Спецификация | **в работе** |
-| 1. Общий envelope | **выполнено для Graph View v1 и Graph Summary v1** |
-| 2. Первые безопасные Graph Views | **в работе** |
+| 1. Общий envelope | **выполнено для Graph View, Graph Summary и Metrics View v1** |
+| 2. Первые безопасные Graph Views | **выполнено для initial scope** |
 | 3. Domain Graph Views | **не выполнено** |
-| 4. Metrics Views | **не выполнено** |
+| 4. Metrics Views | **в работе: initial profiles выполнены** |
 | 5. Aggregates | **не выполнено** |
 | 6. Consumer integration | **не выполнено** |
 
@@ -53,6 +53,8 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    детерминированный UTF-8 JSON.
 5. **Выполнен для Graph Summary v1.** Добавлены отдельные строгие validator,
    fingerprint и serializer; summary не смешивается с Graph View contract.
+6. **Выполнен для Metrics View v1.** Добавлены отдельные source/view validators,
+   fingerprint, serializer и registry без defaults, latest или fallback.
 
 ## Этап 2. Первые безопасные Graph Views
 
@@ -90,16 +92,17 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 
 ## Этап 4. Metrics Views
 
-1. **Не выполнен.** Слой Metrics Views и section-level copying из полного
-   Metrics DTO пока отсутствуют.
-2. **Не выполнен.** Denominator и population metadata необходимо определить до
-   публикации averages, rates и сокращённых metric sections.
+1. **Выполнен для initial scope.** Реализовано явное recursive whitelist-copying
+   из полного versioned Metrics DTO без пересчёта и повторного округления.
+2. **Выполнен для initial scope.** Versioned population/denominator descriptors
+   сопровождают опубликованные averages, rates и density; отсутствующий в full
+   DTO hybrid call-owner denominator явно помечен `not_materialized`.
 3. **Не выполнен.** Truncation metadata потребуется для всех будущих top-k и
    других усечённых списков.
-4. **Не выполнен.** Exact equality Metrics View с full Metrics DTO ещё не
-   реализовано и не проверяется.
-5. **Не выполнен.** `metrics.overview` и `metrics.architecture` остаются
-   ближайшими начальными Metrics profiles после Graph View foundation.
+4. **Выполнен для initial scope.** Exact equality и сохранение типов каждого
+   whitelisted metric leaf проверяются тестами.
+5. **Выполнен полностью для v1.** `metrics.overview` и
+   `metrics.architecture` доступны через explicit profile API.
 6. **Не выполнен.** `metrics.quality`, `metrics.objects`, `metrics.calls` и
    `metrics.aggregate` отложены до реализации общего Metrics View envelope.
 
@@ -118,8 +121,8 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 
 1. **Не выполнен.** Consumer API ещё не запрашивает явные profile ID/version.
 2. **Не выполнен.** Проверка `completeness` на стороне consumer отсутствует.
-3. **Не выполнен.** Связывание Graph и Metrics views по source fingerprint
-   станет доступно после реализации Metrics Views.
+3. **Выполнен на уровне артефактов.** Graph и Metrics views публикуют один
+   `source.graph_fingerprint`; consumer-level связывание ещё не реализовано.
 4. **Не выполнен.** Протокол явного запроса более полного профиля пока не
    определён.
 5. **Выполнен только на уровне Graph View registry.** Текущий projector не имеет
@@ -177,17 +180,18 @@ Metrics Core. Для dependency profile дополнительно провер�
 occurrence aggregation, reverse/self edges, non-exact counters, aggregate IDs,
 строгая валидация и API dispatch. Golden benchmark дополнительно проверяет
 детерминированные populations, provenance, full compact hashes и fixture-scoped
-size target. Полный прогон: **286 passed, 0 failed,
-0 skipped**.
+size target. После реализации Metrics Views полный прогон: **331 passed,
+0 failed, 0 skipped**.
 
 Первый набор безопасных Graph profiles реализован полностью. Для первых двух
 compact profiles зафиксирована и проверена benchmark family v2. Отклонённый
-draft v1 исторически не прошёл 45% из-за дефекта состава fixture. Metrics Views,
-aggregates и consumer integration остаются в backlog.
+draft v1 исторически не прошёл 45% из-за дефекта состава fixture. Начальные
+Metrics Views также реализованы; truncation profiles, остальные Metrics
+profiles, aggregates и consumer integration остаются в backlog.
 
 ## Приоритет доработок
 
-1. Спроектировать общий Metrics View envelope и точные контракты начальных
-   профилей `metrics.overview` и `metrics.architecture`.
-2. После фиксации Metrics View contracts реализовать section-level copying и
-   exact-equality tests с полным Metrics DTO.
+1. Спроектировать точный контракт первого domain Graph View
+   `dependency.architecture` либо следующего подтверждённого consumer profile.
+2. До реализации top-k Metrics profiles зафиксировать truncation metadata и
+   benchmark fixtures, не меняя full Metrics semantics.

@@ -9,6 +9,39 @@ DEPENDENCY_FILES_ID = "dependency.files"
 DEPENDENCY_FILES_VERSION = 1
 STRUCTURE_DECLARATIONS_ID = "structure.declarations"
 STRUCTURE_DECLARATIONS_VERSION = 1
+METRICS_OVERVIEW_ID = "metrics.overview"
+METRICS_OVERVIEW_VERSION = 1
+METRICS_ARCHITECTURE_ID = "metrics.architecture"
+METRICS_ARCHITECTURE_VERSION = 1
+
+_METRICS_PROFILES = {
+    METRICS_OVERVIEW_ID: (
+        METRICS_OVERVIEW_VERSION,
+        "one_way_projection",
+        (
+            "activity_summary", "call_graph_summary", "dependency_graph_summary",
+            "metric_population_semantics", "object_and_quality_population_counts",
+            "project_size",
+        ),
+        (
+            "architecture_details", "call_graph_rankings", "call_graph_topology_details",
+            "code_quality_details", "dependency_graph_rankings", "object_oriented_details",
+        ),
+    ),
+    METRICS_ARCHITECTURE_ID: (
+        METRICS_ARCHITECTURE_VERSION,
+        "query_lossless",
+        (
+            "architecture_metrics", "dependency_graph_metrics",
+            "import_activity_counts", "metric_population_semantics",
+            "package_grouping_semantics",
+        ),
+        (
+            "call_graph_metrics", "code_quality_metrics", "non_import_activity_metrics",
+            "object_oriented_metrics", "project_size",
+        ),
+    ),
+}
 
 _STRUCTURE_DECLARATIONS_COMPLETENESS_KIND = "query_lossless"
 _STRUCTURE_DECLARATIONS_PRESERVES = (
@@ -129,6 +162,18 @@ def summary_profile_metadata(profile_id: object, profile_version: object) -> dic
     }
 
 
+def metrics_profile_metadata(profile_id: object, profile_version: object) -> dict[str, object]:
+    """Return a fresh completeness descriptor for an exact Metrics profile."""
+    if profile_id not in _METRICS_PROFILES:
+        raise ValueError(f"Unsupported metrics profile {profile_id!r}")
+    expected, kind, preserves, omits = _METRICS_PROFILES[profile_id]
+    if type(profile_version) is not int or profile_version != expected:
+        raise ValueError(
+            f"Unsupported version {profile_version!r} for metrics profile {profile_id!r}"
+        )
+    return {"kind": kind, "preserves": list(preserves), "omits": list(omits)}
+
+
 __all__ = [
     "CANONICAL_FULL_ID",
     "CANONICAL_FULL_VERSION",
@@ -138,6 +183,9 @@ __all__ = [
     "INVENTORY_MINIMAL_VERSION",
     "STRUCTURE_DECLARATIONS_ID",
     "STRUCTURE_DECLARATIONS_VERSION",
+    "METRICS_ARCHITECTURE_ID", "METRICS_ARCHITECTURE_VERSION",
+    "METRICS_OVERVIEW_ID", "METRICS_OVERVIEW_VERSION",
+    "metrics_profile_metadata",
     "profile_metadata",
     "summary_profile_metadata",
     "select_graph_profile",
