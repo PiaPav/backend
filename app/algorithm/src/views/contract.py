@@ -10,6 +10,7 @@ from typing import Any, Mapping
 from graph_dto import CLASS_KINDS, NODE_KINDS
 
 from .registry import profile_metadata
+from .metrics_contract import PACKAGE_GROUPING
 
 _HEX_64 = re.compile(r"[0-9a-f]{64}\Z")
 _ROOT_KEYS = {
@@ -47,7 +48,7 @@ def _compact_content(view: Mapping[str, Any]) -> bytes:
     payload = content.get("payload")
     if isinstance(payload, Mapping):
         content["payload"] = dict(payload)
-        for name in ("nodes", "edges"):
+        for name in ("nodes", "edges", "import_references"):
             values = payload.get(name)
             if isinstance(values, list):
                 content["payload"][name] = sorted(
@@ -103,7 +104,7 @@ def _validate_dependency_files(payload: Mapping[str, Any]) -> None:
         where = f"payload.edges[{index}]"
         edge = _object(value, _DEPENDENCY_EDGE_KEYS, where)
         identifier = edge.get("id")
-        if not isinstance(identifier, str) or not identifier or identifier in edge_ids:
+        if not isinstance(identifier, str) or not identifier or identifier in edge_ids or identifier in nodes:
             _error(f"{where}.id is missing or duplicate")
         if edge.get("kind") != "imports":
             _error(f"{where}.kind must be 'imports'")
@@ -131,6 +132,112 @@ def _validate_dependency_files(payload: Mapping[str, Any]) -> None:
         _error("import resolution counts must be nonnegative integers")
     if total != counts["exact"]:
         _error("aggregate import edge counts must equal exact resolution count")
+
+
+def _validate_dependency_architecture(payload: Mapping[str, Any]) -> None:
+    payload = _object(payload, {"nodes", "edges", "import_references", "import_resolution_counts", "package_grouping"}, "payload")
+    if not all(isinstance(payload[name], list) for name in ("nodes", "edges", "import_references")):
+        _error("payload nodes, edges and import_references must be arrays")
+    if payload["package_grouping"] != PACKAGE_GROUPING:
+        _error("package_grouping does not match static contract")
+    nodes: dict[str, Mapping[str, Any]] = {}
+    node_ids: list[str] = []
+    for index, value in enumerate(payload["nodes"]):
+        where = f"payload.nodes[{index}]"
+        if not isinstance(value, Mapping):
+            _error(f"{where} must be an object")
+        kind = value.get("kind")
+        keys = _DEPENDENCY_NODE_KEYS if kind in {"file", "module"} else _DEPENDENCY_NODE_KEYS | {"parent_id", "class_kind"}
+        node = _object(value, keys, where)
+        identifier = node.get("id")
+        if not isinstance(identifier, str) or not identifier or identifier in nodes:
+            _error(f"{where}.id is missing or duplicate")
+        if kind not in {"file", "module", "class"}:
+            _error(f"{where}.kind is invalid")
+        if not isinstance(node.get("qualified_name"), str):
+            _error(f"{where}.qualified_name must be a string")
+        _relative_path(node.get("path"), f"{where}.path")
+        if kind == "class":
+            if node.get("class_kind") not in CLASS_KINDS:
+                _error(f"{where}.class_kind is invalid")
+            if not isinstance(node.get("parent_id"), str) or not node["parent_id"]:
+                _error(f"{where}.parent_id is invalid")
+        nodes[identifier] = node; node_ids.append(identifier)
+    if node_ids != sorted(node_ids):
+        _error("payload.nodes must have unique lexicographically sorted IDs")
+
+    owners: dict[str, str] = {}
+    pairs: dict[tuple[str, str], int] = {}
+    edge_ids: list[str] = []
+    for index, value in enumerate(payload["edges"]):
+        where = f"payload.edges[{index}]"
+        if not isinstance(value, Mapping): _error(f"{where} must be an object")
+        kind = value.get("kind")
+        edge = _object(value, _EDGE_KEYS if kind == "contains" else _DEPENDENCY_EDGE_KEYS, where)
+        identifier = edge.get("id")
+        if not isinstance(identifier, str) or not identifier or identifier in edge_ids or identifier in nodes:
+            _error(f"{where}.id is missing or duplicate")
+        source, target = edge.get("source_id"), edge.get("target_id")
+        if source not in nodes or target not in nodes: _error(f"{where} has a dangling endpoint")
+        if kind == "contains":
+            if nodes[source]["kind"] not in {"file", "module"} or nodes[target]["kind"] != "class":
+                _error(f"{where} must directly contain a class in a root")
+            if target in owners: _error(f"node {target!r} has multiple containers")
+            owners[target] = source
+        elif kind == "imports":
+            if nodes[source]["kind"] not in {"file", "module"} or nodes[target]["kind"] not in {"file", "module"}:
+                _error(f"{where} imports endpoints must be roots")
+            pair = (source, target)
+            if pair in pairs: _error(f"{where} duplicates an ordered endpoint pair")
+            if identifier != aggregate_import_edge_id(source, target): _error(f"{where}.id does not match aggregate endpoint pair")
+            count = edge.get("exact_occurrence_count")
+            if type(count) is not int or count <= 0: _error(f"{where}.exact_occurrence_count must be a positive integer")
+            pairs[pair] = count
+        else: _error(f"{where}.kind is invalid")
+        edge_ids.append(identifier)
+    if edge_ids != sorted(edge_ids): _error("payload.edges must have unique lexicographically sorted IDs")
+    for identifier, node in nodes.items():
+        if node["kind"] == "class":
+            owner = owners.get(identifier)
+            if owner != node["parent_id"]: _error(f"class {identifier!r} parent_id is inconsistent with contains edges")
+            if owner in nodes and node["path"] != nodes[owner]["path"]: _error(f"class {identifier!r} path must match its root")
+
+    statuses = {"exact": 0, "external": 0, "unresolved": 0}
+    observed: dict[tuple[str, str], int] = {}
+    reference_ids: list[str] = []
+    reference_keys = {"id", "importer_id", "kind", "module", "name", "alias", "level", "location", "resolution", "target_id", "candidate_ids"}
+    for index, value in enumerate(payload["import_references"]):
+        where = f"payload.import_references[{index}]"; ref = _object(value, reference_keys, where)
+        identifier = ref.get("id")
+        if not isinstance(identifier, str) or not identifier or identifier in reference_ids: _error(f"{where}.id is missing or duplicate")
+        importer = ref.get("importer_id")
+        if importer not in nodes or nodes[importer]["kind"] not in {"file", "module"}: _error(f"{where}.importer_id is invalid")
+        kind, module, name, alias, level = ref.get("kind"), ref.get("module"), ref.get("name"), ref.get("alias"), ref.get("level")
+        if kind not in {"import", "from"}: _error(f"{where}.kind is invalid")
+        if not isinstance(module, str) or not isinstance(name, str) or not name: _error(f"{where} module or name is invalid")
+        if alias is not None and (not isinstance(alias, str) or not alias): _error(f"{where}.alias is invalid")
+        if type(level) is not int or level < 0: _error(f"{where}.level is invalid")
+        if kind == "import" and (module or level != 0 or name == "*"): _error(f"{where} import spelling is invalid")
+        if kind == "from" and level == 0 and not module: _error(f"{where} absolute from requires a module")
+        location = _object(ref.get("location"), {"path", "line", "column"}, f"{where}.location")
+        _relative_path(location.get("path"), f"{where}.location.path")
+        if location["path"] != nodes[importer]["path"] or type(location.get("line")) is not int or location["line"] < 1 or type(location.get("column")) is not int or location["column"] < 0: _error(f"{where}.location is invalid")
+        status = ref.get("resolution")
+        if status not in statuses: _error(f"{where}.resolution is invalid")
+        if status == "external" and level != 0: _error(f"{where} external resolution must be absolute")
+        if status == "unresolved" and level == 0: _error(f"{where} unresolved resolution must be relative")
+        if ref.get("candidate_ids") != []: _error(f"{where}.candidate_ids must be an empty array")
+        target = ref.get("target_id")
+        if status == "exact":
+            if target not in nodes or nodes[target]["kind"] not in {"file", "module"}: _error(f"{where} exact resolution requires one root target")
+            pair = (importer, target); observed[pair] = observed.get(pair, 0) + 1
+        elif target is not None: _error(f"{where} non-exact resolution cannot have a target")
+        statuses[status] += 1; reference_ids.append(identifier)
+    if reference_ids != sorted(reference_ids): _error("payload.import_references must have unique lexicographically sorted IDs")
+    counts = _object(payload["import_resolution_counts"], set(statuses), "payload.import_resolution_counts")
+    if any(type(value) is not int or value < 0 for value in counts.values()): _error("import resolution counts must be nonnegative integers")
+    if dict(counts) != statuses: _error("import resolution counts must match import references")
+    if pairs != observed: _error("aggregate import pairs and counts must match exact import references")
 
 
 def validate_graph_view_v1(
@@ -171,6 +278,12 @@ def validate_graph_view_v1(
             _error("view_fingerprint must be lowercase SHA-256 hex")
         if verify_fingerprint and fingerprint != graph_view_fingerprint(root):
             _error("view_fingerprint does not match canonical content")
+        return
+    if profile["id"] == "dependency.architecture":
+        _validate_dependency_architecture(root.get("payload"))
+        fingerprint = root.get("view_fingerprint")
+        if not isinstance(fingerprint, str) or not _HEX_64.fullmatch(fingerprint): _error("view_fingerprint must be lowercase SHA-256 hex")
+        if verify_fingerprint and fingerprint != graph_view_fingerprint(root): _error("view_fingerprint does not match canonical content")
         return
 
     payload = _object(root.get("payload"), {"nodes", "edges"}, "payload")

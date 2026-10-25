@@ -53,6 +53,8 @@ def test_canonical_full_is_a_graph_dto_consumable_by_metrics_without_view_envelo
     ("inventory.minimal", True),
     ("dependency.files", 2),
     ("dependency.files", True),
+    ("dependency.architecture", 2),
+    ("dependency.architecture", True),
     ("unknown", 1),
 ])
 def test_unified_api_has_no_profile_or_version_fallback(profile_id, version):
@@ -86,6 +88,11 @@ def test_unified_structure_profile_matches_existing_graph_view_api():
     ) == project_graph_view(
         graph, profile_id="structure.declarations", profile_version=1
     )
+
+
+def test_unified_dependency_architecture_matches_graph_view_api():
+    graph = _graph()
+    assert materialize_graph_profile(graph, profile_id="dependency.architecture", profile_version=1) == project_graph_view(graph, profile_id="dependency.architecture", profile_version=1)
 
 
 def test_graph_view_api_continues_to_reject_canonical_profile():

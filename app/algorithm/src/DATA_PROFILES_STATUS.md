@@ -15,7 +15,7 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 | 0. Спецификация | **в работе** |
 | 1. Общий envelope | **выполнено для Graph View, Graph Summary и Metrics View v1** |
 | 2. Первые безопасные Graph Views | **выполнено для initial scope** |
-| 3. Domain Graph Views | **не выполнено** |
+| 3. Domain Graph Views | **в работе: dependency architecture выполнен** |
 | 4. Metrics Views | **в работе: initial profiles выполнены** |
 | 5. Aggregates | **не выполнено** |
 | 6. Consumer integration | **не выполнено** |
@@ -44,8 +44,9 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    полного source graph; `view_fingerprint` связывает source, profile,
    completeness и payload.
 3. **Выполнен для зарегистрированных профилей.** Unified registry принимает
-   точные пары `canonical.full` / `1`, `inventory.minimal` / `1` и
-   `structure.declarations` / `1` и `dependency.files` / `1`;
+   точные пары `canonical.full` / `1`, `inventory.minimal` / `1`,
+   `structure.declarations` / `1`, `dependency.files` / `1` и
+   `dependency.architecture` / `1`;
    специализированные metadata registries
    разделяют Summary и View. Defaults, `latest` и fallback отсутствуют.
 4. **Выполнен полностью для текущего envelope.** Nodes и edges сортируются по
@@ -77,8 +78,9 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 
 ## Этап 3. Domain Graph Views
 
-1. **Не выполнен.** `dependency.architecture` ещё не спроектирован как точный
-   whitelist и не реализован.
+1. **Выполнен полностью для v1.** `dependency.architecture` сохраняет roots,
+   classes, canonical ownership, aggregate exact import topology, все detailed
+   import references, status counts и versioned package grouping descriptor.
 2. **Не выполнен.** Для `calls.topology` предстоит определить compact topology,
    aggregate counters и правила сохранения weights.
 3. **Не выполнен.** `calls.detailed` должен сохранить callsites и complexity
@@ -87,8 +89,9 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    реализованы.
 5. **Не выполнен.** Для `objects.metrics_basis` ещё требуется матрица metric ->
    required facts и точный whitelist.
-6. **Выполнен частично.** Query guarantee и контрпример документированы для
-   `structure.declarations`; для всех domain-профилей они отсутствуют.
+6. **Выполнен частично.** Query guarantee и контрпримеры документированы для
+   `structure.declarations` и `dependency.architecture`; для остальных
+   domain-профилей они отсутствуют.
 
 ## Этап 4. Metrics Views
 
@@ -133,13 +136,15 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 
 1. **Выполнен частично.** Есть fixtures пустого graph, изолированного root,
    declaration structure, exact/repeated/reverse/self imports, а также external
-   и unresolved imports; call, inheritance, aggregate и truncation scenarios из
+   и unresolved imports, включая detailed architecture view; call, inheritance,
+   aggregate и truncation scenarios из
    полного перечня ещё не добавлены.
 2. **Выполнен частично.** Проверены determinism, source immutability,
    referential closure, whitelist, fingerprint changes и version policy для
-   `structure.declarations` и `dependency.files`; общие свойства будущих
+   `structure.declarations`, `dependency.files` и `dependency.architecture`;
+   общие свойства будущих
    профилей не покрыты.
-3. **Выполнен для первых compact profiles.** Golden manifest family v2 хранит
+3. **Выполнен для первых compact profiles и dependency architecture.** Golden manifest family v2 хранит
     версии profiles, exact populations, fingerprints, compact UTF-8 bytes и
     SHA-256 полного transferable artifact для medium/large fixtures.
 4. **V1 отклонён, V2 прошёл проверку.** Черновая family v1 дала medium
@@ -180,18 +185,20 @@ Metrics Core. Для dependency profile дополнительно провер�
 occurrence aggregation, reverse/self edges, non-exact counters, aggregate IDs,
 строгая валидация и API dispatch. Golden benchmark дополнительно проверяет
 детерминированные populations, provenance, full compact hashes и fixture-scoped
-size target. После реализации Metrics Views полный прогон: **331 passed,
+size target. `dependency.architecture` прошёл target 30%: medium
+`7910/37091 = 21.3259%`, large `17723/91853 = 19.2949%`. Полный прогон:
+**365 passed,
 0 failed, 0 skipped**.
 
 Первый набор безопасных Graph profiles реализован полностью. Для первых двух
 compact profiles зафиксирована и проверена benchmark family v2. Отклонённый
 draft v1 исторически не прошёл 45% из-за дефекта состава fixture. Начальные
-Metrics Views также реализованы; truncation profiles, остальные Metrics
-profiles, aggregates и consumer integration остаются в backlog.
+Metrics Views и первый domain Graph View также реализованы; остальные domain и
+Metrics profiles, truncation, aggregates и consumer integration остаются в backlog.
 
 ## Приоритет доработок
 
-1. Спроектировать точный контракт первого domain Graph View
-   `dependency.architecture` либо следующего подтверждённого consumer profile.
+1. Спроектировать следующий domain Graph View `calls.topology` и точно разделить
+   weighted topology от occurrence-level callsites.
 2. До реализации top-k Metrics profiles зафиксировать truncation metadata и
    benchmark fixtures, не меняя full Metrics semantics.

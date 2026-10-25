@@ -2,7 +2,8 @@
 
 Публичный `materialize_graph_profile` поддерживает точные пары
 `canonical.full / 1`, `inventory.minimal / 1` и
-`structure.declarations / 1` и `dependency.files / 1`. Первый профиль возвращает
+`structure.declarations / 1`, `dependency.files / 1` и
+`dependency.architecture / 1`. Первый профиль возвращает
 глубокую копию полного Graph DTO schema 1 / Parser semantics 7 и не является
 Graph View: он не получает view envelope или новый fingerprint и остаётся
 допустимым входом Metrics Core. `project_graph_view` по-прежнему принимает
@@ -96,3 +97,17 @@ A Graph View DTO is **not Graph DTO v1**: required canonical collections have
 been omitted. It must not be passed to Metrics; Metrics continues to consume a
 complete validated canonical Graph DTO only. Parser semantics other than `7`
 are unsupported.
+
+## `dependency.architecture` v1
+
+Профиль использует тот же строгий envelope и дополняет файловую topology всеми
+class descriptors, canonical root-to-class `contains` и полными whitelist-копиями
+`import_references`. Exact occurrences агрегируются в уникальные directed import
+pairs с нормативными aggregate IDs и `exact_occurrence_count`; reverse и self
+pairs сохраняются. Resolution counts считают occurrences, а не edges.
+
+Payload также содержит строгий `package_grouping` descriptor действующей
+Metrics policy: первый POSIX-сегмент path, `<root>` для path без `/`, distinct
+exact non-self file pairs и distinct cross-package pairs. View не создаёт package
+objects и не вычисляет Metrics. Полный нормативный контракт и контрпримеры
+зафиксированы в `DATA_PROFILES_DEPENDENCY_ARCHITECTURE_CONTRACT.md`.

@@ -8,8 +8,11 @@ six `contains` edges, one synthetic method, two complexity-bearing callables,
 three owner facts, five callsites (one per status), three imports (one per
 status), four type references (one per status), two diagnostics, and four
 non-`contains` edges. Exact targets advance cyclically to the next component.
-This composition and the 45/100 structure target were fixed before v2
-measurement; the target claim is scoped only to these v2 fixtures.
+This composition, the 45/100 `structure.declarations` target, and the 30/100
+`dependency.architecture` target were fixed before their measurements; target
+claims are scoped only to these v2 fixtures. The architecture profile measures
+`7910 / 37091 = 21.3259%` for medium and
+`17723 / 91853 = 19.2949%` for large using compact sorted-key UTF-8 JSON.
 
 The rejected draft family v1 did not scale its calls, imports, types, or
 diagnostics with its declaration population. Its measured structure results

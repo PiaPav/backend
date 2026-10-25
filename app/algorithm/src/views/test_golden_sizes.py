@@ -19,7 +19,7 @@ from views.summary_contract import validate_graph_summary_v1
 from views.testdata import build_representative_graph_v2
 
 _FIXTURES = ("medium", "large")
-_PROFILES = ("inventory.minimal", "structure.declarations")
+_PROFILES = ("inventory.minimal", "structure.declarations", "dependency.architecture")
 _MANIFEST = Path(__file__).with_name("testdata") / "graph_profiles_golden_v2.json"
 _COMPONENT_COUNTS = {"medium": 4, "large": 10}
 
@@ -68,13 +68,24 @@ def _artifact_record(artifact: Mapping[str, Any], source: Mapping[str, Any]) -> 
                         "diagnostics": len(source["diagnostics"]),
                         "owner_structural_facts": len(source["owner_structural_facts"]),
                         "complexity_facts": sum("complexity_facts" in node for node in source["nodes"])}}
-    else:
+    elif profile["id"] == "inventory.minimal":
         populations = {
             "kept": {"root_descriptors": len(artifact["payload"]["roots"]),
                      "count_categories": len(artifact["payload"]["node_counts"])},
             "omitted": {"declaration_descriptors": sum(node["kind"] not in {"file", "module"} for node in source["nodes"]),
                         "edges": len(source["edges"]),
                         "occurrence_details": len(source["callsites"]) + len(source["import_references"]) + len(source["type_references"])}}
+    else:
+        populations = {
+            "kept": {"nodes": len(artifact["payload"]["nodes"]),
+                     "edges": len(artifact["payload"]["edges"]),
+                     "import_references": len(artifact["payload"]["import_references"])},
+            "omitted": {"non_class_declarations": sum(node["kind"] not in {"file", "module", "class"} for node in source["nodes"]),
+                        "callsites": len(source["callsites"]),
+                        "type_references": len(source["type_references"]),
+                        "diagnostics": len(source["diagnostics"]),
+                        "owner_structural_facts": len(source["owner_structural_facts"])}
+        }
     return {
         "profile": dict(profile), "artifact_kind": artifact["artifact_kind"],
         "artifact_schema_version": artifact[schema_field],
@@ -97,7 +108,9 @@ def build_golden_manifest() -> dict[str, Any]:
             "artifacts": [_artifact_record(artifact, source) for artifact in artifacts],
             "budgets": {"inventory.minimal": None,
                         "structure.declarations": {"kind": "product_target", "source_basis": 100,
-                                                   "maximum_view_basis": 45}},
+                                                    "maximum_view_basis": 45},
+                        "dependency.architecture": {"kind": "product_target", "source_basis": 100,
+                                                    "maximum_view_basis": 30}},
         })
     return {
         "manifest_schema_version": 1,
@@ -138,12 +151,16 @@ def test_manifest_identity_versions_hashes_provenance_and_populations():
     for fixture in manifest["fixtures"]:
         assert [(artifact["profile"]["id"], artifact["profile"]["version"])
                 for artifact in fixture["artifacts"]] == [
-            ("inventory.minimal", 1), ("structure.declarations", 1)
+            ("inventory.minimal", 1), ("structure.declarations", 1),
+            ("dependency.architecture", 1),
         ]
         assert fixture["budgets"] == {
             "inventory.minimal": None,
             "structure.declarations": {
                 "kind": "product_target", "source_basis": 100, "maximum_view_basis": 45,
+            },
+            "dependency.architecture": {
+                "kind": "product_target", "source_basis": 100, "maximum_view_basis": 30,
             },
         }
         source = fixture["source"]
@@ -283,6 +300,13 @@ def test_structure_declarations_meets_fixture_scoped_product_target(fixture_name
     fixture = next(item for item in _load_manifest()["fixtures"] if item["name"] == fixture_name)
     structure = next(item for item in fixture["artifacts"] if item["profile"]["id"] == "structure.declarations")
     assert _within_budget(structure["compact_bytes"], fixture["source"]["compact_bytes"], 45, 100)
+
+
+@pytest.mark.parametrize("fixture_name", _FIXTURES)
+def test_dependency_architecture_meets_fixture_scoped_product_target(fixture_name):
+    fixture = next(item for item in _load_manifest()["fixtures"] if item["name"] == fixture_name)
+    architecture = next(item for item in fixture["artifacts"] if item["profile"]["id"] == "dependency.architecture")
+    assert _within_budget(architecture["compact_bytes"], fixture["source"]["compact_bytes"], 30, 100)
 
 
 def test_inventory_minimal_is_measurement_only_without_threshold():

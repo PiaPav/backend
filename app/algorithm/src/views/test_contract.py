@@ -8,6 +8,7 @@ from views import (
     validate_graph_view_v1,
 )
 from views.registry import profile_metadata
+from views.metrics_contract import PACKAGE_GROUPING
 
 
 EXPECTED_COMPLETENESS = {
@@ -236,3 +237,68 @@ def test_dependency_contract_rejects_stale_fingerprint_and_payload_shape_types()
     view["payload"]["edges"] = tuple(view["payload"]["edges"])
     with pytest.raises(ValueError, match="arrays"):
         validate_graph_view_v1(view, verify_fingerprint=False)
+
+
+def _architecture_view():
+    root, cls = "file:a.py", "class:a.C"
+    reference = {"id": "import:self", "importer_id": root, "kind": "import", "module": "", "name": "a", "alias": None, "level": 0, "location": {"path": "a.py", "line": 1, "column": 0}, "resolution": "exact", "target_id": root, "candidate_ids": []}
+    view = {"artifact_kind": "graph_view", "view_schema_version": 1, "profile": {"id": "dependency.architecture", "version": 1}, "source": {"graph_schema_version": 1, "parser_semantics_version": 7, "graph_fingerprint": "c" * 64}, "completeness": profile_metadata("dependency.architecture", 1), "payload": {"nodes": [{"id": cls, "kind": "class", "qualified_name": "a.C", "parent_id": root, "path": "a.py", "class_kind": "class"}, {"id": root, "kind": "file", "qualified_name": "a", "path": "a.py"}], "edges": [{"id": aggregate_import_edge_id(root, root), "kind": "imports", "source_id": root, "target_id": root, "exact_occurrence_count": 1}, {"id": "contains:a.C", "kind": "contains", "source_id": root, "target_id": cls}], "import_references": [reference], "import_resolution_counts": {"exact": 1, "external": 0, "unresolved": 0}, "package_grouping": deepcopy(PACKAGE_GROUPING)}, "view_fingerprint": "0" * 64}
+    view["payload"]["nodes"].sort(key=lambda row: row["id"]); view["payload"]["edges"].sort(key=lambda row: row["id"]); view["view_fingerprint"] = graph_view_fingerprint(view); return view
+
+
+def test_dependency_architecture_contract_accepts_complete_occurrence_projection():
+    validate_graph_view_v1(_architecture_view())
+
+
+@pytest.mark.parametrize("mutation,message", [
+    (lambda v: v["payload"]["nodes"][0].__setitem__("path", "other.py"), "path"),
+    (lambda v: v["payload"]["import_references"][0]["location"].__setitem__("line", True), "location"),
+    (lambda v: v["payload"]["import_references"][0].__setitem__("candidate_ids", ["file:x"]), "empty"),
+    (lambda v: v["payload"]["import_resolution_counts"].__setitem__("exact", 2), "match"),
+    (lambda v: v["payload"]["edges"][0].__setitem__("exact_occurrence_count", 2), "match"),
+    (lambda v: v["payload"].__setitem__("package_grouping", {}), "package_grouping"),
+    (lambda v: v["payload"]["import_references"][0].__setitem__("extra", 1), "invalid fields"),
+])
+def test_dependency_architecture_contract_rejects_malformed_payload(mutation, message):
+    view = _architecture_view(); mutation(view)
+    with pytest.raises(ValueError, match=message): validate_graph_view_v1(view, verify_fingerprint=False)
+
+
+def test_dependency_architecture_rejects_noncanonical_reference_order_and_stale_fingerprint():
+    view = _architecture_view(); duplicate = deepcopy(view["payload"]["import_references"][0]); duplicate["id"] = "import:0"; view["payload"]["import_references"].append(duplicate); view["payload"]["import_resolution_counts"]["exact"] = 2
+    with pytest.raises(ValueError, match="sorted"): validate_graph_view_v1(view, verify_fingerprint=False)
+    view = _architecture_view(); view["payload"]["import_references"][0]["alias"] = "changed"
+    with pytest.raises(ValueError, match="does not match"): validate_graph_view_v1(view)
+
+
+@pytest.mark.parametrize("mutation,message", [
+    (lambda v: v["payload"]["nodes"][0].__setitem__("parent_id", "missing"), "inconsistent"),
+    (lambda v: v["payload"]["nodes"][1].__setitem__("path", "../a.py"), "relative POSIX"),
+    (lambda v: v["payload"]["edges"][1].__setitem__("source_id", v["payload"]["nodes"][0]["id"]), "directly contain"),
+    (lambda v: v["payload"]["edges"][1].__setitem__("id", v["payload"]["edges"][0]["id"]), "duplicate"),
+    (lambda v: v["payload"]["import_references"][0].__setitem__("kind", "from"), "absolute from"),
+    (lambda v: v["payload"]["import_references"][0].__setitem__("level", True), "level"),
+    (lambda v: v["payload"]["import_references"][0].__setitem__("target_id", v["payload"]["nodes"][0]["id"]), "root target"),
+    (lambda v: v["payload"]["import_references"][0].__setitem__("resolution", "ambiguous"), "resolution"),
+    (lambda v: v["payload"]["import_references"][0]["location"].__setitem__("path", "other.py"), "location"),
+    (lambda v: v["payload"]["import_resolution_counts"].__setitem__("external", True), "nonnegative"),
+])
+def test_dependency_architecture_rejects_cross_invariant_and_type_violations(mutation, message):
+    view = _architecture_view()
+    mutation(view)
+    with pytest.raises(ValueError, match=message):
+        validate_graph_view_v1(view, verify_fingerprint=False)
+
+
+def test_dependency_architecture_accepts_external_and_unresolved_without_aggregate_edges():
+    view = _architecture_view()
+    root = "file:a.py"
+    view["payload"]["import_references"].extend([
+        {"id": "import:external", "importer_id": root, "kind": "import", "module": "", "name": "os", "alias": None, "level": 0, "location": {"path": "a.py", "line": 2, "column": 0}, "resolution": "external", "target_id": None, "candidate_ids": []},
+        {"id": "import:unresolved", "importer_id": root, "kind": "from", "module": "missing", "name": "x", "alias": None, "level": 1, "location": {"path": "a.py", "line": 3, "column": 0}, "resolution": "unresolved", "target_id": None, "candidate_ids": []},
+    ])
+    view["payload"]["import_references"].sort(key=lambda row: row["id"])
+    view["payload"]["import_resolution_counts"].update(external=1, unresolved=1)
+    view["view_fingerprint"] = graph_view_fingerprint(view)
+    validate_graph_view_v1(view)
+    assert len([edge for edge in view["payload"]["edges"] if edge["kind"] == "imports"]) == 1

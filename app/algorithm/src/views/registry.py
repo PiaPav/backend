@@ -7,6 +7,8 @@ INVENTORY_MINIMAL_ID = "inventory.minimal"
 INVENTORY_MINIMAL_VERSION = 1
 DEPENDENCY_FILES_ID = "dependency.files"
 DEPENDENCY_FILES_VERSION = 1
+DEPENDENCY_ARCHITECTURE_ID = "dependency.architecture"
+DEPENDENCY_ARCHITECTURE_VERSION = 1
 STRUCTURE_DECLARATIONS_ID = "structure.declarations"
 STRUCTURE_DECLARATIONS_VERSION = 1
 METRICS_OVERVIEW_ID = "metrics.overview"
@@ -98,6 +100,21 @@ _DEPENDENCY_FILES_OMITS = (
     "type_relations",
 )
 
+_DEPENDENCY_ARCHITECTURE_PRESERVES = (
+    "canonical_class_nodes",
+    "canonical_class_ownership",
+    "canonical_import_references",
+    "canonical_root_descriptors",
+    "exact_import_topology",
+    "import_resolution_counts",
+    "metrics_package_grouping_semantics",
+)
+_DEPENDENCY_ARCHITECTURE_OMITS = (
+    "call_relations", "callable_complexity_facts", "callsites", "diagnostics",
+    "edge_locations", "field_access_relations", "function_constant_method_field_nodes",
+    "node_locations", "owner_structural_facts", "type_references", "type_relations",
+)
+
 
 def select_graph_profile(profile_id: object, profile_version: object) -> str:
     """Validate an exact graph profile and return its artifact kind."""
@@ -112,6 +129,9 @@ def select_graph_profile(profile_id: object, profile_version: object) -> str:
         artifact_kind = "graph_view"
     elif profile_id == DEPENDENCY_FILES_ID:
         expected_version = DEPENDENCY_FILES_VERSION
+        artifact_kind = "graph_view"
+    elif profile_id == DEPENDENCY_ARCHITECTURE_ID:
+        expected_version = DEPENDENCY_ARCHITECTURE_VERSION
         artifact_kind = "graph_view"
     else:
         raise ValueError(f"Unsupported graph profile {profile_id!r}")
@@ -134,6 +154,11 @@ def profile_metadata(profile_id: object, profile_version: object) -> dict[str, o
         kind = "query_lossless"
         preserves = _DEPENDENCY_FILES_PRESERVES
         omits = _DEPENDENCY_FILES_OMITS
+    elif profile_id == DEPENDENCY_ARCHITECTURE_ID:
+        expected_version = DEPENDENCY_ARCHITECTURE_VERSION
+        kind = "query_lossless"
+        preserves = _DEPENDENCY_ARCHITECTURE_PRESERVES
+        omits = _DEPENDENCY_ARCHITECTURE_OMITS
     else:
         raise ValueError(f"Unsupported graph view profile {profile_id!r}")
     if type(profile_version) is not int or profile_version != expected_version:
@@ -179,6 +204,8 @@ __all__ = [
     "CANONICAL_FULL_VERSION",
     "DEPENDENCY_FILES_ID",
     "DEPENDENCY_FILES_VERSION",
+    "DEPENDENCY_ARCHITECTURE_ID",
+    "DEPENDENCY_ARCHITECTURE_VERSION",
     "INVENTORY_MINIMAL_ID",
     "INVENTORY_MINIMAL_VERSION",
     "STRUCTURE_DECLARATIONS_ID",
