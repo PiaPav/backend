@@ -3,7 +3,7 @@
 Публичный `materialize_graph_profile` поддерживает точные пары
 `canonical.full / 1`, `inventory.minimal / 1` и
 `structure.declarations / 1`, `dependency.files / 1` и
-`dependency.architecture / 1`. Первый профиль возвращает
+`dependency.architecture / 1` и `calls.topology / 1`. Первый профиль возвращает
 глубокую копию полного Graph DTO schema 1 / Parser semantics 7 и не является
 Graph View: он не получает view envelope или новый fingerprint и остаётся
 допустимым входом Metrics Core. `project_graph_view` по-прежнему принимает
@@ -111,3 +111,18 @@ Metrics policy: первый POSIX-сегмент path, `<root>` для path б�
 exact non-self file pairs и distinct cross-package pairs. View не создаёт package
 objects и не вычисляет Metrics. Полный нормативный контракт и контрпримеры
 зафиксированы в `DATA_PROFILES_DEPENDENCY_ARCHITECTURE_CONTRACT.md`.
+
+## `calls.topology` v1
+
+Профиль использует тот же строгий Graph View envelope. Payload содержит все
+functions/methods, минимальную class/root ownership closure, необходимые
+canonical `contains`, а также canonical `calls`/`awaits` с неизменёнными IDs и
+positive weights. `module_call_owner_ids` отдельно маркирует file/module roots,
+которые действительно являются caller callsites, и не смешивает их с roots,
+добавленными только ради closure.
+
+Полная zero-filled `callsite_counts` matrix сохраняет совместное распределение
+пяти resolution statuses по `awaited`/`non_awaited`. Только exact occurrences
+представлены edges; суммы weights обязаны совпадать с двумя exact buckets.
+Подробный whitelist, query guarantee и контрпримеры зафиксированы в
+`DATA_PROFILES_CALLS_TOPOLOGY_CONTRACT.md`.

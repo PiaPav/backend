@@ -21,6 +21,8 @@ _NODE_REQUIRED = {"id", "kind", "qualified_name", "parent_id", "path"}
 _EDGE_KEYS = {"id", "kind", "source_id", "target_id"}
 _DEPENDENCY_NODE_KEYS = {"id", "kind", "qualified_name", "path"}
 _DEPENDENCY_EDGE_KEYS = _EDGE_KEYS | {"exact_occurrence_count"}
+_CALL_EDGE_KEYS = _EDGE_KEYS | {"weight"}
+_CALL_STATUSES = ("exact", "ambiguous", "external", "dynamic", "unresolved")
 
 
 def _error(message: str) -> None:
@@ -240,6 +242,121 @@ def _validate_dependency_architecture(payload: Mapping[str, Any]) -> None:
     if pairs != observed: _error("aggregate import pairs and counts must match exact import references")
 
 
+def _validate_calls_topology(payload: Mapping[str, Any]) -> None:
+    payload = _object(payload, {"nodes", "edges", "module_call_owner_ids", "callsite_counts"}, "payload")
+    if not isinstance(payload["nodes"], list) or not isinstance(payload["edges"], list):
+        _error("payload nodes and edges must be arrays")
+    nodes: dict[str, Mapping[str, Any]] = {}
+    node_ids: list[str] = []
+    for index, value in enumerate(payload["nodes"]):
+        where = f"payload.nodes[{index}]"
+        if not isinstance(value, Mapping): _error(f"{where} must be an object")
+        kind = value.get("kind")
+        keys = {"id", "kind", "qualified_name", "path"}
+        if kind not in {"file", "module"}: keys.add("parent_id")
+        if kind == "method" and value.get("synthetic") is True: keys.add("synthetic")
+        node = _object(value, keys, where)
+        identifier = node.get("id")
+        if not isinstance(identifier, str) or not identifier or identifier in nodes:
+            _error(f"{where}.id is missing or duplicate")
+        if kind not in {"file", "module", "class", "function", "method"}:
+            _error(f"{where}.kind is invalid")
+        if not isinstance(node.get("qualified_name"), str): _error(f"{where}.qualified_name must be a string")
+        _relative_path(node.get("path"), f"{where}.path")
+        if kind not in {"file", "module"} and (not isinstance(node.get("parent_id"), str) or not node["parent_id"]):
+            _error(f"{where}.parent_id is invalid")
+        if "synthetic" in node and (kind != "method" or node["synthetic"] is not True):
+            _error(f"{where}.synthetic is only allowed as true on methods")
+        nodes[identifier] = node; node_ids.append(identifier)
+    if node_ids != sorted(node_ids): _error("payload.nodes must have unique lexicographically sorted IDs")
+
+    owners: dict[str, str] = {}
+    triples: set[tuple[str, str, str]] = set()
+    edge_ids: list[str] = []
+    exact = {"awaited": 0, "non_awaited": 0}
+    for index, value in enumerate(payload["edges"]):
+        where = f"payload.edges[{index}]"
+        if not isinstance(value, Mapping): _error(f"{where} must be an object")
+        kind = value.get("kind")
+        edge = _object(value, _EDGE_KEYS if kind == "contains" else _CALL_EDGE_KEYS, where)
+        identifier = edge.get("id")
+        if not isinstance(identifier, str) or not identifier or identifier in edge_ids or identifier in nodes:
+            _error(f"{where}.id is missing or duplicate")
+        source, target = edge.get("source_id"), edge.get("target_id")
+        if source not in nodes or target not in nodes: _error(f"{where} has a dangling endpoint")
+        if kind == "contains":
+            if target in owners: _error(f"node {target!r} has multiple containers")
+            pair = (nodes[source]["kind"], nodes[target]["kind"])
+            if pair not in {("file", "class"), ("module", "class"), ("file", "function"),
+                            ("module", "function"), ("class", "method")}:
+                _error(f"{where} has invalid ownership kinds")
+            owners[target] = source
+        elif kind in {"calls", "awaits"}:
+            if nodes[source]["kind"] not in {"file", "module", "function", "method"} or nodes[target]["kind"] not in {"function", "method"}:
+                _error(f"{where} has invalid call endpoint kinds")
+            triple = (source, target, kind)
+            if triple in triples: _error(f"{where} duplicates a call triple")
+            triples.add(triple)
+            weight = edge.get("weight")
+            if type(weight) is not int or weight <= 0: _error(f"{where}.weight must be a positive integer")
+            exact["awaited" if kind == "awaits" else "non_awaited"] += weight
+        else: _error(f"{where}.kind is invalid")
+        edge_ids.append(identifier)
+    if edge_ids != sorted(edge_ids): _error("payload.edges must have unique lexicographically sorted IDs")
+
+    for identifier, node in nodes.items():
+        kind = node["kind"]
+        if kind in {"file", "module"}:
+            if identifier in owners: _error(f"root {identifier!r} must not have an owner")
+        elif owners.get(identifier) != node["parent_id"]:
+            _error(f"node {identifier!r} parent_id is inconsistent with contains edges")
+        if kind == "class" and not any(owner == identifier and nodes[child]["kind"] == "method" for child, owner in owners.items()):
+            _error(f"class {identifier!r} must own at least one method")
+        current, seen = identifier, set()
+        while current in owners:
+            if current in seen: _error("contains edges must form an acyclic forest")
+            seen.add(current); current = owners[current]
+        if nodes[current]["kind"] not in {"file", "module"}: _error(f"node {identifier!r} has no owning root")
+        if node["path"] != nodes[current]["path"]: _error(f"node {identifier!r} path must match its root")
+
+    owner_ids = payload["module_call_owner_ids"]
+    if not isinstance(owner_ids, list) or owner_ids != sorted(owner_ids) or len(owner_ids) != len(set(owner_ids)):
+        _error("module_call_owner_ids must be unique and lexicographically sorted")
+    if any(identifier not in nodes or nodes[identifier]["kind"] not in {"file", "module"} for identifier in owner_ids):
+        _error("module_call_owner_ids must reference root nodes")
+    ownership_roots = {
+        owner for child, owner in owners.items()
+        if nodes[owner]["kind"] in {"file", "module"}
+        and nodes[child]["kind"] in {"class", "function"}
+    }
+    if any(node["kind"] in {"file", "module"} and identifier not in owner_ids
+           and identifier not in ownership_roots for identifier, node in nodes.items()):
+        _error("every root must own a callable or be a module call owner")
+    for source, _target, kind in triples:
+        if nodes[source]["kind"] in {"file", "module"} and source not in owner_ids:
+            _error(f"{kind} root source must be a module call owner")
+
+    counts = _object(payload["callsite_counts"], set(_CALL_STATUSES), "payload.callsite_counts")
+    for status in _CALL_STATUSES:
+        row = _object(counts[status], {"awaited", "non_awaited"}, f"payload.callsite_counts.{status}")
+        if any(type(value) is not int or value < 0 for value in row.values()):
+            _error("callsite counts must be nonnegative integers")
+    if dict(counts["exact"]) != exact: _error("exact callsite counts must equal call edge weights")
+    exact_root_sources = {
+        source for source, _target, _kind in triples
+        if nodes[source]["kind"] in {"file", "module"}
+    }
+    owners_requiring_non_exact = set(owner_ids) - exact_root_sources
+    non_exact_total = sum(
+        value
+        for status, row in counts.items()
+        if status != "exact"
+        for value in row.values()
+    )
+    if non_exact_total < len(owners_requiring_non_exact):
+        _error("non-exact callsite counts must cover module call owners without an exact root edge")
+
+
 def validate_graph_view_v1(
     view: Mapping[str, Any], *, verify_fingerprint: bool = True
 ) -> None:
@@ -281,6 +398,12 @@ def validate_graph_view_v1(
         return
     if profile["id"] == "dependency.architecture":
         _validate_dependency_architecture(root.get("payload"))
+        fingerprint = root.get("view_fingerprint")
+        if not isinstance(fingerprint, str) or not _HEX_64.fullmatch(fingerprint): _error("view_fingerprint must be lowercase SHA-256 hex")
+        if verify_fingerprint and fingerprint != graph_view_fingerprint(root): _error("view_fingerprint does not match canonical content")
+        return
+    if profile["id"] == "calls.topology":
+        _validate_calls_topology(root.get("payload"))
         fingerprint = root.get("view_fingerprint")
         if not isinstance(fingerprint, str) or not _HEX_64.fullmatch(fingerprint): _error("view_fingerprint must be lowercase SHA-256 hex")
         if verify_fingerprint and fingerprint != graph_view_fingerprint(root): _error("view_fingerprint does not match canonical content")

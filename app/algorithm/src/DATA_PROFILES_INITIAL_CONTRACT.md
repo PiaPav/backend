@@ -14,6 +14,7 @@ populations, обязательных полей или правил агрег�
 | `structure.declarations` | 1 | Graph View DTO | реализован |
 | `dependency.files` | 1 | Graph View DTO | реализован |
 | `dependency.architecture` | 1 | Graph View DTO | реализован |
+| `calls.topology` | 1 | Graph View DTO | реализован |
 | `metrics.overview` | 1 | Metrics View DTO | реализован |
 | `metrics.architecture` | 1 | Metrics View DTO | реализован |
 
@@ -35,8 +36,8 @@ semantics 7 и возвращает независимую глубокую ко
 тождество mutable Python-объекта.
 
 Публичный gateway `materialize_graph_profile` поддерживает `canonical.full`,
-`inventory.minimal`, `structure.declarations`, `dependency.files` и
-`dependency.architecture`. Специализированные gateway
+`inventory.minimal`, `structure.declarations`, `dependency.files`,
+`dependency.architecture` и `calls.topology`. Специализированные gateway
 `project_graph_summary` и `project_graph_view` принимают только профили своего
 вида артефакта.
 
@@ -169,6 +170,10 @@ Derived dependency edges не являются canonical edge objects.
 Точный domain contract `dependency.architecture / 1`, включая class ownership,
 detailed import occurrences, aggregate topology и package grouping, находится в
 `DATA_PROFILES_DEPENDENCY_ARCHITECTURE_CONTRACT.md`.
+
+Точный domain contract `calls.topology / 1`, включая topology population,
+canonical weights и совместные resolution/awaited counters, находится в
+`DATA_PROFILES_CALLS_TOPOLOGY_CONTRACT.md`.
 
 ## Матрица Metrics facts
 
