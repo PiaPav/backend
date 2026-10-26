@@ -19,6 +19,8 @@ CALLS_TOPOLOGY_ID = "calls.topology"
 CALLS_TOPOLOGY_VERSION = 1
 CALLS_DETAILED_ID = "calls.detailed"
 CALLS_DETAILED_VERSION = 1
+TYPES_TOPOLOGY_ID = "types.topology"
+TYPES_TOPOLOGY_VERSION = 1
 
 _METRICS_PROFILES = {
     METRICS_OVERVIEW_ID: (
@@ -152,6 +154,19 @@ _CALLS_DETAILED_OMITS = (
     "import_relations", "node_locations", "type_references", "type_relations",
 )
 
+_TYPES_TOPOLOGY_PRESERVES = (
+    "canonical_class_and_field_nodes",
+    "canonical_declaration_ownership",
+    "canonical_type_references",
+    "exact_type_topology",
+)
+_TYPES_TOPOLOGY_OMITS = (
+    "call_relations", "callable_complexity_facts", "callsites", "class_kind",
+    "constant_function_and_method_nodes", "diagnostics", "edge_locations",
+    "field_access_relations", "import_references", "import_relations",
+    "node_locations", "owner_structural_facts",
+)
+
 
 def select_graph_profile(profile_id: object, profile_version: object) -> str:
     """Validate an exact graph profile and return its artifact kind."""
@@ -175,6 +190,9 @@ def select_graph_profile(profile_id: object, profile_version: object) -> str:
         artifact_kind = "graph_view"
     elif profile_id == CALLS_DETAILED_ID:
         expected_version = CALLS_DETAILED_VERSION
+        artifact_kind = "graph_view"
+    elif profile_id == TYPES_TOPOLOGY_ID:
+        expected_version = TYPES_TOPOLOGY_VERSION
         artifact_kind = "graph_view"
     else:
         raise ValueError(f"Unsupported graph profile {profile_id!r}")
@@ -212,6 +230,11 @@ def profile_metadata(profile_id: object, profile_version: object) -> dict[str, o
         kind = "query_lossless"
         preserves = _CALLS_DETAILED_PRESERVES
         omits = _CALLS_DETAILED_OMITS
+    elif profile_id == TYPES_TOPOLOGY_ID:
+        expected_version = TYPES_TOPOLOGY_VERSION
+        kind = "query_lossless"
+        preserves = _TYPES_TOPOLOGY_PRESERVES
+        omits = _TYPES_TOPOLOGY_OMITS
     else:
         raise ValueError(f"Unsupported graph view profile {profile_id!r}")
     if type(profile_version) is not int or profile_version != expected_version:
@@ -257,6 +280,7 @@ __all__ = [
     "CANONICAL_FULL_VERSION",
     "CALLS_TOPOLOGY_ID", "CALLS_TOPOLOGY_VERSION",
     "CALLS_DETAILED_ID", "CALLS_DETAILED_VERSION",
+    "TYPES_TOPOLOGY_ID", "TYPES_TOPOLOGY_VERSION",
     "DEPENDENCY_FILES_ID",
     "DEPENDENCY_FILES_VERSION",
     "DEPENDENCY_ARCHITECTURE_ID",

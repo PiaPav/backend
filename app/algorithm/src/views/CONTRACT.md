@@ -3,7 +3,8 @@
 Публичный `materialize_graph_profile` поддерживает точные пары
 `canonical.full / 1`, `inventory.minimal / 1` и
 `structure.declarations / 1`, `dependency.files / 1` и
-`dependency.architecture / 1`, `calls.topology / 1` и `calls.detailed / 1`.
+`dependency.architecture / 1`, `calls.topology / 1`, `calls.detailed / 1` и
+`types.topology / 1`.
 Первый профиль возвращает
 глубокую копию полного Graph DTO schema 1 / Parser semantics 7 и не является
 Graph View: он не получает view envelope или новый fingerprint и остаётся
@@ -139,3 +140,17 @@ Validator проверяет occurrence resolution rules, candidate closure, т�
 соответствие exact callsites weighted `calls`/`awaits`, ownership, complexity и
 полную structural-owner population. Подробный whitelist, query guarantee и
 контрпримеры определены в `DATA_PROFILES_CALLS_DETAILED_CONTRACT.md`.
+
+## `types.topology` v1
+
+Профиль сохраняет все classes и fields, их минимальную root ownership closure,
+необходимые canonical `contains`, все `inherits`/`field_type` и полные canonical
+`type_references`. Exact references и typed topology совпадают по множеству
+directed triples; occurrence multiplicity остаётся в references, а canonical
+duplicate edges не агрегируются. Ambiguous candidates сохраняются как
+reference facts и не становятся edges.
+
+Профиль сохраняет basis текущих DIT/NOC, включая multiple inheritance, self и
+cycles, но исключает facts для CBO/RFC/LCOM/WMC. Полный whitelist, closure,
+query guarantee и контрпример определены в
+`DATA_PROFILES_TYPES_TOPOLOGY_CONTRACT.md`.
