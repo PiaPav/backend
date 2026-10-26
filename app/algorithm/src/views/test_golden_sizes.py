@@ -1,4 +1,4 @@
-"""Golden compact UTF-8 sizes for the initial graph profiles.
+"""Golden compact UTF-8 sizes for the graph profiles.
 
 The command-line mode prints a candidate manifest to stdout and never writes it.
 """
@@ -21,6 +21,7 @@ from views.testdata import build_representative_graph_v2
 _FIXTURES = ("medium", "large")
 _PROFILES = (
     "inventory.minimal", "structure.declarations", "dependency.architecture", "calls.topology",
+    "calls.detailed",
 )
 _MANIFEST = Path(__file__).with_name("testdata") / "graph_profiles_golden_v2.json"
 _COMPONENT_COUNTS = {"medium": 4, "large": 10}
@@ -125,6 +126,40 @@ def _artifact_record(artifact: Mapping[str, Any], source: Mapping[str, Any]) -> 
                 "complexity_facts": sum("complexity_facts" in node for node in source["nodes"]),
             },
         }
+    elif profile["id"] == "calls.detailed":
+        payload = artifact["payload"]
+        node_kinds = Counter(node["kind"] for node in payload["nodes"])
+        edge_kinds = Counter(edge["kind"] for edge in payload["edges"])
+        edge_weights = Counter()
+        for edge in payload["edges"]:
+            if edge["kind"] in {"calls", "awaits"}:
+                edge_weights[edge["kind"]] += edge["weight"]
+        populations = {
+            "kept": {
+                "nodes": len(payload["nodes"]),
+                "callable_nodes": node_kinds["function"] + node_kinds["method"],
+                "ownership_context_nodes": node_kinds["file"] + node_kinds["module"] + node_kinds["class"],
+                "contains_edges": edge_kinds["contains"],
+                "calls_edges": edge_kinds["calls"],
+                "awaits_edges": edge_kinds["awaits"],
+                "calls_weight": edge_weights["calls"],
+                "awaits_weight": edge_weights["awaits"],
+                "callsites": len(payload["callsites"]),
+                "module_call_owners": len(payload["module_call_owner_ids"]),
+                "owner_structural_facts": len(payload["owner_structural_facts"]),
+                "complexity_facts": sum("complexity_facts" in node for node in payload["nodes"]),
+            },
+            "omitted": {
+                "non_selected_nodes": len(source["nodes"]) - len(payload["nodes"]),
+                "non_projected_edges": len(source["edges"]) - len(payload["edges"]),
+                "import_references": len(source["import_references"]),
+                "type_references": len(source["type_references"]),
+                "diagnostics": len(source["diagnostics"]),
+                "direct_import_occurrence_facts": sum(
+                    "direct_import_occurrences" in fact for fact in source["owner_structural_facts"]
+                ),
+            },
+        }
     else:
         raise AssertionError(f"unhandled golden profile: {profile['id']!r}")
     return {
@@ -152,8 +187,10 @@ def build_golden_manifest() -> dict[str, Any]:
                                                     "maximum_view_basis": 45},
                         "dependency.architecture": {"kind": "product_target", "source_basis": 100,
                                                     "maximum_view_basis": 30},
-                        "calls.topology": {"kind": "product_target", "source_basis": 100,
-                                           "maximum_view_basis": 35}},
+                         "calls.topology": {"kind": "product_target", "source_basis": 100,
+                                            "maximum_view_basis": 35},
+                         "calls.detailed": {"kind": "product_target", "source_basis": 100,
+                                            "maximum_view_basis": 60}},
         })
     return {
         "manifest_schema_version": 1,
@@ -196,6 +233,7 @@ def test_manifest_identity_versions_hashes_provenance_and_populations():
                 for artifact in fixture["artifacts"]] == [
             ("inventory.minimal", 1), ("structure.declarations", 1),
             ("dependency.architecture", 1), ("calls.topology", 1),
+            ("calls.detailed", 1),
         ]
         assert fixture["budgets"] == {
             "inventory.minimal": None,
@@ -207,6 +245,9 @@ def test_manifest_identity_versions_hashes_provenance_and_populations():
             },
             "calls.topology": {
                 "kind": "product_target", "source_basis": 100, "maximum_view_basis": 35,
+            },
+            "calls.detailed": {
+                "kind": "product_target", "source_basis": 100, "maximum_view_basis": 60,
             },
         }
         source = fixture["source"]
@@ -326,6 +367,52 @@ def test_calls_topology_current_v2_populations_are_exact(fixture_name, n):
 
 
 @pytest.mark.parametrize("fixture_name,n", tuple(_COMPONENT_COUNTS.items()))
+def test_calls_detailed_current_v2_populations_are_exact(fixture_name, n):
+    source = build_representative_graph_v2(fixture_name)
+    artifact = materialize_graph_profile(source, profile_id="calls.detailed", profile_version=1)
+    payload = artifact["payload"]
+
+    assert _artifact_record(artifact, source)["populations"] == {
+        "kept": {
+            "nodes": 1 + 5 * n,
+            "callable_nodes": 3 * n,
+            "ownership_context_nodes": 1 + 2 * n,
+            "contains_edges": 4 * n,
+            "calls_edges": n,
+            "awaits_edges": 0,
+            "calls_weight": n,
+            "awaits_weight": 0,
+            "callsites": 5 * n,
+            "module_call_owners": 0,
+            "owner_structural_facts": 1 + 3 * n,
+            "complexity_facts": 2 * n,
+        },
+        "omitted": {
+            "non_selected_nodes": 2 * n,
+            "non_projected_edges": 5 * n,
+            "import_references": 3 * n,
+            "type_references": 4 * n,
+            "diagnostics": 2 * n,
+            "direct_import_occurrence_facts": 1 + n,
+        },
+    }
+    assert Counter(item["resolution"] for item in payload["callsites"]) == {
+        "exact": n, "ambiguous": n, "external": n, "dynamic": n, "unresolved": n,
+    }
+    exact_callsites = Counter(
+        (item["caller_id"], item["target_id"])
+        for item in payload["callsites"] if item["resolution"] == "exact"
+    )
+    calls_weights = Counter({
+        (edge["source_id"], edge["target_id"]): edge["weight"]
+        for edge in payload["edges"] if edge["kind"] == "calls"
+    })
+    assert sum(exact_callsites.values()) == n
+    assert sum(calls_weights.values()) == n
+    assert exact_callsites == calls_weights
+
+
+@pytest.mark.parametrize("fixture_name,n", tuple(_COMPONENT_COUNTS.items()))
 def test_v2_component_attribution_and_exact_relations(fixture_name, n):
     graph = build_representative_graph_v2(fixture_name)
     nodes = {node["id"]: node for node in graph["nodes"]}
@@ -415,6 +502,19 @@ def test_calls_topology_meets_fixture_scoped_product_target(fixture_name):
     assert _within_budget(
         _measurement(artifact)["compact_bytes"], _measurement(source)["compact_bytes"], 35, 100
     )
+
+
+@pytest.mark.parametrize("fixture_name", _FIXTURES)
+def test_calls_detailed_meets_fixture_scoped_product_target(fixture_name):
+    fixture = next(item for item in _load_manifest()["fixtures"] if item["name"] == fixture_name)
+    manifest_record = next(
+        item for item in fixture["artifacts"] if item["profile"]["id"] == "calls.detailed"
+    )
+    assert manifest_record["compact_bytes"] * 100 <= fixture["source"]["compact_bytes"] * 60
+
+    source = build_representative_graph_v2(fixture_name)
+    artifact = materialize_graph_profile(source, profile_id="calls.detailed", profile_version=1)
+    assert len(_compact_bytes(artifact)) * 100 <= len(_compact_bytes(source)) * 60
 
 
 def test_inventory_minimal_is_measurement_only_without_threshold():

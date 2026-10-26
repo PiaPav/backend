@@ -149,8 +149,8 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    общие свойства будущих профилей не покрыты; для `calls.topology` проверены
    determinism, source immutability, referential closure, canonical
    edges/weights и non-exact boundary.
-3. **Выполнен для первых compact profiles, dependency architecture и calls
-   topology.** Golden manifest family v2 хранит версии profiles, exact
+3. **Выполнен для первых compact profiles, dependency architecture, calls
+   topology и calls detailed.** Golden manifest family v2 хранит версии profiles, exact
    populations, fingerprints, compact UTF-8 bytes и SHA-256 полного
    transferable artifact для medium/large fixtures.
 4. **V1 отклонён, V2 прошёл проверку.** Черновая family v1 дала medium
@@ -198,13 +198,15 @@ large `21740/91853 = 23.6683%`. Golden populations раздельно фикси
 call edges, суммы weights и callsite occurrences; совпадение этих величин для
 exact ordinary calls является свойством неизменённой fixture v2, а не общей
 семантикой профиля.
+`calls.detailed` прошёл неизменный target 60% без изменения accepted fixture:
+medium `20465/37091 = 55.1751%`, large `49331/91853 = 53.7065%`.
 
 Для `calls.topology` semantic-прогон дал **14 passed**, golden-прогон —
 **18 passed**, а полный прогон разрешённой области без `gpt_work_dir` —
 **360 passed, 0 failed, 0 skipped**.
-Для `calls.detailed` профильный прогон дал **7 passed**, все views —
-**195 passed**, а полный прогон разрешённой области без `gpt_work_dir` —
-**367 passed, 0 failed, 0 skipped**. Test-only Metrics reconstruction подтвердила
+Для `calls.detailed` профильный прогон дал **7 passed**, golden-прогон —
+**22 passed**, все views — **199 passed**, а полный прогон разрешённой области
+без `gpt_work_dir` — **371 passed, 0 failed, 0 skipped**. Test-only Metrics reconstruction подтвердила
 точное равенство секции `call_graph`, включая duplicate root label context.
 Полный collection `app/algorithm/src` остановлен тремя посторонними import
 errors в `gpt_work_dir`; тесты в этом прогоне не исполнялись.
@@ -218,8 +220,6 @@ domain и Metrics profiles, truncation, aggregates и consumer integration
 
 ## Приоритет доработок
 
-1. Зафиксировать golden size benchmark `calls.detailed` для неизменного target
-   60% без подгонки accepted fixtures.
-2. Спроектировать `types.topology` и его referential closure.
-3. До реализации top-k Metrics profiles зафиксировать truncation metadata и
+1. Спроектировать `types.topology` и его referential closure.
+2. До реализации top-k Metrics profiles зафиксировать truncation metadata и
    benchmark fixtures, не меняя full Metrics semantics.
