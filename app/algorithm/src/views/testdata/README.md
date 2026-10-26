@@ -8,11 +8,19 @@ six `contains` edges, one synthetic method, two complexity-bearing callables,
 three owner facts, five callsites (one per status), three imports (one per
 status), four type references (one per status), two diagnostics, and four
 non-`contains` edges. Exact targets advance cyclically to the next component.
-This composition, the 45/100 `structure.declarations` target, and the 30/100
-`dependency.architecture` target were fixed before their measurements; target
-claims are scoped only to these v2 fixtures. The architecture profile measures
+This composition, the 45/100 `structure.declarations` target, the 30/100
+`dependency.architecture` target, and the 35/100 `calls.topology` target were
+fixed before their measurements; target claims are scoped only to these v2
+fixtures. The architecture profile measures
 `7910 / 37091 = 21.3259%` for medium and
 `17723 / 91853 = 19.2949%` for large using compact sorted-key UTF-8 JSON.
+The calls topology profile measures `9375 / 37091 = 25.2757%` for medium and
+`21740 / 91853 = 23.6683%` for large. Its manifest populations deliberately
+separate unique call edges, sums of weights, and callsite occurrences; in this
+v2 family these values happen to coincide for exact non-awaited calls because
+every canonical call edge has weight one. Awaited, repeated, self/reverse, and
+module-level scenarios remain semantic-test concerns rather than reasons to
+change the accepted size fixture.
 
 The rejected draft family v1 did not scale its calls, imports, types, or
 diagnostics with its declaration population. Its measured structure results

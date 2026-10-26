@@ -147,9 +147,10 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    общие свойства будущих профилей не покрыты; для `calls.topology` проверены
    determinism, source immutability, referential closure, canonical
    edges/weights и non-exact boundary.
-3. **Выполнен для первых compact profiles и dependency architecture.** Golden manifest family v2 хранит
-    версии profiles, exact populations, fingerprints, compact UTF-8 bytes и
-    SHA-256 полного transferable artifact для medium/large fixtures.
+3. **Выполнен для первых compact profiles, dependency architecture и calls
+   topology.** Golden manifest family v2 хранит версии profiles, exact
+   populations, fingerprints, compact UTF-8 bytes и SHA-256 полного
+   transferable artifact для medium/large fixtures.
 4. **V1 отклонён, V2 прошёл проверку.** Черновая family v1 дала medium
     `13569 / 26258 = 51.6757%` и large `32619 / 57298 = 56.9287%`, то есть
     провалила заранее заданные 45%. Причина — declarations масштабировались, а
@@ -190,25 +191,28 @@ occurrence aggregation, reverse/self edges, non-exact counters, aggregate IDs,
 детерминированные populations, provenance, full compact hashes и fixture-scoped
 size target. `dependency.architecture` прошёл target 30%: medium
 `7910/37091 = 21.3259%`, large `17723/91853 = 19.2949%`.
+`calls.topology` прошёл target 35%: medium `9375/37091 = 25.2757%`,
+large `21740/91853 = 23.6683%`. Golden populations раздельно фиксируют unique
+call edges, суммы weights и callsite occurrences; совпадение этих величин для
+exact ordinary calls является свойством неизменённой fixture v2, а не общей
+семантикой профиля.
 
-Для `calls.topology` релевантный прогон дал **14 passed**, а полный прогон
-разрешённой области без `gpt_work_dir` — **356 passed, 0 failed, 0 skipped**.
+Для `calls.topology` semantic-прогон дал **14 passed**, golden-прогон —
+**18 passed**, а полный прогон разрешённой области без `gpt_work_dir` —
+**360 passed, 0 failed, 0 skipped**.
 Полный collection `app/algorithm/src` остановлен тремя посторонними import
 errors в `gpt_work_dir`; тесты в этом прогоне не исполнялись.
 
 Первый набор безопасных Graph profiles реализован полностью. Для первых двух
 compact profiles зафиксирована и проверена benchmark family v2. Отклонённый
 draft v1 исторически не прошёл 45% из-за дефекта состава fixture. Начальные
-Metrics Views и первый domain Graph View также реализованы; остальные domain и
-Metrics profiles, остальные domain views, truncation, aggregates и consumer
-integration остаются в backlog. Size benchmark `calls.topology` по target 35%
-ещё не зафиксирован.
+Metrics Views и первые два domain Graph Views также реализованы; остальные
+domain и Metrics profiles, truncation, aggregates и consumer integration
+остаются в backlog.
 
 ## Приоритет доработок
 
-1. Зафиксировать golden size benchmark `calls.topology` для заранее выбранных
-   medium/large fixtures и target 35%.
-2. Спроектировать следующий domain Graph View `calls.detailed`, не смешивая
+1. Спроектировать следующий domain Graph View `calls.detailed`, не смешивая
    canonical weighted topology с occurrence-level callsites.
-3. До реализации top-k Metrics profiles зафиксировать truncation metadata и
+2. До реализации top-k Metrics profiles зафиксировать truncation metadata и
    benchmark fixtures, не меняя full Metrics semantics.

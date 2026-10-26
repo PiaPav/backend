@@ -19,7 +19,9 @@ from views.summary_contract import validate_graph_summary_v1
 from views.testdata import build_representative_graph_v2
 
 _FIXTURES = ("medium", "large")
-_PROFILES = ("inventory.minimal", "structure.declarations", "dependency.architecture")
+_PROFILES = (
+    "inventory.minimal", "structure.declarations", "dependency.architecture", "calls.topology",
+)
 _MANIFEST = Path(__file__).with_name("testdata") / "graph_profiles_golden_v2.json"
 _COMPONENT_COUNTS = {"medium": 4, "large": 10}
 
@@ -75,7 +77,7 @@ def _artifact_record(artifact: Mapping[str, Any], source: Mapping[str, Any]) -> 
             "omitted": {"declaration_descriptors": sum(node["kind"] not in {"file", "module"} for node in source["nodes"]),
                         "edges": len(source["edges"]),
                         "occurrence_details": len(source["callsites"]) + len(source["import_references"]) + len(source["type_references"])}}
-    else:
+    elif profile["id"] == "dependency.architecture":
         populations = {
             "kept": {"nodes": len(artifact["payload"]["nodes"]),
                      "edges": len(artifact["payload"]["edges"]),
@@ -84,8 +86,47 @@ def _artifact_record(artifact: Mapping[str, Any], source: Mapping[str, Any]) -> 
                         "callsites": len(source["callsites"]),
                         "type_references": len(source["type_references"]),
                         "diagnostics": len(source["diagnostics"]),
-                        "owner_structural_facts": len(source["owner_structural_facts"])}
+                         "owner_structural_facts": len(source["owner_structural_facts"])}
         }
+    elif profile["id"] == "calls.topology":
+        payload = artifact["payload"]
+        node_kinds = Counter(node["kind"] for node in payload["nodes"])
+        edge_kinds = Counter(edge["kind"] for edge in payload["edges"])
+        edge_weights = Counter()
+        for edge in payload["edges"]:
+            if edge["kind"] in {"calls", "awaits"}:
+                edge_weights[edge["kind"]] += edge["weight"]
+        callsite_occurrences = sum(
+            count
+            for status_counts in payload["callsite_counts"].values()
+            for count in status_counts.values()
+        )
+        populations = {
+            "kept": {
+                "nodes": len(payload["nodes"]),
+                "callable_nodes": node_kinds["function"] + node_kinds["method"],
+                "ownership_context_nodes": node_kinds["file"] + node_kinds["module"] + node_kinds["class"],
+                "contains_edges": edge_kinds["contains"],
+                "calls_edges": edge_kinds["calls"],
+                "awaits_edges": edge_kinds["awaits"],
+                "calls_weight": edge_weights["calls"],
+                "awaits_weight": edge_weights["awaits"],
+                "module_call_owners": len(payload["module_call_owner_ids"]),
+                "callsite_occurrences": callsite_occurrences,
+            },
+            "omitted": {
+                "non_selected_nodes": len(source["nodes"]) - len(payload["nodes"]),
+                "non_projected_edges": len(source["edges"]) - len(payload["edges"]),
+                "callsite_details": len(source["callsites"]),
+                "import_references": len(source["import_references"]),
+                "type_references": len(source["type_references"]),
+                "diagnostics": len(source["diagnostics"]),
+                "owner_structural_facts": len(source["owner_structural_facts"]),
+                "complexity_facts": sum("complexity_facts" in node for node in source["nodes"]),
+            },
+        }
+    else:
+        raise AssertionError(f"unhandled golden profile: {profile['id']!r}")
     return {
         "profile": dict(profile), "artifact_kind": artifact["artifact_kind"],
         "artifact_schema_version": artifact[schema_field],
@@ -110,7 +151,9 @@ def build_golden_manifest() -> dict[str, Any]:
                         "structure.declarations": {"kind": "product_target", "source_basis": 100,
                                                     "maximum_view_basis": 45},
                         "dependency.architecture": {"kind": "product_target", "source_basis": 100,
-                                                    "maximum_view_basis": 30}},
+                                                    "maximum_view_basis": 30},
+                        "calls.topology": {"kind": "product_target", "source_basis": 100,
+                                           "maximum_view_basis": 35}},
         })
     return {
         "manifest_schema_version": 1,
@@ -152,7 +195,7 @@ def test_manifest_identity_versions_hashes_provenance_and_populations():
         assert [(artifact["profile"]["id"], artifact["profile"]["version"])
                 for artifact in fixture["artifacts"]] == [
             ("inventory.minimal", 1), ("structure.declarations", 1),
-            ("dependency.architecture", 1),
+            ("dependency.architecture", 1), ("calls.topology", 1),
         ]
         assert fixture["budgets"] == {
             "inventory.minimal": None,
@@ -161,6 +204,9 @@ def test_manifest_identity_versions_hashes_provenance_and_populations():
             },
             "dependency.architecture": {
                 "kind": "product_target", "source_basis": 100, "maximum_view_basis": 30,
+            },
+            "calls.topology": {
+                "kind": "product_target", "source_basis": 100, "maximum_view_basis": 35,
             },
         }
         source = fixture["source"]
@@ -232,6 +278,51 @@ def test_v2_source_population_contract_is_exact(fixture_name, n):
     assert Counter((item["kind"], item["status"]) for item in graph["diagnostics"]) == {
         ("import_resolution", "warning"): n, ("call_resolution", "info"): n,
     }
+
+
+@pytest.mark.parametrize("fixture_name,n", tuple(_COMPONENT_COUNTS.items()))
+def test_calls_topology_current_v2_populations_are_exact(fixture_name, n):
+    source = build_representative_graph_v2(fixture_name)
+    artifact = materialize_graph_profile(source, profile_id="calls.topology", profile_version=1)
+    payload = artifact["payload"]
+    populations = _artifact_record(artifact, source)["populations"]
+
+    assert populations == {
+        "kept": {
+            "nodes": 5 * n,
+            "callable_nodes": 3 * n,
+            "ownership_context_nodes": 2 * n,
+            "contains_edges": 4 * n,
+            "calls_edges": n,
+            "awaits_edges": 0,
+            "calls_weight": n,
+            "awaits_weight": 0,
+            "module_call_owners": 0,
+            "callsite_occurrences": 5 * n,
+        },
+        "omitted": {
+            "non_selected_nodes": 1 + 2 * n,
+            "non_projected_edges": 5 * n,
+            "callsite_details": 5 * n,
+            "import_references": 3 * n,
+            "type_references": 4 * n,
+            "diagnostics": 2 * n,
+            "owner_structural_facts": 1 + 3 * n,
+            "complexity_facts": 2 * n,
+        },
+    }
+
+    counts = payload["callsite_counts"]
+    assert sum(sum(row.values()) for row in counts.values()) == len(source["callsites"])
+    assert counts["exact"]["non_awaited"] == populations["kept"]["calls_weight"]
+    assert counts["exact"]["awaited"] == populations["kept"]["awaits_weight"]
+    source_nodes = {node["id"]: node for node in source["nodes"]}
+    source_root_callers = {
+        callsite["caller_id"]
+        for callsite in source["callsites"]
+        if source_nodes[callsite["caller_id"]]["kind"] in {"file", "module"}
+    }
+    assert set(payload["module_call_owner_ids"]) == source_root_callers
 
 
 @pytest.mark.parametrize("fixture_name,n", tuple(_COMPONENT_COUNTS.items()))
@@ -307,6 +398,23 @@ def test_dependency_architecture_meets_fixture_scoped_product_target(fixture_nam
     fixture = next(item for item in _load_manifest()["fixtures"] if item["name"] == fixture_name)
     architecture = next(item for item in fixture["artifacts"] if item["profile"]["id"] == "dependency.architecture")
     assert _within_budget(architecture["compact_bytes"], fixture["source"]["compact_bytes"], 30, 100)
+
+
+@pytest.mark.parametrize("fixture_name", _FIXTURES)
+def test_calls_topology_meets_fixture_scoped_product_target(fixture_name):
+    fixture = next(item for item in _load_manifest()["fixtures"] if item["name"] == fixture_name)
+    manifest_record = next(
+        item for item in fixture["artifacts"] if item["profile"]["id"] == "calls.topology"
+    )
+    assert _within_budget(
+        manifest_record["compact_bytes"], fixture["source"]["compact_bytes"], 35, 100
+    )
+
+    source = build_representative_graph_v2(fixture_name)
+    artifact = materialize_graph_profile(source, profile_id="calls.topology", profile_version=1)
+    assert _within_budget(
+        _measurement(artifact)["compact_bytes"], _measurement(source)["compact_bytes"], 35, 100
+    )
 
 
 def test_inventory_minimal_is_measurement_only_without_threshold():
