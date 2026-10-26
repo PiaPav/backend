@@ -15,6 +15,7 @@ populations, обязательных полей или правил агрег�
 | `dependency.files` | 1 | Graph View DTO | реализован |
 | `dependency.architecture` | 1 | Graph View DTO | реализован |
 | `calls.topology` | 1 | Graph View DTO | реализован |
+| `calls.detailed` | 1 | Graph View DTO | реализован |
 | `metrics.overview` | 1 | Metrics View DTO | реализован |
 | `metrics.architecture` | 1 | Metrics View DTO | реализован |
 
@@ -37,7 +38,8 @@ semantics 7 и возвращает независимую глубокую ко
 
 Публичный gateway `materialize_graph_profile` поддерживает `canonical.full`,
 `inventory.minimal`, `structure.declarations`, `dependency.files`,
-`dependency.architecture` и `calls.topology`. Специализированные gateway
+`dependency.architecture`, `calls.topology` и `calls.detailed`.
+Специализированные gateway
 `project_graph_summary` и `project_graph_view` принимают только профили своего
 вида артефакта.
 
@@ -174,6 +176,10 @@ detailed import occurrences, aggregate topology и package grouping, наход�
 Точный domain contract `calls.topology / 1`, включая topology population,
 canonical weights и совместные resolution/awaited counters, находится в
 `DATA_PROFILES_CALLS_TOPOLOGY_CONTRACT.md`.
+
+Точный domain contract `calls.detailed / 1`, включая occurrence-level
+callsites, complexity и structural call basis, находится в
+`DATA_PROFILES_CALLS_DETAILED_CONTRACT.md`.
 
 ## Матрица Metrics facts
 

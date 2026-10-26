@@ -3,7 +3,8 @@
 Публичный `materialize_graph_profile` поддерживает точные пары
 `canonical.full / 1`, `inventory.minimal / 1` и
 `structure.declarations / 1`, `dependency.files / 1` и
-`dependency.architecture / 1` и `calls.topology / 1`. Первый профиль возвращает
+`dependency.architecture / 1`, `calls.topology / 1` и `calls.detailed / 1`.
+Первый профиль возвращает
 глубокую копию полного Graph DTO schema 1 / Parser semantics 7 и не является
 Graph View: он не получает view envelope или новый fingerprint и остаётся
 допустимым входом Metrics Core. `project_graph_view` по-прежнему принимает
@@ -126,3 +127,15 @@ positive weights. `module_call_owner_ids` отдельно маркирует fi
 представлены edges; суммы weights обязаны совпадать с двумя exact buckets.
 Подробный whitelist, query guarantee и контрпримеры зафиксированы в
 `DATA_PROFILES_CALLS_TOPOLOGY_CONTRACT.md`.
+
+## `calls.detailed` v1
+
+Профиль дополняет exact weighted call topology полными canonical callsites,
+raw complexity facts и call-related owner structural facts. Все roots
+сохраняются как collision-safe Metrics label context; `module_call_owner_ids`
+по-прежнему отделяет реальные module-level callers от context-only roots.
+
+Validator проверяет occurrence resolution rules, candidate closure, точное
+соответствие exact callsites weighted `calls`/`awaits`, ownership, complexity и
+полную structural-owner population. Подробный whitelist, query guarantee и
+контрпримеры определены в `DATA_PROFILES_CALLS_DETAILED_CONTRACT.md`.

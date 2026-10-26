@@ -17,6 +17,8 @@ METRICS_ARCHITECTURE_ID = "metrics.architecture"
 METRICS_ARCHITECTURE_VERSION = 1
 CALLS_TOPOLOGY_ID = "calls.topology"
 CALLS_TOPOLOGY_VERSION = 1
+CALLS_DETAILED_ID = "calls.detailed"
+CALLS_DETAILED_VERSION = 1
 
 _METRICS_PROFILES = {
     METRICS_OVERVIEW_ID: (
@@ -132,6 +134,24 @@ _CALLS_TOPOLOGY_OMITS = (
     "type_references", "type_relations",
 )
 
+_CALLS_DETAILED_PRESERVES = (
+    "call_activity_structural_basis",
+    "call_graph_label_disambiguation_context",
+    "callable_complexity_facts",
+    "canonical_callable_nodes",
+    "canonical_callable_ownership",
+    "canonical_callsite_edge_correspondence",
+    "canonical_callsites",
+    "exact_weighted_call_topology",
+    "module_level_call_owner_population",
+    "synthetic_method_identity",
+)
+_CALLS_DETAILED_OMITS = (
+    "class_kind", "diagnostics", "direct_import_occurrence_facts", "edge_locations",
+    "field_access_relations", "field_and_constant_nodes", "import_references",
+    "import_relations", "node_locations", "type_references", "type_relations",
+)
+
 
 def select_graph_profile(profile_id: object, profile_version: object) -> str:
     """Validate an exact graph profile and return its artifact kind."""
@@ -152,6 +172,9 @@ def select_graph_profile(profile_id: object, profile_version: object) -> str:
         artifact_kind = "graph_view"
     elif profile_id == CALLS_TOPOLOGY_ID:
         expected_version = CALLS_TOPOLOGY_VERSION
+        artifact_kind = "graph_view"
+    elif profile_id == CALLS_DETAILED_ID:
+        expected_version = CALLS_DETAILED_VERSION
         artifact_kind = "graph_view"
     else:
         raise ValueError(f"Unsupported graph profile {profile_id!r}")
@@ -184,6 +207,11 @@ def profile_metadata(profile_id: object, profile_version: object) -> dict[str, o
         kind = "query_lossless"
         preserves = _CALLS_TOPOLOGY_PRESERVES
         omits = _CALLS_TOPOLOGY_OMITS
+    elif profile_id == CALLS_DETAILED_ID:
+        expected_version = CALLS_DETAILED_VERSION
+        kind = "query_lossless"
+        preserves = _CALLS_DETAILED_PRESERVES
+        omits = _CALLS_DETAILED_OMITS
     else:
         raise ValueError(f"Unsupported graph view profile {profile_id!r}")
     if type(profile_version) is not int or profile_version != expected_version:
@@ -228,6 +256,7 @@ __all__ = [
     "CANONICAL_FULL_ID",
     "CANONICAL_FULL_VERSION",
     "CALLS_TOPOLOGY_ID", "CALLS_TOPOLOGY_VERSION",
+    "CALLS_DETAILED_ID", "CALLS_DETAILED_VERSION",
     "DEPENDENCY_FILES_ID",
     "DEPENDENCY_FILES_VERSION",
     "DEPENDENCY_ARCHITECTURE_ID",

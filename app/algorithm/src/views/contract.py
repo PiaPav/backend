@@ -7,7 +7,7 @@ import re
 from pathlib import PurePosixPath
 from typing import Any, Mapping
 
-from graph_dto import CLASS_KINDS, NODE_KINDS
+from graph_dto import CLASS_KINDS, CONTROL_KINDS, NODE_KINDS, OCCURRENCE_KINDS
 
 from .registry import profile_metadata
 from .metrics_contract import PACKAGE_GROUPING
@@ -50,13 +50,21 @@ def _compact_content(view: Mapping[str, Any]) -> bytes:
     payload = content.get("payload")
     if isinstance(payload, Mapping):
         content["payload"] = dict(payload)
-        for name in ("nodes", "edges", "import_references"):
+        for name in ("nodes", "edges", "import_references", "callsites"):
             values = payload.get(name)
             if isinstance(values, list):
                 content["payload"][name] = sorted(
                     values,
                     key=lambda item: item.get("id", "") if isinstance(item, Mapping) else "",
                 )
+        facts = payload.get("owner_structural_facts")
+        if isinstance(facts, list):
+            content["payload"]["owner_structural_facts"] = sorted(
+                facts, key=lambda item: item.get("owner_id", "") if isinstance(item, Mapping) else ""
+            )
+        owner_ids = payload.get("module_call_owner_ids")
+        if isinstance(owner_ids, list):
+            content["payload"]["module_call_owner_ids"] = sorted(owner_ids, key=lambda item: str(item))
     return json.dumps(
         content, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
@@ -357,6 +365,167 @@ def _validate_calls_topology(payload: Mapping[str, Any]) -> None:
         _error("non-exact callsite counts must cover module call owners without an exact root edge")
 
 
+def _view_location(value: Any, where: str, path: str | None = None) -> tuple[int, int]:
+    location = _object(value, {"path", "line", "column"}, where)
+    _relative_path(location.get("path"), f"{where}.path")
+    if path is not None and location["path"] != path:
+        _error(f"{where}.path must match its owner path")
+    if type(location.get("line")) is not int or location["line"] < 1:
+        _error(f"{where}.line is invalid")
+    if type(location.get("column")) is not int or location["column"] < 0:
+        _error(f"{where}.column is invalid")
+    return location["line"], location["column"]
+
+
+def _validate_view_complexity(value: Any, where: str, path: str) -> None:
+    facts = _object(value, {"span", "is_async", "controls", "occurrences"}, where)
+    if type(facts.get("is_async")) is not bool:
+        _error(f"{where}.is_async must be a boolean")
+    span = _object(facts.get("span"), {"start", "end"}, f"{where}.span")
+    start = _view_location(span.get("start"), f"{where}.span.start", path)
+    end = _view_location(span.get("end"), f"{where}.span.end", path)
+    if end < start: _error(f"{where}.span is reversed")
+    controls, occurrences = facts.get("controls"), facts.get("occurrences")
+    if not isinstance(controls, list) or not isinstance(occurrences, list):
+        _error(f"{where} controls and occurrences must be arrays")
+    depths: list[int] = []
+    required = {"kind", "parent_index", "location", "operand_count", "case_count", "filter_count"}
+    for index, value in enumerate(controls):
+        item_where = f"{where}.controls[{index}]"
+        if not isinstance(value, Mapping) or not required <= set(value) or not set(value) <= required | {"expression"}:
+            _error(f"{item_where} has invalid fields")
+        kind, parent = value.get("kind"), value.get("parent_index")
+        if kind not in CONTROL_KINDS: _error(f"{item_where}.kind is invalid")
+        if parent is not None and (type(parent) is not int or parent < 0 or parent >= index):
+            _error(f"{item_where}.parent_index must reference an earlier control")
+        depths.append(0 if parent is None else depths[parent] + 1)
+        position = _view_location(value.get("location"), f"{item_where}.location", path)
+        if not start <= position <= end: _error(f"{item_where}.location is outside the callable span")
+        for field, used, minimum in (("operand_count", kind == "boolean", 2),
+                                     ("case_count", kind == "match", 1),
+                                     ("filter_count", kind == "comprehension", 0)):
+            count = value.get(field)
+            if type(count) is not int or (used and count < minimum) or (not used and count != 0):
+                _error(f"{item_where}.{field} is invalid")
+        if kind == "exception_handler":
+            if not isinstance(value.get("expression"), str) or not value["expression"]:
+                _error(f"{item_where}.expression is required")
+        elif "expression" in value: _error(f"{item_where}.expression is not allowed")
+    for index, value in enumerate(occurrences):
+        item_where = f"{where}.occurrences[{index}]"
+        if not isinstance(value, Mapping) or not {"kind", "location"} <= set(value) or not set(value) <= {"kind", "location", "expression"}:
+            _error(f"{item_where} has invalid fields")
+        kind = value.get("kind")
+        if kind not in OCCURRENCE_KINDS: _error(f"{item_where}.kind is invalid")
+        position = _view_location(value.get("location"), f"{item_where}.location", path)
+        if not start <= position <= end: _error(f"{item_where}.location is outside the callable span")
+        expression = value.get("expression")
+        if kind == "self_attribute" and (not isinstance(expression, str) or not expression):
+            _error(f"{item_where}.expression is required")
+        if "expression" in value and kind not in {"raise", "self_attribute"}:
+            _error(f"{item_where}.expression is not allowed")
+        if kind == "raise" and "expression" in value and (not isinstance(expression, str) or not expression):
+            _error(f"{item_where}.expression is invalid")
+
+
+def _validate_calls_detailed(payload: Mapping[str, Any]) -> None:
+    payload = _object(payload, {"nodes", "edges", "callsites", "module_call_owner_ids", "owner_structural_facts"}, "payload")
+    if not all(isinstance(payload[name], list) for name in payload):
+        _error("calls.detailed payload fields must be arrays")
+    nodes: dict[str, Mapping[str, Any]] = {}; node_ids: list[str] = []
+    for index, value in enumerate(payload["nodes"]):
+        where = f"payload.nodes[{index}]"
+        if not isinstance(value, Mapping): _error(f"{where} must be an object")
+        kind = value.get("kind"); keys = {"id", "kind", "qualified_name", "path"}
+        if kind not in {"file", "module"}: keys.add("parent_id")
+        if kind in {"function", "method"}:
+            keys.add("synthetic" if value.get("synthetic") is True else "complexity_facts")
+        node = _object(value, keys, where); identifier = node.get("id")
+        if not isinstance(identifier, str) or not identifier or identifier in nodes: _error(f"{where}.id is missing or duplicate")
+        if kind not in {"file", "module", "class", "function", "method"}: _error(f"{where}.kind is invalid")
+        if not isinstance(node.get("qualified_name"), str): _error(f"{where}.qualified_name must be a string")
+        _relative_path(node.get("path"), f"{where}.path")
+        if kind not in {"file", "module"} and (not isinstance(node.get("parent_id"), str) or not node["parent_id"]): _error(f"{where}.parent_id is invalid")
+        if "synthetic" in node and (kind != "method" or node["synthetic"] is not True): _error(f"{where}.synthetic is invalid")
+        if "complexity_facts" in node: _validate_view_complexity(node["complexity_facts"], f"{where}.complexity_facts", node["path"])
+        nodes[identifier] = node; node_ids.append(identifier)
+    if node_ids != sorted(node_ids): _error("payload.nodes must have unique lexicographically sorted IDs")
+
+    owners: dict[str, str] = {}; triples: dict[tuple[str, str, str], int] = {}; edge_ids: list[str] = []
+    for index, value in enumerate(payload["edges"]):
+        where = f"payload.edges[{index}]"; kind = value.get("kind") if isinstance(value, Mapping) else None
+        edge = _object(value, _EDGE_KEYS if kind == "contains" else _CALL_EDGE_KEYS, where)
+        identifier = edge.get("id")
+        if not isinstance(identifier, str) or not identifier or identifier in edge_ids or identifier in nodes: _error(f"{where}.id is missing or duplicate")
+        source, target = edge.get("source_id"), edge.get("target_id")
+        if source not in nodes or target not in nodes: _error(f"{where} has a dangling endpoint")
+        if kind == "contains":
+            pair = (nodes[source]["kind"], nodes[target]["kind"])
+            if pair not in {("file", "class"), ("module", "class"), ("file", "function"), ("module", "function"), ("class", "method")}:
+                _error(f"{where} has invalid ownership kinds")
+            if target in owners: _error(f"node {target!r} has multiple containers")
+            owners[target] = source
+        elif kind in {"calls", "awaits"}:
+            if nodes[source]["kind"] not in {"file", "module", "function", "method"} or nodes[target]["kind"] not in {"function", "method"}: _error(f"{where} has invalid call endpoint kinds")
+            triple = (source, target, kind); weight = edge.get("weight")
+            if triple in triples: _error(f"{where} duplicates a call triple")
+            if type(weight) is not int or weight <= 0: _error(f"{where}.weight must be a positive integer")
+            triples[triple] = weight
+        else: _error(f"{where}.kind is invalid")
+        edge_ids.append(identifier)
+    if edge_ids != sorted(edge_ids): _error("payload.edges must have unique lexicographically sorted IDs")
+    for identifier, node in nodes.items():
+        if node["kind"] in {"file", "module"}:
+            if identifier in owners: _error(f"root {identifier!r} must not have an owner")
+        elif owners.get(identifier) != node["parent_id"]: _error(f"node {identifier!r} parent_id is inconsistent with contains edges")
+        if node["kind"] == "class" and not any(owner == identifier and nodes[child]["kind"] == "method" for child, owner in owners.items()): _error(f"class {identifier!r} must own at least one method")
+        current, seen = identifier, set()
+        while current in owners:
+            if current in seen: _error("contains edges must form an acyclic forest")
+            seen.add(current); current = owners[current]
+        if nodes[current]["kind"] not in {"file", "module"}: _error(f"node {identifier!r} has no owning root")
+        if node["path"] != nodes[current]["path"]: _error(f"node {identifier!r} path must match its root")
+
+    observed: dict[tuple[str, str, str], int] = {}; root_callers: set[str] = set(); callsite_ids: list[str] = []
+    callsite_keys = {"id", "caller_id", "expression", "location", "syntactic_depth", "resolution", "target_id", "candidate_ids", "awaited"}
+    for index, value in enumerate(payload["callsites"]):
+        where = f"payload.callsites[{index}]"; callsite = _object(value, callsite_keys, where); identifier = callsite.get("id")
+        if not isinstance(identifier, str) or not identifier or identifier in callsite_ids: _error(f"{where}.id is missing or duplicate")
+        caller = callsite.get("caller_id")
+        if caller not in nodes or nodes[caller]["kind"] not in {"file", "module", "function", "method"}: _error(f"{where}.caller_id is invalid")
+        if nodes[caller]["kind"] in {"file", "module"}: root_callers.add(caller)
+        if not isinstance(callsite.get("expression"), str) or not callsite["expression"]: _error(f"{where}.expression is required")
+        _view_location(callsite.get("location"), f"{where}.location")
+        if type(callsite.get("syntactic_depth")) is not int or callsite["syntactic_depth"] < 0: _error(f"{where}.syntactic_depth is invalid")
+        if type(callsite.get("awaited")) is not bool: _error(f"{where}.awaited must be a boolean")
+        status, target, candidates = callsite.get("resolution"), callsite.get("target_id"), callsite.get("candidate_ids")
+        if status not in _CALL_STATUSES: _error(f"{where}.resolution is invalid")
+        if (not isinstance(candidates, list) or any(not isinstance(item, str) for item in candidates)
+                or candidates != sorted(candidates) or len(candidates) != len(set(candidates))):
+            _error(f"{where}.candidate_ids must be unique and sorted")
+        if any(item not in nodes or nodes[item]["kind"] not in {"function", "method"} for item in candidates): _error(f"{where}.candidate_ids are invalid")
+        if status == "exact":
+            if target not in nodes or nodes[target]["kind"] not in {"function", "method"} or candidates: _error(f"{where} exact resolution requires exactly target_id")
+            triple = (caller, target, "awaits" if callsite["awaited"] else "calls"); observed[triple] = observed.get(triple, 0) + 1
+        elif status == "ambiguous":
+            if target is not None or len(candidates) < 2: _error(f"{where} ambiguous resolution requires >=2 candidates")
+        elif target is not None or candidates: _error(f"{where} non-internal resolution cannot have targets")
+        callsite_ids.append(identifier)
+    if callsite_ids != sorted(callsite_ids): _error("payload.callsites must have unique lexicographically sorted IDs")
+    if observed != triples: _error("call edge triples and weights must exactly match exact callsites")
+    owner_ids = payload["module_call_owner_ids"]
+    if any(not isinstance(item, str) for item in owner_ids) or owner_ids != sorted(owner_ids) or len(owner_ids) != len(set(owner_ids)) or set(owner_ids) != root_callers: _error("module_call_owner_ids must exactly equal sorted root callsite callers")
+
+    expected_facts = {identifier for identifier, node in nodes.items() if node["kind"] in {"file", "module"} or (node["kind"] in {"function", "method"} and node.get("synthetic") is not True)}
+    fact_ids: list[str] = []
+    for index, value in enumerate(payload["owner_structural_facts"]):
+        fact = _object(value, {"owner_id", "call_occurrences"}, f"payload.owner_structural_facts[{index}]"); owner = fact.get("owner_id")
+        if owner not in expected_facts or owner in fact_ids: _error(f"payload.owner_structural_facts[{index}].owner_id is invalid or duplicate")
+        if type(fact.get("call_occurrences")) is not int or fact["call_occurrences"] < 0: _error(f"payload.owner_structural_facts[{index}].call_occurrences is invalid")
+        fact_ids.append(owner)
+    if fact_ids != sorted(expected_facts): _error("owner_structural_facts must exactly contain every structural owner in sorted order")
+
+
 def validate_graph_view_v1(
     view: Mapping[str, Any], *, verify_fingerprint: bool = True
 ) -> None:
@@ -404,6 +573,12 @@ def validate_graph_view_v1(
         return
     if profile["id"] == "calls.topology":
         _validate_calls_topology(root.get("payload"))
+        fingerprint = root.get("view_fingerprint")
+        if not isinstance(fingerprint, str) or not _HEX_64.fullmatch(fingerprint): _error("view_fingerprint must be lowercase SHA-256 hex")
+        if verify_fingerprint and fingerprint != graph_view_fingerprint(root): _error("view_fingerprint does not match canonical content")
+        return
+    if profile["id"] == "calls.detailed":
+        _validate_calls_detailed(root.get("payload"))
         fingerprint = root.get("view_fingerprint")
         if not isinstance(fingerprint, str) or not _HEX_64.fullmatch(fingerprint): _error("view_fingerprint must be lowercase SHA-256 hex")
         if verify_fingerprint and fingerprint != graph_view_fingerprint(root): _error("view_fingerprint does not match canonical content")

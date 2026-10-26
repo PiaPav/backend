@@ -19,6 +19,7 @@ from .projections.dependency_files import _project_dependency_files_v1
 from .projections.dependency_architecture import _project_dependency_architecture_v1
 from .projections.structure_declarations import _project_structure_declarations_v1
 from .projections.calls_topology import _project_calls_topology_v1
+from .projections.calls_detailed import _project_calls_detailed_v1
 from .registry import profile_metadata, select_graph_profile, summary_profile_metadata
 from .registry import metrics_profile_metadata
 
@@ -57,6 +58,8 @@ def materialize_graph_profile(
         return _project_dependency_architecture_v1(source_graph)
     if profile_id == "calls.topology" and profile_kind == "graph_view":
         return _project_calls_topology_v1(source_graph)
+    if profile_id == "calls.detailed" and profile_kind == "graph_view":
+        return _project_calls_detailed_v1(source_graph)
     if profile_id == "inventory.minimal" and profile_kind == "graph_summary":
         return _project_inventory_minimal_v1(source_graph)
     if profile_id == "canonical.full" and profile_kind == "canonical":
@@ -80,6 +83,8 @@ def project_graph_view(
         return _project_dependency_architecture_v1(source_graph)
     if profile_id == "calls.topology":
         return _project_calls_topology_v1(source_graph)
+    if profile_id == "calls.detailed":
+        return _project_calls_detailed_v1(source_graph)
     raise ValueError(f"Unsupported graph view profile {profile_id!r}")
 
 

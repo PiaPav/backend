@@ -15,7 +15,7 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 | 0. Спецификация | **в работе** |
 | 1. Общий envelope | **выполнено для Graph View, Graph Summary и Metrics View v1** |
 | 2. Первые безопасные Graph Views | **выполнено для initial scope** |
-| 3. Domain Graph Views | **в работе: dependency architecture и calls topology выполнены** |
+| 3. Domain Graph Views | **в работе: dependency architecture, calls topology и calls detailed выполнены** |
 | 4. Metrics Views | **в работе: initial profiles выполнены** |
 | 5. Aggregates | **не выполнено** |
 | 6. Consumer integration | **не выполнено** |
@@ -46,7 +46,8 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 3. **Выполнен для зарегистрированных профилей.** Unified registry принимает
    точные пары `canonical.full` / `1`, `inventory.minimal` / `1`,
    `structure.declarations` / `1`, `dependency.files` / `1`,
-   `dependency.architecture` / `1` и `calls.topology` / `1`;
+   `dependency.architecture` / `1`, `calls.topology` / `1` и
+   `calls.detailed` / `1`;
    специализированные metadata registries
    разделяют Summary и View. Defaults, `latest` и fallback отсутствуют.
 4. **Выполнен полностью для текущего envelope.** Nodes и edges сортируются по
@@ -84,15 +85,16 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 2. **Выполнен полностью для v1.** `calls.topology` сохраняет callable ownership
    closure, canonical weighted `calls`/`awaits`, module-level caller population
    и joint resolution/awaited occurrence counters без individual callsites.
-3. **Не выполнен.** `calls.detailed` должен сохранить callsites и complexity
-   basis, но его контракт пока не зафиксирован.
+3. **Выполнен полностью для v1.** `calls.detailed` сохраняет полные callsites,
+   exact weighted topology, raw callable complexity, call-related structural
+   facts и global root label context без import/type данных.
 4. **Не выполнен.** `types.topology` и его referential closure пока не
    реализованы.
 5. **Не выполнен.** Для `objects.metrics_basis` ещё требуется матрица metric ->
    required facts и точный whitelist.
 6. **Выполнен частично.** Query guarantee и контрпримеры документированы для
-   `structure.declarations`, `dependency.architecture` и `calls.topology`; для
-   остальных domain-профилей они отсутствуют.
+   `structure.declarations`, `dependency.architecture`, `calls.topology` и
+   `calls.detailed`; для остальных domain-профилей они отсутствуют.
 
 ## Этап 4. Metrics Views
 
@@ -200,19 +202,24 @@ exact ordinary calls является свойством неизменённо�
 Для `calls.topology` semantic-прогон дал **14 passed**, golden-прогон —
 **18 passed**, а полный прогон разрешённой области без `gpt_work_dir` —
 **360 passed, 0 failed, 0 skipped**.
+Для `calls.detailed` профильный прогон дал **7 passed**, все views —
+**195 passed**, а полный прогон разрешённой области без `gpt_work_dir` —
+**367 passed, 0 failed, 0 skipped**. Test-only Metrics reconstruction подтвердила
+точное равенство секции `call_graph`, включая duplicate root label context.
 Полный collection `app/algorithm/src` остановлен тремя посторонними import
 errors в `gpt_work_dir`; тесты в этом прогоне не исполнялись.
 
 Первый набор безопасных Graph profiles реализован полностью. Для первых двух
 compact profiles зафиксирована и проверена benchmark family v2. Отклонённый
 draft v1 исторически не прошёл 45% из-за дефекта состава fixture. Начальные
-Metrics Views и первые два domain Graph Views также реализованы; остальные
+Metrics Views и первые три domain Graph Views также реализованы; остальные
 domain и Metrics profiles, truncation, aggregates и consumer integration
 остаются в backlog.
 
 ## Приоритет доработок
 
-1. Спроектировать следующий domain Graph View `calls.detailed`, не смешивая
-   canonical weighted topology с occurrence-level callsites.
-2. До реализации top-k Metrics profiles зафиксировать truncation metadata и
+1. Зафиксировать golden size benchmark `calls.detailed` для неизменного target
+   60% без подгонки accepted fixtures.
+2. Спроектировать `types.topology` и его referential closure.
+3. До реализации top-k Metrics profiles зафиксировать truncation metadata и
    benchmark fixtures, не меняя full Metrics semantics.
