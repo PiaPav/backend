@@ -1,4 +1,4 @@
-# Контракт начальных Metrics profiles
+# Контракт Metrics profiles v1
 
 Этот документ фиксирует Metrics View DTO schema 1 для полного Metrics DTO
 schema 1 / Metrics semantics 4. Projector принимает только versioned full
@@ -51,9 +51,50 @@ POSIX-сегментом root path, path без `/` относится к `<root
 использует distinct exact non-self pairs, package topology — distinct
 cross-package pairs. Это не Python package discovery.
 
+## `metrics.quality` v1
+
+Whitelist `payload.metrics`:
+
+- `size.functions` и `size.methods`;
+- полный текущий `code_quality` без пересчёта, повторного округления или
+  изменения порядка строк.
+
+Профиль является query-lossless для текущей quality-секции полного Metrics DTO.
+`code_quality.analyzed_callables` равен сумме `size.functions + size.methods`:
+обе populations включают functions и несинтетические methods.
+
+`threshold_policy` descriptor version 1 фиксирует действующие правила Metrics
+semantics 4:
+
+- `high_complexity_callables`: cyclomatic `>= 10` **или** cognitive `>= 15`;
+- `deeply_nested_callables`: nesting `>= 4`;
+- `largest_callables`: не более 10 строк в порядке lines descending, затем node
+  ascending; ties не расширяют результат сверх limit.
+
+Threshold-filtered списки не являются усечёнными. Единственный усечённый список
+профиля — `metrics.code_quality.largest_callables`.
+
+## Truncation metadata
+
+`metrics.quality` содержит sidecar `truncation_metadata` descriptor version 1,
+не изменяя форму скопированной quality-секции. Descriptor для
+`metrics.code_quality.largest_callables` содержит:
+
+- `limit: 10`;
+- `returned_count` — число возвращённых строк;
+- `total_matching` — число кандидатов после фильтрации и до limit; для этого
+  ranking фильтр тождественно истинный, поэтому значение равно
+  `code_quality.analyzed_callables`;
+- `truncated` — `total_matching > returned_count`;
+- детерминированный порядок `lines descending`, `node ascending`.
+
+Значение `total_matching` не означает число строк, равных граничной строке
+ranking. Изменение limit, порядка, tie policy или смысла population требует
+новой версии profile.
+
 ## Population metadata
 
-Оба профиля содержат `population_metadata` descriptor version 1. Он определяет
+Все профили содержат `population_metadata` descriptor version 1. Он определяет
 populations, rounding policy и denominator binding для каждого опубликованного
 average/rate/density. Descriptor не является новым результатом Metrics и не
 содержит пересчитанных denominator values.
@@ -83,6 +124,10 @@ average/rate/density. Descriptor не является новым результ
 `not_materialized`. Его нельзя подменять call-graph-owner population или
 восстанавливать из округлённого значения.
 
+Для `metrics.quality` descriptor содержит только callable population и bindings
+трёх averages к `code_quality.analyzed_callables`; при пустой population полный
+Metrics DTO публикует `0.0`.
+
 ## Инварианты
 
 - каждый metric leaf равен одноимённому leaf полного Metrics DTO, включая тип;
@@ -98,5 +143,10 @@ average/rate/density. Descriptor не является новым результ
   bridges уникальны и канонически отсортированы;
 - изменение population, grouping, whitelist или denominator policy требует
   новой profile version;
+- для quality выполняются `analyzed_callables = size.functions + size.methods`
+  и `len(largest_callables) = min(analyzed_callables, 10)`;
+- строки quality rankings имеют канонический порядок, положительные `lines` и
+  cyclomatic complexity, а threshold rows удовлетворяют опубликованным
+  включительным границам;
 - Graph DTO, Graph View, Graph Summary и raw `calculate_graph_metrics()` result
   не являются допустимым source.

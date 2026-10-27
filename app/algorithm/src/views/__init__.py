@@ -14,6 +14,7 @@ from .summary_contract import graph_summary_fingerprint, serialize_graph_summary
 from .metrics_contract import metrics_view_fingerprint, serialize_metrics_view, validate_metrics_source_v1, validate_metrics_view_v1
 from .projections.metrics_architecture import _project_metrics_architecture_v1
 from .projections.metrics_overview import _project_metrics_overview_v1
+from .projections.metrics_quality import _project_metrics_quality_v1
 from .projections.inventory_minimal import _project_inventory_minimal_v1
 from .projections.dependency_files import _project_dependency_files_v1
 from .projections.dependency_architecture import _project_dependency_architecture_v1
@@ -36,6 +37,8 @@ def materialize_metrics_profile(
         return _project_metrics_overview_v1(source_metrics)
     if profile_id == "metrics.architecture":
         return _project_metrics_architecture_v1(source_metrics)
+    if profile_id == "metrics.quality":
+        return _project_metrics_quality_v1(source_metrics)
     raise ValueError(f"Unsupported metrics profile {profile_id!r}")
 
 

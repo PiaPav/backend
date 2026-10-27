@@ -47,3 +47,37 @@ C:\Users\Red0c\PycharmProjects\PiaPav\backend\app\algorithm\.venv\Scripts\python
 Copy the printed JSON into `graph_profiles_golden_v2.json` with the normal
 editor, inspect its changes, and then run the tests. There is no auto-update
 mode.
+
+## Golden Metrics-profile fixtures
+
+Metrics benchmark family v1, рассчитанная из Graph family с 4/10 компонентами,
+сохранена как неактивная отклонённая история. Она не прошла заранее заданные
+targets `metrics.overview <= 20%` и, для medium fixture,
+`metrics.architecture <= 50%`. Её manifest не участвует в acceptance и не был
+переписан после измерения.
+
+Активная `representative_metrics_v2` заранее фиксирует 20 компонентов для
+medium и 50 для large. Каждый компонент сохраняет ту же проверяемую Graph DTO
+композицию, но family является независимой от принятого Graph benchmark и
+рассчитывает полный Metrics DTO только через неизменённый Metrics Core.
+Populations составляют 40/100 анализируемых callables, 60/150 call-graph nodes
+и 21/51 dependency roots. Targets до измерения зафиксированы как overview 20%,
+architecture 50% и quality 50%.
+
+Все targets пройдены на полном compact UTF-8 JSON:
+
+- overview: `4560 / 23838 = 19.1291%` и
+  `4565 / 40974 = 11.1412%`;
+- architecture: `6902 / 23838 = 28.9538%` и
+  `10593 / 40974 = 25.8530%`;
+- quality: `3211 / 23838 = 13.4701%` и
+  `3213 / 40974 = 7.8416%`.
+
+Candidate manifest печатается, но никогда не записывается автоматически:
+
+```text
+C:\Users\Red0c\PycharmProjects\PiaPav\backend\app\algorithm\.venv\Scripts\python.exe -m views.test_metrics_golden_sizes --print-manifest
+```
+
+Активный результат хранится в `metrics_profiles_golden_v2.json`; manifest v1
+остаётся audit trail запрета на post-measurement adjustment.

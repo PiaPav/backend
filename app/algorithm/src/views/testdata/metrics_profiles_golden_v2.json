@@ -1,0 +1,133 @@
+{
+  "fixture_family": "representative_metrics_v2",
+  "fixtures": [
+    {
+      "artifacts": [
+        {
+          "compact_bytes": 4560,
+          "full_compact_sha256": "a93dd956b13ec21f636c3cb91b4da41d97dd7cd2310962cf5384fdae5095ff47",
+          "profile": {
+            "id": "metrics.overview",
+            "version": 1
+          }
+        },
+        {
+          "compact_bytes": 6902,
+          "full_compact_sha256": "9391bf32e09b9f167f9800fe94ad982f39ee74e1f9201d7c2deb8f417cd7b839",
+          "profile": {
+            "id": "metrics.architecture",
+            "version": 1
+          }
+        },
+        {
+          "compact_bytes": 3211,
+          "full_compact_sha256": "2b359c93d1dd4d1a22b7c9db6eba60770cbd9e409b21feea40bd59ae84f95369",
+          "profile": {
+            "id": "metrics.quality",
+            "version": 1
+          }
+        }
+      ],
+      "name": "medium",
+      "source": {
+        "compact_bytes": 23838,
+        "full_compact_sha256": "c34eaa715e6f9119ab64262b466276d64b20673d020aa0caefcd27a185f5747d",
+        "graph_fingerprint": "c9fe1b22d4ae705706782cb8813c24f776c3cef47a324bdd2f7df48124edb15f",
+        "graph_schema_version": 1,
+        "metrics_schema_version": 1,
+        "metrics_semantics_version": 4,
+        "populations": {
+          "analyzed_callables": 40,
+          "call_graph_nodes": 60,
+          "classes_analyzed": 20,
+          "dependency_nodes": 21,
+          "functions": 20,
+          "methods": 20
+        }
+      },
+      "targets": {
+        "metrics.architecture": {
+          "maximum_view_basis": 50,
+          "source_basis": 100
+        },
+        "metrics.overview": {
+          "maximum_view_basis": 20,
+          "source_basis": 100
+        },
+        "metrics.quality": {
+          "maximum_view_basis": 50,
+          "source_basis": 100
+        }
+      }
+    },
+    {
+      "artifacts": [
+        {
+          "compact_bytes": 4565,
+          "full_compact_sha256": "758fc889b465d9531d9b1725c77184d020b08e7fe37e015259702ea9a255ed0f",
+          "profile": {
+            "id": "metrics.overview",
+            "version": 1
+          }
+        },
+        {
+          "compact_bytes": 10593,
+          "full_compact_sha256": "6eef887086bd0d01e94fcc781a49ea1edf9f32f09da00972aad62a45054af0e1",
+          "profile": {
+            "id": "metrics.architecture",
+            "version": 1
+          }
+        },
+        {
+          "compact_bytes": 3213,
+          "full_compact_sha256": "93f74fb74ca0466a4931944b917a179b5e48d30749ac7a550d8651d606e721f7",
+          "profile": {
+            "id": "metrics.quality",
+            "version": 1
+          }
+        }
+      ],
+      "name": "large",
+      "source": {
+        "compact_bytes": 40974,
+        "full_compact_sha256": "ca768197cd784a5df83a99d9502b4f8f1cb9912c6d18f2d74b3ea6d9b3c031a7",
+        "graph_fingerprint": "bc84cf0eda2012e69f307ff9100b141738e382aa2c8cbbbbab3405789f3ef4e6",
+        "graph_schema_version": 1,
+        "metrics_schema_version": 1,
+        "metrics_semantics_version": 4,
+        "populations": {
+          "analyzed_callables": 100,
+          "call_graph_nodes": 150,
+          "classes_analyzed": 50,
+          "dependency_nodes": 51,
+          "functions": 50,
+          "methods": 50
+        }
+      },
+      "targets": {
+        "metrics.architecture": {
+          "maximum_view_basis": 50,
+          "source_basis": 100
+        },
+        "metrics.overview": {
+          "maximum_view_basis": 20,
+          "source_basis": 100
+        },
+        "metrics.quality": {
+          "maximum_view_basis": 50,
+          "source_basis": 100
+        }
+      }
+    }
+  ],
+  "manifest_schema_version": 1,
+  "serialization": {
+    "encoding": "utf-8",
+    "ensure_ascii": false,
+    "separators": [
+      ",",
+      ":"
+    ],
+    "sort_keys": true
+  }
+}

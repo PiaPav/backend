@@ -165,3 +165,131 @@ def test_source_and_architecture_view_reject_malformed_bridges(bridge: list) -> 
     view = project_metrics_view(_source(), profile_id="metrics.architecture", profile_version=1)
     view["payload"]["metrics"]["architecture"]["bridge_dependencies"] = bridge
     with pytest.raises(ValueError): validate_metrics_view_v1(view, verify_fingerprint=False)
+
+
+@pytest.mark.parametrize("profile", ["metrics.quality"])
+@pytest.mark.parametrize("version", [True, 0, 2])
+def test_quality_dispatch_has_no_version_fallback(profile: str, version: object) -> None:
+    with pytest.raises(ValueError):
+        project_metrics_view(_source(), profile_id=profile, profile_version=version)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "population", "zero-largest-lines", "below-complexity-threshold",
+        "below-nesting-threshold", "zero-broad-handler-count",
+    ],
+)
+def test_quality_source_invariants_are_rejected(mutation: str) -> None:
+    source = _source()
+    quality = source["metrics"]["code_quality"]
+    if mutation == "population":
+        quality["analyzed_callables"] += 1
+    elif mutation == "zero-largest-lines":
+        source["metrics"]["size"].update(functions=1, methods=0)
+        quality["analyzed_callables"] = 1
+        quality["largest_callables"] = [{"node": "bad", "lines": 0}]
+    elif mutation == "below-complexity-threshold":
+        quality["high_complexity_callables"] = [{"node": "bad", "cyclomatic": 9,
+                                                   "cognitive": 14, "lines": 1, "nesting": 0}]
+    elif mutation == "below-nesting-threshold":
+        quality["maximum_control_nesting"] = 3
+        quality["deeply_nested_callables"] = [{"node": "bad", "nesting": 3}]
+    else:
+        quality["exceptions"]["broad_handlers"] = [{"node": "bad", "count": 0}]
+    with pytest.raises(ValueError): validate_metrics_source_v1(source)
+
+
+def test_quality_truncation_metadata_is_strict() -> None:
+    view = project_metrics_view(_source(), profile_id="metrics.quality", profile_version=1)
+    descriptor = view["payload"]["truncation_metadata"]["rankings"]["metrics.code_quality.largest_callables"]
+    descriptor["total_matching"] += 1
+    with pytest.raises(ValueError, match="truncation"): validate_metrics_view_v1(view, verify_fingerprint=False)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda view: view["payload"]["population_metadata"].update(descriptor_version=True),
+        lambda view: view["payload"]["population_metadata"]["metric_denominators"][0].update(zero_denominator_result=False),
+        lambda view: view["payload"]["threshold_policy"].update(descriptor_version=True),
+        lambda view: view["payload"]["truncation_metadata"].update(descriptor_version=True),
+        lambda view: view["payload"]["truncation_metadata"]["rankings"]["metrics.code_quality.largest_callables"].update(returned_count=True),
+        lambda view: view["payload"]["truncation_metadata"]["rankings"]["metrics.code_quality.largest_callables"].update(truncated=0),
+    ],
+)
+def test_quality_static_metadata_rejects_bool_numeric_substitution(mutate) -> None:
+    view = project_metrics_view(_source(), profile_id="metrics.quality", profile_version=1)
+    mutate(view)
+    with pytest.raises(ValueError):
+        validate_metrics_view_v1(view, verify_fingerprint=False)
+
+
+def test_architecture_package_grouping_rejects_bool_descriptor_version() -> None:
+    view = project_metrics_view(_source(), profile_id="metrics.architecture", profile_version=1)
+    view["payload"]["package_grouping"]["descriptor_version"] = True
+    with pytest.raises(ValueError, match="package_grouping"):
+        validate_metrics_view_v1(view, verify_fingerprint=False)
+
+
+@pytest.mark.parametrize(
+    "profile,mutate",
+    [
+        ("metrics.overview", lambda view: view["completeness"].update(kind=True)),
+        ("metrics.overview", lambda view: view["payload"]["population_metadata"].update(descriptor_version=1.0)),
+        ("metrics.overview", lambda view: view["payload"]["population_metadata"]["metric_denominators"][0].update(zero_denominator_result=0)),
+        ("metrics.quality", lambda view: view["payload"]["threshold_policy"].update(descriptor_version=1.0)),
+        ("metrics.architecture", lambda view: view["payload"]["package_grouping"].update(descriptor_version=1.0)),
+        ("metrics.quality", lambda view: view["payload"]["truncation_metadata"].update(descriptor_version=1.0)),
+    ],
+)
+def test_static_metadata_rejects_cross_type_equal_substitutions(profile: str, mutate) -> None:
+    view = project_metrics_view(_source(), profile_id=profile, profile_version=1)
+    mutate(view)
+    with pytest.raises(ValueError):
+        validate_metrics_view_v1(view, verify_fingerprint=False)
+
+
+@pytest.mark.parametrize("field", ["analyzed_callables", "maximum_control_nesting"])
+def test_quality_source_rejects_bool_counts(field: str) -> None:
+    source = _source()
+    source["metrics"]["code_quality"][field] = False
+    with pytest.raises(ValueError, match="integer"):
+        validate_metrics_source_v1(source)
+
+
+@pytest.mark.parametrize("ranking", ["high_complexity_callables", "deeply_nested_callables", "broad_handlers"])
+def test_quality_source_rejects_rankings_larger_than_population(ranking: str) -> None:
+    source = _source()
+    quality = source["metrics"]["code_quality"]
+    source["metrics"]["size"].update(functions=1, methods=0)
+    quality["analyzed_callables"] = 1
+    quality["largest_callables"] = [{"node": "one", "lines": 1}]
+    quality["high_complexity_callables"] = []
+    quality["maximum_control_nesting"] = 0
+    quality["deeply_nested_callables"] = []
+    quality["async"] = {"functions": 0, "without_await": []}
+    quality["exceptions"] = {"raise_statements": 0, "callables_raising": 0,
+                             "raised_types": {}, "caught_types": {}, "broad_handlers": []}
+    rows = [{"node": "a", "cyclomatic": 10, "cognitive": 0, "lines": 1, "nesting": 4},
+            {"node": "b", "cyclomatic": 10, "cognitive": 0, "lines": 1, "nesting": 4}]
+    if ranking == "high_complexity_callables":
+        quality[ranking] = rows
+    elif ranking == "deeply_nested_callables":
+        quality["maximum_control_nesting"] = 4
+        quality[ranking] = [{"node": row["node"], "nesting": 4} for row in rows]
+    else:
+        quality["exceptions"][ranking] = [{"node": row["node"], "count": 1} for row in rows]
+    with pytest.raises(ValueError, match="population"):
+        validate_metrics_source_v1(source)
+
+
+@pytest.mark.parametrize("maximum,nested", [(3, [{"node": "bad", "nesting": 4}]), (4, []), (5, [{"node": "bad", "nesting": 4}])])
+def test_quality_source_rejects_inconsistent_maximum_nesting(maximum: int, nested: list[dict]) -> None:
+    source = _source()
+    quality = source["metrics"]["code_quality"]
+    quality["maximum_control_nesting"] = maximum
+    quality["deeply_nested_callables"] = nested
+    with pytest.raises(ValueError, match="maximum_control_nesting"):
+        validate_metrics_source_v1(source)

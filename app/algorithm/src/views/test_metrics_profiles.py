@@ -100,8 +100,35 @@ def test_source_identity_is_selected_but_unselected_extensions_are_omitted_from_
 
 def test_projectors_do_not_import_metrics_core() -> None:
     projection_dir = Path(__file__).with_name("projections")
-    for filename in ("metrics_overview.py", "metrics_architecture.py"):
+    for filename in ("metrics_overview.py", "metrics_architecture.py", "metrics_quality.py"):
         tree = ast.parse((projection_dir / filename).read_text(encoding="utf-8"))
         imports = [node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
         imports += [alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names]
         assert all(name != "metrics" and not name.startswith("metrics.") for name in imports)
+
+
+def test_quality_is_exact_detached_and_has_consistent_sidecars() -> None:
+    source = _source()
+    expected = deepcopy(source["metrics"]["code_quality"])
+    view = project_metrics_view(source, profile_id="metrics.quality", profile_version=1)
+    payload = view["payload"]
+    _assert_exact_tree(payload["metrics"]["code_quality"], expected)
+    assert payload["metrics"]["size"] == {
+        "functions": source["metrics"]["size"]["functions"],
+        "methods": source["metrics"]["size"]["methods"],
+    }
+    descriptor = payload["truncation_metadata"]["rankings"]["metrics.code_quality.largest_callables"]
+    assert descriptor["total_matching"] == expected["analyzed_callables"]
+    assert descriptor["returned_count"] == len(expected["largest_callables"])
+    before = deepcopy(view)
+    source["metrics"]["code_quality"]["largest_callables"][0]["lines"] += 1
+    assert view == before
+
+
+def test_quality_extensions_are_recursively_omitted() -> None:
+    source = _source()
+    source["metrics"]["code_quality"]["extension"] = True
+    source["metrics"]["code_quality"]["largest_callables"][0]["extension"] = True
+    projected = project_metrics_view(source, profile_id="metrics.quality", profile_version=1)["payload"]["metrics"]["code_quality"]
+    assert "extension" not in projected
+    assert "extension" not in projected["largest_callables"][0]

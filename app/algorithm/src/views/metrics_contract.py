@@ -22,6 +22,12 @@ OBJECT_ORIENTED = ("classes_analyzed", "highest_weighted_method_complexity", "hi
 CALL_GRAPH = CALL_OVERVIEW + ("heaviest_edges", "entrypoints", "leaf_callables", "isolated_callables", "highest_fan_in", "highest_fan_out", "maximum_transitive_reach", "longest_call_chain", "deepest_nested_call_owners", "recursive_components", "pagerank_top", "betweenness_top", "risk_top", "node_kinds")
 
 ROUNDING_POLICY = {"kind": "decimal_places", "places": 4, "applies_to": "ratio_metrics"}
+THRESHOLD_POLICY = {
+    "descriptor_version": 1,
+    "high_complexity": {"cyclomatic_gte": 10, "cognitive_gte": 15, "operator": "or"},
+    "deep_nesting": {"nesting_gte": 4},
+    "largest_callables": {"limit": 10, "tie_policy": "fixed_size", "ordering": ["lines descending", "node ascending"]},
+}
 DEFINITIONS = [
     {"id": "activity_call_owner", "population": "hybrid activity call owners: non-synthetic functions and methods plus roots with structural call_occurrences greater than zero", "includes": ["roots with structural call occurrences", "non-synthetic functions", "non-synthetic methods"], "excludes": ["synthetic methods", "roots without structural call occurrences"]},
     {"id": "call_graph_owner", "population": "call-graph owners: all function and method nodes plus roots with a callsite or an outgoing canonical call edge", "includes": ["functions", "methods including synthetic methods", "roots with callsites", "roots with outgoing canonical call edges"], "excludes": ["roots without callsites or outgoing canonical call edges"]},
@@ -35,6 +41,11 @@ DEFINITIONS = [
 
 
 def _bindings(profile: str) -> list[dict[str, Any]]:
+    if profile == "metrics.quality":
+        return [
+            {"metric": f"metrics.code_quality.{metric}", "denominator": "metrics.code_quality.analyzed_callables", "zero_denominator_result": 0.0}
+            for metric in ("average_cognitive_complexity", "average_cyclomatic_complexity", "average_lines_per_callable")
+        ]
     common = [
         {"metric": "metrics.dependency_graph.density", "denominator": "ordered distinct root pairs: n*(n-1)", "zero_denominator_result": 0.0},
         {"metric": "metrics.dependency_graph.average_fan_in", "denominator": "dependency graph roots", "zero_denominator_result": 0.0},
@@ -55,7 +66,9 @@ def _bindings(profile: str) -> list[dict[str, Any]]:
 
 
 def population_metadata(profile: str) -> dict[str, Any]:
-    return {"descriptor_version": 1, "rounding_policy": deepcopy(ROUNDING_POLICY), "definitions": deepcopy(DEFINITIONS), "metric_denominators": _bindings(profile)}
+    definitions = ([row for row in DEFINITIONS if row["id"] == "callable"]
+                   if profile == "metrics.quality" else DEFINITIONS)
+    return {"descriptor_version": 1, "rounding_policy": deepcopy(ROUNDING_POLICY), "definitions": deepcopy(definitions), "metric_denominators": _bindings(profile)}
 
 
 PACKAGE_GROUPING = {
@@ -74,6 +87,20 @@ def _obj(value: Any, fields: set[str], where: str, *, exact: bool = True) -> Map
     if not isinstance(value, Mapping) or (set(value) != fields if exact else not fields <= set(value)):
         _error(f"{where} has invalid fields")
     return value
+
+
+def _typed_tree_equal(value: Any, expected: Any) -> bool:
+    """Compare JSON-shaped contract data without bool/numeric coercion."""
+    if type(value) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        return (value.keys() == expected.keys()
+                and all(_typed_tree_equal(value[key], expected[key]) for key in expected))
+    if isinstance(expected, list):
+        return (len(value) == len(expected)
+                and all(_typed_tree_equal(item, expected_item)
+                        for item, expected_item in zip(value, expected)))
+    return value == expected
 
 
 def _count(value: Any, where: str) -> None:
@@ -111,11 +138,11 @@ def _string_count_map(value: Any, where: str) -> None:
     for key, count in item.items(): _count(count, f"{where}.{key}")
 
 
-def _rows(value: Any, fields: set[str], where: str, validator: Any) -> list[Mapping[str, Any]]:
+def _rows(value: Any, fields: set[str], where: str, validator: Any, *, exact: bool = False) -> list[Mapping[str, Any]]:
     if not isinstance(value, list): _error(f"{where} must be an array")
     result = []
     for index, raw in enumerate(value):
-        row = _obj(raw, fields, f"{where}[{index}]", exact=False); validator(row, f"{where}[{index}]"); result.append(row)
+        row = _obj(raw, fields, f"{where}[{index}]", exact=exact); validator(row, f"{where}[{index}]"); result.append(row)
     return result
 
 
@@ -151,8 +178,8 @@ def _validate_architecture(value: Any, where: str, *, exact: bool) -> None:
         _error(f"{where}.bridge_dependencies is not canonical")
 
 
-def _validate_quality(value: Any, where: str) -> None:
-    item = _obj(value, set(QUALITY), where, exact=False)
+def _validate_quality(value: Any, where: str, *, exact: bool = False, expected_population: int | None = None) -> None:
+    item = _obj(value, set(QUALITY), where, exact=exact)
     _count(item["analyzed_callables"], f"{where}.analyzed_callables")
     for key in ("average_cyclomatic_complexity", "average_cognitive_complexity", "average_lines_per_callable"):
         _number(item[key], f"{where}.{key}")
@@ -161,23 +188,44 @@ def _validate_quality(value: Any, where: str) -> None:
     def complexity(row: Mapping[str, Any], row_where: str) -> None:
         _string(row["node"], f"{row_where}.node")
         for key in ("cyclomatic", "cognitive", "lines", "nesting"): _count(row[key], f"{row_where}.{key}")
-    rows = _rows(item["high_complexity_callables"], {"node", "cyclomatic", "cognitive", "lines", "nesting"}, f"{where}.high_complexity_callables", complexity)
+        if row["cyclomatic"] < 1 or row["lines"] < 1: _error(f"{row_where} has impossible complexity or line count")
+    rows = _rows(item["high_complexity_callables"], {"node", "cyclomatic", "cognitive", "lines", "nesting"}, f"{where}.high_complexity_callables", complexity, exact=exact)
     if rows != sorted(rows, key=lambda row: (-row["cyclomatic"], -row["cognitive"], row["node"])): _error(f"{where}.high_complexity_callables is not canonical")
+    if any(row["cyclomatic"] < 10 and row["cognitive"] < 15 for row in rows): _error(f"{where}.high_complexity_callables violates thresholds")
 
     def node_count(row: Mapping[str, Any], row_where: str, key: str) -> None:
         _string(row["node"], f"{row_where}.node"); _count(row[key], f"{row_where}.{key}")
-    largest = _rows(item["largest_callables"], {"node", "lines"}, f"{where}.largest_callables", lambda row, place: node_count(row, place, "lines"))
-    nested = _rows(item["deeply_nested_callables"], {"node", "nesting"}, f"{where}.deeply_nested_callables", lambda row, place: node_count(row, place, "nesting"))
+    largest = _rows(item["largest_callables"], {"node", "lines"}, f"{where}.largest_callables", lambda row, place: node_count(row, place, "lines"), exact=exact)
+    nested = _rows(item["deeply_nested_callables"], {"node", "nesting"}, f"{where}.deeply_nested_callables", lambda row, place: node_count(row, place, "nesting"), exact=exact)
     if largest != sorted(largest, key=lambda row: (-row["lines"], row["node"])) or nested != sorted(nested, key=lambda row: (-row["nesting"], row["node"])): _error(f"{where} rankings are not canonical")
+    if any(row["lines"] < 1 for row in largest) or any(row["nesting"] < 4 for row in nested): _error(f"{where} rankings violate thresholds")
     for rows_value, name in ((rows, "high_complexity_callables"), (largest, "largest_callables"), (nested, "deeply_nested_callables")):
         if len(rows_value) != len({row["node"] for row in rows_value}): _error(f"{where}.{name} contains duplicate nodes")
-    async_ = _obj(item["async"], {"functions", "without_await"}, f"{where}.async", exact=False)
+    async_ = _obj(item["async"], {"functions", "without_await"}, f"{where}.async", exact=exact)
     _count(async_["functions"], f"{where}.async.functions"); _sorted_strings(async_["without_await"], f"{where}.async.without_await")
-    exceptions = _obj(item["exceptions"], {"raise_statements", "callables_raising", "raised_types", "caught_types", "broad_handlers"}, f"{where}.exceptions", exact=False)
+    exceptions = _obj(item["exceptions"], {"raise_statements", "callables_raising", "raised_types", "caught_types", "broad_handlers"}, f"{where}.exceptions", exact=exact)
     _count(exceptions["raise_statements"], f"{where}.exceptions.raise_statements"); _count(exceptions["callables_raising"], f"{where}.exceptions.callables_raising")
     _string_count_map(exceptions["raised_types"], f"{where}.exceptions.raised_types"); _string_count_map(exceptions["caught_types"], f"{where}.exceptions.caught_types")
-    handlers = _rows(exceptions["broad_handlers"], {"node", "count"}, f"{where}.exceptions.broad_handlers", lambda row, place: node_count(row, place, "count"))
+    handlers = _rows(exceptions["broad_handlers"], {"node", "count"}, f"{where}.exceptions.broad_handlers", lambda row, place: node_count(row, place, "count"), exact=exact)
+    if any(row["count"] < 1 for row in handlers): _error(f"{where}.exceptions.broad_handlers contains a zero count")
     if handlers != sorted(handlers, key=lambda row: (-row["count"], row["node"])) or len(handlers) != len({row["node"] for row in handlers}): _error(f"{where}.exceptions.broad_handlers is not canonical")
+    population = item["analyzed_callables"]
+    if expected_population is not None and population != expected_population: _error(f"{where}.analyzed_callables does not match size functions plus methods")
+    if len(largest) != min(population, 10): _error(f"{where}.largest_callables has inconsistent length")
+    if (len(rows) > population or len(nested) > population or len(handlers) > population
+            or async_["functions"] > population or len(async_["without_await"]) > async_["functions"]
+            or exceptions["callables_raising"] > population):
+        _error(f"{where} contains counts outside the callable population")
+    maximum_nesting = item["maximum_control_nesting"]
+    if ((maximum_nesting < 4 and nested)
+            or (maximum_nesting >= 4 and (not nested or nested[0]["nesting"] != maximum_nesting))):
+        _error(f"{where}.deeply_nested_callables is inconsistent with maximum_control_nesting")
+    if population == 0 and (rows or largest or nested or item["maximum_control_nesting"] != 0
+                            or any(item[key] != 0.0 for key in ("average_cyclomatic_complexity", "average_cognitive_complexity", "average_lines_per_callable"))
+                            or async_["functions"] != 0 or async_["without_await"]
+                            or exceptions["raise_statements"] != 0 or exceptions["callables_raising"] != 0
+                            or exceptions["raised_types"] or exceptions["caught_types"] or handlers):
+        _error(f"{where} empty population is inconsistent")
 
 
 def _validate_object_oriented(value: Any, where: str) -> None:
@@ -235,7 +283,7 @@ def validate_metrics_source_v1(source: Mapping[str, Any]) -> None:
     for key in ACTIVITY[3:]: _number(activity[key], f"source.metrics.activity.{key}")
     _validate_dependency(metrics["dependency_graph"], "source.metrics.dependency_graph", exact=False, details=True)
     _validate_architecture(metrics["architecture"], "source.metrics.architecture", exact=False)
-    _validate_quality(metrics["code_quality"], "source.metrics.code_quality")
+    _validate_quality(metrics["code_quality"], "source.metrics.code_quality", expected_population=size["functions"] + size["methods"])
     _validate_object_oriented(metrics["object_oriented"], "source.metrics.object_oriented")
     _validate_call_graph(metrics["call_graph"], "source.metrics.call_graph")
 
@@ -252,7 +300,8 @@ def validate_metrics_view_v1(view: Mapping[str, Any], *, verify_fingerprint: boo
     profile = _obj(root["profile"], {"id", "version"}, "profile"); expected = metrics_profile_metadata(profile["id"], profile["version"])
     source = _obj(root["source"], {"metrics_schema_version", "metrics_semantics_version", "graph_schema_version", "graph_fingerprint"}, "source")
     if any(type(source[key]) is not int for key in ("metrics_schema_version", "metrics_semantics_version", "graph_schema_version")) or (source["metrics_schema_version"], source["metrics_semantics_version"], source["graph_schema_version"]) != (1, 4, 1) or not isinstance(source["graph_fingerprint"], str) or not _HEX.fullmatch(source["graph_fingerprint"]): _error("invalid source identity")
-    if _obj(root["completeness"], {"kind", "preserves", "omits"}, "completeness") != expected: _error("completeness does not match registry")
+    completeness = _obj(root["completeness"], {"kind", "preserves", "omits"}, "completeness")
+    if not _typed_tree_equal(completeness, expected): _error("completeness does not match registry")
     payload = root["payload"]
     if profile["id"] == "metrics.overview":
         payload = _obj(payload, {"metrics", "population_metadata"}, "payload"); metrics = _obj(payload["metrics"], {"size", "activity", "dependency_graph", "code_quality", "object_oriented", "call_graph"}, "payload.metrics")
@@ -261,12 +310,32 @@ def validate_metrics_view_v1(view: Mapping[str, Any], *, verify_fingerprint: boo
         _validate_dependency(metrics["dependency_graph"], "payload.metrics.dependency_graph", exact=True, details=False)
         _count(_obj(metrics["code_quality"], {"analyzed_callables"}, "code_quality")["analyzed_callables"], "analyzed_callables"); _count(_obj(metrics["object_oriented"], {"classes_analyzed"}, "object_oriented")["classes_analyzed"], "classes_analyzed")
         calls = _obj(metrics["call_graph"], set(CALL_OVERVIEW), "call_graph"); [(_number(calls[k], k, rate=k.endswith("_rate")) if k.endswith("_rate") else _count(calls[k], k)) for k in CALL_OVERVIEW]
-    else:
+    elif profile["id"] == "metrics.architecture":
         payload = _obj(payload, {"metrics", "population_metadata", "package_grouping"}, "payload"); metrics = _obj(payload["metrics"], {"activity", "dependency_graph", "architecture"}, "payload.metrics")
         activity = _obj(metrics["activity"], {"local_imports", "external_imports"}, "activity"); _count(activity["local_imports"], "local_imports"); _count(activity["external_imports"], "external_imports")
         _validate_dependency(metrics["dependency_graph"], "dependency_graph", exact=True, details=True); _validate_architecture(metrics["architecture"], "architecture", exact=True)
-        if payload["package_grouping"] != PACKAGE_GROUPING: _error("package_grouping does not match static contract")
-    if payload["population_metadata"] != population_metadata(profile["id"]): _error("population_metadata does not match static contract")
+        if not _typed_tree_equal(payload["package_grouping"], PACKAGE_GROUPING): _error("package_grouping does not match static contract")
+    elif profile["id"] == "metrics.quality":
+        payload = _obj(payload, {"metrics", "population_metadata", "threshold_policy", "truncation_metadata"}, "payload")
+        metrics = _obj(payload["metrics"], {"size", "code_quality"}, "payload.metrics")
+        size = _obj(metrics["size"], {"functions", "methods"}, "payload.metrics.size")
+        _count(size["functions"], "size.functions"); _count(size["methods"], "size.methods")
+        _validate_quality(metrics["code_quality"], "payload.metrics.code_quality", exact=True, expected_population=size["functions"] + size["methods"])
+        if not _typed_tree_equal(payload["threshold_policy"], THRESHOLD_POLICY): _error("threshold_policy does not match static contract")
+        truncation = _obj(payload["truncation_metadata"], {"descriptor_version", "rankings"}, "payload.truncation_metadata")
+        ranking = _obj(truncation["rankings"], {"metrics.code_quality.largest_callables"}, "payload.truncation_metadata.rankings")
+        descriptor = _obj(ranking["metrics.code_quality.largest_callables"], {"limit", "returned_count", "total_matching", "truncated", "ordering"}, "truncation descriptor")
+        returned = len(metrics["code_quality"]["largest_callables"]); total = metrics["code_quality"]["analyzed_callables"]
+        expected_descriptor = {"limit": 10, "returned_count": returned, "total_matching": total,
+                               "truncated": total > returned,
+                               "ordering": ["lines descending", "node ascending"]}
+        expected_truncation = {"descriptor_version": 1, "rankings": {
+            "metrics.code_quality.largest_callables": expected_descriptor,
+        }}
+        if not _typed_tree_equal(truncation, expected_truncation): _error("truncation_metadata is inconsistent")
+    else:
+        _error("unsupported metrics profile dispatch")
+    if not _typed_tree_equal(payload["population_metadata"], population_metadata(profile["id"])): _error("population_metadata does not match static contract")
     fingerprint = root["view_fingerprint"]
     if not isinstance(fingerprint, str) or not _HEX.fullmatch(fingerprint) or verify_fingerprint and fingerprint != metrics_view_fingerprint(root): _error("invalid view_fingerprint")
 
@@ -276,4 +345,4 @@ def serialize_metrics_view(view: Mapping[str, Any]) -> bytes:
     return (json.dumps(view, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
 
 
-__all__ = ["PACKAGE_GROUPING", "metrics_view_fingerprint", "population_metadata", "serialize_metrics_view", "validate_metrics_source_v1", "validate_metrics_view_v1"]
+__all__ = ["PACKAGE_GROUPING", "THRESHOLD_POLICY", "metrics_view_fingerprint", "population_metadata", "serialize_metrics_view", "validate_metrics_source_v1", "validate_metrics_view_v1"]

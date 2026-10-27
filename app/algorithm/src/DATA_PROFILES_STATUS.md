@@ -108,14 +108,16 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 2. **Выполнен для initial scope.** Versioned population/denominator descriptors
    сопровождают опубликованные averages, rates и density; отсутствующий в full
    DTO hybrid call-owner denominator явно помечен `not_materialized`.
-3. **Не выполнен.** Truncation metadata потребуется для всех будущих top-k и
-   других усечённых списков.
+3. **Выполнен для `metrics.quality` v1.** Sidecar truncation descriptor фиксирует
+   limit, returned/total populations, признак усечения и tie-safe ordering для
+   `largest_callables`. Общий контракт будущих call-graph top-k остаётся
+   открытым, поскольку их total population не всегда материализован в DTO.
 4. **Выполнен для initial scope.** Exact equality и сохранение типов каждого
    whitelisted metric leaf проверяются тестами.
-5. **Выполнен полностью для v1.** `metrics.overview` и
-   `metrics.architecture` доступны через explicit profile API.
-6. **Не выполнен.** `metrics.quality`, `metrics.objects`, `metrics.calls` и
-   `metrics.aggregate` отложены до реализации общего Metrics View envelope.
+5. **Выполнен полностью для v1.** `metrics.overview`, `metrics.architecture` и
+   `metrics.quality` доступны через explicit profile API.
+6. **В работе.** `metrics.objects`, `metrics.calls` и `metrics.aggregate`
+   остаются в backlog; общий Metrics View envelope уже реализован.
 
 ## Этап 5. Aggregates
 
@@ -146,7 +148,8 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    declaration structure, exact/repeated/reverse/self imports, а также external
    и unresolved imports, включая detailed architecture view; call и inheritance
    scenarios покрывают repeated, awaited, self/reverse, non-exact occurrences,
-   multiple inheritance и cycles; aggregate и truncation scenarios ещё не
+   multiple inheritance и cycles; quality truncation покрывает empty, границу
+   limit, fixed-size ties и threshold boundaries; aggregate scenarios ещё не
    добавлены.
 2. **Выполнен частично.** Проверены determinism, source immutability,
    referential closure, whitelist, fingerprint changes и version policy для
@@ -167,9 +170,9 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
     `28680 / 91853 = 31.2238%`. `inventory.minimal` измерен как
     `2003 / 37091 = 5.4002%` и `2811 / 91853 = 3.0603%`, но по-прежнему не имеет
     threshold.
-5. **Выполнен частично.** Критерии envelope и первого профиля подтверждены, но
-    критерии Metrics Views, aggregates, golden fixtures будущих profiles и
-    consumer integration остаются открытыми.
+5. **Выполнен частично.** Критерии envelope, Graph profiles и первых трёх
+   Metrics Views подтверждены, но aggregates, golden fixtures будущих profiles
+   и consumer integration остаются открытыми.
 
 ## Текущая итерация
 
@@ -230,12 +233,27 @@ errors в `gpt_work_dir`; тесты в этом прогоне не испол�
 Первый набор безопасных Graph profiles реализован полностью. Для первых двух
 compact profiles зафиксирована и проверена benchmark family v2. Отклонённый
 draft v1 исторически не прошёл 45% из-за дефекта состава fixture. Начальные
-Metrics Views и все пять domain Graph Views также реализованы; остальные Metrics
-profiles, truncation, aggregates и consumer integration остаются в backlog.
+Metrics Views, `metrics.quality` и все пять domain Graph Views также реализованы;
+остальные Metrics profiles, расширение truncation contract для call-graph
+rankings, aggregates и consumer integration остаются в backlog.
+
+Для Metrics size benchmark исходная family v1 на Graph fixture с 4/10
+компонентами сохранена как отклонённая история: `metrics.overview` дал
+`4535/9183 = 49.385%` и `4559/16238 = 28.076%`, а medium
+`metrics.architecture` — `4633/9183 = 50.452%`. Targets после измерения не
+менялись. Заранее зафиксированная family v2 с 20/50 компонентами прошла все
+неизменённые targets: overview `4560/23838 = 19.1291%` и
+`4565/40974 = 11.1412%`; architecture `6902/23838 = 28.9538%` и
+`10593/40974 = 25.8530%`; quality `3211/23838 = 13.4701%` и
+`3213/40974 = 7.8416%`.
+
+Финальная проверка milestone собрала 99 релевантных тестов, 291 тест `views` и
+463 теста безопасной области без `gpt_work_dir`; все проверки passed, failures
+и skips отсутствуют.
 
 ## Приоритет доработок
 
-1. До реализации top-k Metrics profiles зафиксировать truncation metadata и
-   benchmark fixtures, не меняя full Metrics semantics.
-2. После фиксации truncation contract приступить к следующему Metrics View из
-   этапа 4 без пересчёта значений из сокращённого графа.
+1. Расширять truncation contract только вместе со следующим top-k Metrics
+   profile, явно учитывая доступность total population в полном DTO.
+2. Приступить к следующему Metrics View из этапа 4 без пересчёта значений из
+   сокращённого графа; для него заранее зафиксировать query need и benchmark.

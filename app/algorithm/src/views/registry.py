@@ -15,6 +15,8 @@ METRICS_OVERVIEW_ID = "metrics.overview"
 METRICS_OVERVIEW_VERSION = 1
 METRICS_ARCHITECTURE_ID = "metrics.architecture"
 METRICS_ARCHITECTURE_VERSION = 1
+METRICS_QUALITY_ID = "metrics.quality"
+METRICS_QUALITY_VERSION = 1
 CALLS_TOPOLOGY_ID = "calls.topology"
 CALLS_TOPOLOGY_VERSION = 1
 CALLS_DETAILED_ID = "calls.detailed"
@@ -49,6 +51,19 @@ _METRICS_PROFILES = {
         (
             "call_graph_metrics", "code_quality_metrics", "non_import_activity_metrics",
             "object_oriented_metrics", "project_size",
+        ),
+    ),
+    METRICS_QUALITY_ID: (
+        METRICS_QUALITY_VERSION,
+        "query_lossless",
+        (
+            "code_quality_metrics", "metric_population_semantics",
+            "quality_threshold_semantics", "ranking_truncation_semantics",
+        ),
+        (
+            "activity_metrics", "architecture_metrics", "call_graph_metrics",
+            "dependency_graph_metrics", "object_oriented_metrics",
+            "project_size_except_callable_counts",
         ),
     ),
 }
@@ -327,6 +342,7 @@ __all__ = [
     "STRUCTURE_DECLARATIONS_VERSION",
     "METRICS_ARCHITECTURE_ID", "METRICS_ARCHITECTURE_VERSION",
     "METRICS_OVERVIEW_ID", "METRICS_OVERVIEW_VERSION",
+    "METRICS_QUALITY_ID", "METRICS_QUALITY_VERSION",
     "metrics_profile_metadata",
     "profile_metadata",
     "summary_profile_metadata",
