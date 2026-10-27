@@ -231,12 +231,13 @@ class populations для abstractness. Package grouping остаётся тем 
 Содержит:
 
 - roots, classes, fields, methods;
-- functions/methods — exact targets method calls;
-- ownership closure;
+- standalone functions — exact targets calls/awaits от non-synthetic methods;
+- минимальная ownership closure;
 - `inherits`, `field_type`, `accesses_field`;
-- exact `calls`/`awaits` от methods;
-- type references;
-- method complexity facts;
+- exact weighted `calls`/`awaits` от non-synthetic methods; object metrics
+  интерпретируют их как unweighted adjacency;
+- все type references как provenance; non-exact references не создают topology;
+- полные complexity facts non-synthetic methods;
 - synthetic flags.
 
 Гарантия: query-lossless для текущих DIT/NOC/CBO/RFC/LCOM/WMC, но не является

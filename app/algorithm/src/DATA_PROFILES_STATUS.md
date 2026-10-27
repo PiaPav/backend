@@ -15,7 +15,7 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 | 0. Спецификация | **в работе** |
 | 1. Общий envelope | **выполнено для Graph View, Graph Summary и Metrics View v1** |
 | 2. Первые безопасные Graph Views | **выполнено для initial scope** |
-| 3. Domain Graph Views | **в работе: dependency architecture, calls topology, calls detailed и types topology выполнены** |
+| 3. Domain Graph Views | **выполнено для всех пяти domain profiles v1** |
 | 4. Metrics Views | **в работе: initial profiles выполнены** |
 | 5. Aggregates | **не выполнено** |
 | 6. Consumer integration | **не выполнено** |
@@ -47,7 +47,8 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    точные пары `canonical.full` / `1`, `inventory.minimal` / `1`,
    `structure.declarations` / `1`, `dependency.files` / `1`,
    `dependency.architecture` / `1`, `calls.topology` / `1`,
-   `calls.detailed` / `1` и `types.topology` / `1`;
+   `calls.detailed` / `1`, `types.topology` / `1` и
+   `objects.metrics_basis` / `1`;
    специализированные metadata registries
    разделяют Summary и View. Defaults, `latest` и fallback отсутствуют.
 4. **Выполнен полностью для текущего envelope.** Nodes и edges сортируются по
@@ -91,12 +92,14 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 4. **Выполнен полностью для v1.** `types.topology` сохраняет все classes и
    fields, минимальную root ownership closure, canonical typed edges и полные
    type references; exact topology сохраняет basis текущих DIT/NOC.
-5. **Не выполнен.** Для `objects.metrics_basis` ещё требуется матрица metric ->
-   required facts и точный whitelist.
-6. **Выполнен частично.** Query guarantee и контрпримеры документированы для
+5. **Выполнен полностью для v1.** `objects.metrics_basis` сохраняет полные
+   class/field/method populations, target-only functions, metric ownership,
+   exact typed/access/call topology, call weights как provenance, все type
+   references и complexity facts non-synthetic methods. Точная матрица metric ->
+   required facts зафиксирована отдельным domain contract.
+6. **Выполнен для domain scope.** Query guarantee и контрпримеры документированы для
    `structure.declarations`, `dependency.architecture`, `calls.topology`,
-   `calls.detailed` и `types.topology`; для остальных domain-профилей они
-   отсутствуют.
+   `calls.detailed`, `types.topology` и `objects.metrics_basis`.
 
 ## Этап 4. Metrics Views
 
@@ -148,9 +151,9 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 2. **Выполнен частично.** Проверены determinism, source immutability,
    referential closure, whitelist, fingerprint changes и version policy для
    `structure.declarations`, `dependency.files` и `dependency.architecture`;
-   общие свойства будущих профилей не покрыты; для `calls.topology` и
-   `types.topology` проверены determinism, source immutability, referential
-   closure, canonical relations и non-exact boundary.
+   общие свойства будущих профилей не покрыты; для `calls.topology`,
+   `types.topology` и `objects.metrics_basis` проверены determinism, source
+   immutability, referential closure, canonical relations и non-exact boundary.
 3. **Выполнен для первых compact profiles, dependency architecture, calls
    topology и calls detailed.** Golden manifest family v2 хранит версии profiles, exact
    populations, fingerprints, compact UTF-8 bytes и SHA-256 полного
@@ -215,19 +218,24 @@ medium `20465/37091 = 55.1751%`, large `49331/91853 = 53.7065%`.
 области без `gpt_work_dir` — **394 passed, 0 failed, 0 skipped**. Test-only
 реконструкция подтвердила DIT/NOC для inheritance chains, multiple inheritance,
 self edges и cycles.
+Для `objects.metrics_basis` окончательный профильный прогон дал **15 passed**,
+все views — **236 passed**, а полный безопасный прогон разрешённой области без
+`gpt_work_dir` — **408 passed, 0 failed, 0 skipped**. Test-only реконструкция
+подтвердила точное равенство полной секции `object_oriented`, включая
+inheritance cycles, populated LCOM, synthetic policy и unweighted RFC/CBO при
+сохранённых call weights.
 Полный collection `app/algorithm/src` остановлен тремя посторонними import
 errors в `gpt_work_dir`; тесты в этом прогоне не исполнялись.
 
 Первый набор безопасных Graph profiles реализован полностью. Для первых двух
 compact profiles зафиксирована и проверена benchmark family v2. Отклонённый
 draft v1 исторически не прошёл 45% из-за дефекта состава fixture. Начальные
-Metrics Views и первые четыре domain Graph Views также реализованы; остальные
-domain и Metrics profiles, truncation, aggregates и consumer integration
-остаются в backlog.
+Metrics Views и все пять domain Graph Views также реализованы; остальные Metrics
+profiles, truncation, aggregates и consumer integration остаются в backlog.
 
 ## Приоритет доработок
 
-1. Спроектировать `objects.metrics_basis`, включая точную матрицу metric ->
-   required facts и whitelist.
-2. До реализации top-k Metrics profiles зафиксировать truncation metadata и
+1. До реализации top-k Metrics profiles зафиксировать truncation metadata и
    benchmark fixtures, не меняя full Metrics semantics.
+2. После фиксации truncation contract приступить к следующему Metrics View из
+   этапа 4 без пересчёта значений из сокращённого графа.

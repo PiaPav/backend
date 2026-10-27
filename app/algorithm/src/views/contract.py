@@ -442,6 +442,92 @@ def _validate_types_topology(payload: Mapping[str, Any]) -> None:
     if topology != references: _error("type topology must exactly match exact type references")
 
 
+def _validate_objects_metrics_basis(payload: Mapping[str, Any]) -> None:
+    payload = _object(payload, {"nodes", "edges", "type_references"}, "payload")
+    if not all(isinstance(payload[name], list) for name in payload): _error("objects.metrics_basis payload fields must be arrays")
+    nodes: dict[str, Mapping[str, Any]] = {}; node_ids: list[str] = []
+    for index, value in enumerate(payload["nodes"]):
+        where = f"payload.nodes[{index}]"; kind = value.get("kind") if isinstance(value, Mapping) else None
+        keys = set(_DEPENDENCY_NODE_KEYS if kind in {"file", "module"} else _NODE_REQUIRED)
+        if kind == "method": keys.add("synthetic" if value.get("synthetic") is True else "complexity_facts")
+        node = _object(value, keys, where); identifier = node.get("id")
+        if not isinstance(identifier, str) or not identifier or identifier in nodes: _error(f"{where}.id is missing or duplicate")
+        if kind not in {"file", "module", "class", "field", "method", "function"}: _error(f"{where}.kind is invalid")
+        if not isinstance(node.get("qualified_name"), str): _error(f"{where}.qualified_name must be a string")
+        _relative_path(node.get("path"), f"{where}.path")
+        if kind not in {"file", "module"} and (not isinstance(node.get("parent_id"), str) or not node["parent_id"]): _error(f"{where}.parent_id is invalid")
+        if "complexity_facts" in node: _validate_view_complexity(node["complexity_facts"], f"{where}.complexity_facts", node["path"])
+        nodes[identifier] = node; node_ids.append(identifier)
+    if node_ids != sorted(node_ids): _error("payload.nodes must have unique lexicographically sorted IDs")
+    owners: dict[str, str] = {}; topology: set[tuple[str, str, str]] = set(); calls: set[tuple[str, str, str]] = set(); function_targets: set[str] = set(); edge_ids: list[str] = []
+    for index, value in enumerate(payload["edges"]):
+        where = f"payload.edges[{index}]"; kind = value.get("kind") if isinstance(value, Mapping) else None
+        edge = _object(value, _CALL_EDGE_KEYS if kind in {"calls", "awaits"} else _EDGE_KEYS, where); identifier = edge.get("id")
+        if not isinstance(identifier, str) or not identifier or identifier in nodes or identifier in edge_ids: _error(f"{where}.id is missing or duplicate")
+        source, target = edge.get("source_id"), edge.get("target_id")
+        if source not in nodes or target not in nodes: _error(f"{where} has a dangling endpoint")
+        pair = nodes[source]["kind"], nodes[target]["kind"]
+        if kind == "contains":
+            if pair not in {("file", "class"), ("module", "class"), ("file", "function"), ("module", "function"), ("class", "field"), ("class", "method")}: _error(f"{where} has invalid ownership kinds")
+            if target in owners: _error(f"node {target!r} has multiple containers")
+            owners[target] = source
+        elif kind in {"inherits", "field_type"}:
+            if pair != (("class", "class") if kind == "inherits" else ("field", "class")): _error(f"{where} has invalid type relation endpoint kinds")
+            topology.add((kind, source, target))
+        elif kind == "accesses_field":
+            if pair != ("method", "field") or nodes[source].get("synthetic") is True or nodes[source]["parent_id"] != nodes[target]["parent_id"]: _error(f"{where} has invalid field access endpoints or owners")
+        elif kind in {"calls", "awaits"}:
+            triple = kind, source, target
+            if nodes[source]["kind"] != "method" or nodes[source].get("synthetic") is True or nodes[target]["kind"] not in {"method", "function"}: _error(f"{where} has invalid call endpoints")
+            if triple in calls: _error(f"{where} duplicates a call relation")
+            if type(edge.get("weight")) is not int or edge["weight"] <= 0: _error(f"{where}.weight must be a positive integer")
+            calls.add(triple)
+            if nodes[target]["kind"] == "function": function_targets.add(target)
+        else: _error(f"{where}.kind is invalid")
+        edge_ids.append(identifier)
+    if edge_ids != sorted(edge_ids): _error("payload.edges must have unique lexicographically sorted IDs")
+    roots_with_population: set[str] = set()
+    for identifier, node in nodes.items():
+        if node["kind"] in {"file", "module"}:
+            if identifier in owners: _error(f"root {identifier!r} must not have an owner")
+        elif owners.get(identifier) != node["parent_id"]: _error(f"node {identifier!r} parent_id is inconsistent with contains edges")
+        current, seen = identifier, set()
+        while current in owners:
+            if current in seen: _error("contains edges must form an acyclic forest")
+            seen.add(current); current = owners[current]
+        if nodes[current]["kind"] not in {"file", "module"}: _error(f"node {identifier!r} has no owning root")
+        if node["path"] != nodes[current]["path"]: _error(f"node {identifier!r} path must match its root")
+        if node["kind"] in {"class", "function"}: roots_with_population.add(current)
+    roots = {identifier for identifier, node in nodes.items() if node["kind"] in {"file", "module"}}
+    if roots != roots_with_population: _error("every included root must own a class or selected function")
+    if {identifier for identifier, node in nodes.items() if node["kind"] == "function"} != function_targets: _error("functions must exactly be retained method call targets")
+    references: set[tuple[str, str, str]] = set(); reference_ids: list[str] = []
+    keys = {"id", "owner_id", "role", "expression", "location", "resolution", "target_id", "candidate_ids"}
+    for index, value in enumerate(payload["type_references"]):
+        where = f"payload.type_references[{index}]"; ref = _object(value, keys, where); identifier = ref.get("id")
+        if not isinstance(identifier, str) or not identifier or identifier in nodes or identifier in edge_ids or identifier in reference_ids: _error(f"{where}.id is missing or duplicate")
+        role, owner = ref.get("role"), ref.get("owner_id"); expected = "class" if role == "base" else "field" if role == "field_type" else None
+        if owner not in nodes or nodes[owner]["kind"] != expected: _error(f"{where}.owner_id or role is invalid")
+        if not isinstance(ref.get("expression"), str) or not ref["expression"]: _error(f"{where}.expression is required")
+        _view_location(ref.get("location"), f"{where}.location")
+        candidates = ref.get("candidate_ids"); status, target = ref.get("resolution"), ref.get("target_id")
+        if (not isinstance(candidates, list) or any(not isinstance(item, str) for item in candidates)
+                or candidates != sorted(candidates) or len(candidates) != len(set(candidates))
+                or any(item not in nodes or nodes[item]["kind"] != "class" for item in candidates)):
+            _error(f"{where}.candidate_ids are invalid")
+        if status == "exact":
+            if target not in nodes or nodes[target]["kind"] != "class" or candidates: _error(f"{where} exact resolution requires one class target")
+            references.add(("inherits" if role == "base" else "field_type", owner, target))
+        elif status == "ambiguous":
+            if target is not None or len(candidates) < 2: _error(f"{where} ambiguous resolution requires >=2 candidates")
+        elif status in {"external", "unresolved"}:
+            if target is not None or candidates: _error(f"{where} non-exact resolution cannot have targets")
+        else: _error(f"{where}.resolution is invalid")
+        reference_ids.append(identifier)
+    if reference_ids != sorted(reference_ids): _error("payload.type_references must have unique lexicographically sorted IDs")
+    if topology != references: _error("type topology must exactly match exact type references")
+
+
 def _view_location(value: Any, where: str, path: str | None = None) -> tuple[int, int]:
     location = _object(value, {"path", "line", "column"}, where)
     _relative_path(location.get("path"), f"{where}.path")
@@ -662,6 +748,14 @@ def validate_graph_view_v1(
         return
     if profile["id"] == "types.topology":
         _validate_types_topology(root.get("payload"))
+        fingerprint = root.get("view_fingerprint")
+        if not isinstance(fingerprint, str) or not _HEX_64.fullmatch(fingerprint):
+            _error("view_fingerprint must be lowercase SHA-256 hex")
+        if verify_fingerprint and fingerprint != graph_view_fingerprint(root):
+            _error("view_fingerprint does not match canonical content")
+        return
+    if profile["id"] == "objects.metrics_basis":
+        _validate_objects_metrics_basis(root.get("payload"))
         fingerprint = root.get("view_fingerprint")
         if not isinstance(fingerprint, str) or not _HEX_64.fullmatch(fingerprint):
             _error("view_fingerprint must be lowercase SHA-256 hex")

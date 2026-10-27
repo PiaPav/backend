@@ -21,6 +21,8 @@ CALLS_DETAILED_ID = "calls.detailed"
 CALLS_DETAILED_VERSION = 1
 TYPES_TOPOLOGY_ID = "types.topology"
 TYPES_TOPOLOGY_VERSION = 1
+OBJECTS_METRICS_BASIS_ID = "objects.metrics_basis"
+OBJECTS_METRICS_BASIS_VERSION = 1
 
 _METRICS_PROFILES = {
     METRICS_OVERVIEW_ID: (
@@ -167,6 +169,31 @@ _TYPES_TOPOLOGY_OMITS = (
     "node_locations", "owner_structural_facts",
 )
 
+_OBJECTS_METRICS_BASIS_PRESERVES = (
+    "call_weights_as_metadata",
+    "canonical_class_field_method_populations",
+    "canonical_declaration_ownership",
+    "canonical_type_references",
+    "exact_object_access_topology",
+    "exact_object_call_topology",
+    "exact_object_type_topology",
+    "object_labels",
+    "real_method_complexity",
+    "synthetic_method_identity",
+)
+_OBJECTS_METRICS_BASIS_OMITS = (
+    "callsites",
+    "diagnostics",
+    "import_references",
+    "import_relations",
+    "locations_outside_retained_complexity_and_type_references",
+    "node_and_edge_locations",
+    "non_metric_access_relations",
+    "non_metric_call_relations",
+    "owner_structural_facts",
+    "unrelated_declarations_and_roots",
+)
+
 
 def select_graph_profile(profile_id: object, profile_version: object) -> str:
     """Validate an exact graph profile and return its artifact kind."""
@@ -193,6 +220,9 @@ def select_graph_profile(profile_id: object, profile_version: object) -> str:
         artifact_kind = "graph_view"
     elif profile_id == TYPES_TOPOLOGY_ID:
         expected_version = TYPES_TOPOLOGY_VERSION
+        artifact_kind = "graph_view"
+    elif profile_id == OBJECTS_METRICS_BASIS_ID:
+        expected_version = OBJECTS_METRICS_BASIS_VERSION
         artifact_kind = "graph_view"
     else:
         raise ValueError(f"Unsupported graph profile {profile_id!r}")
@@ -235,6 +265,11 @@ def profile_metadata(profile_id: object, profile_version: object) -> dict[str, o
         kind = "query_lossless"
         preserves = _TYPES_TOPOLOGY_PRESERVES
         omits = _TYPES_TOPOLOGY_OMITS
+    elif profile_id == OBJECTS_METRICS_BASIS_ID:
+        expected_version = OBJECTS_METRICS_BASIS_VERSION
+        kind = "query_lossless"
+        preserves = _OBJECTS_METRICS_BASIS_PRESERVES
+        omits = _OBJECTS_METRICS_BASIS_OMITS
     else:
         raise ValueError(f"Unsupported graph view profile {profile_id!r}")
     if type(profile_version) is not int or profile_version != expected_version:
@@ -281,6 +316,7 @@ __all__ = [
     "CALLS_TOPOLOGY_ID", "CALLS_TOPOLOGY_VERSION",
     "CALLS_DETAILED_ID", "CALLS_DETAILED_VERSION",
     "TYPES_TOPOLOGY_ID", "TYPES_TOPOLOGY_VERSION",
+    "OBJECTS_METRICS_BASIS_ID", "OBJECTS_METRICS_BASIS_VERSION",
     "DEPENDENCY_FILES_ID",
     "DEPENDENCY_FILES_VERSION",
     "DEPENDENCY_ARCHITECTURE_ID",

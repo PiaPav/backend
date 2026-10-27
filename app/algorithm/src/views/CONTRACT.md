@@ -4,7 +4,7 @@
 `canonical.full / 1`, `inventory.minimal / 1` и
 `structure.declarations / 1`, `dependency.files / 1` и
 `dependency.architecture / 1`, `calls.topology / 1`, `calls.detailed / 1` и
-`types.topology / 1`.
+`types.topology / 1` и `objects.metrics_basis / 1`.
 Первый профиль возвращает
 глубокую копию полного Graph DTO schema 1 / Parser semantics 7 и не является
 Graph View: он не получает view envelope или новый fingerprint и остаётся
@@ -154,3 +154,18 @@ reference facts и не становятся edges.
 cycles, но исключает facts для CBO/RFC/LCOM/WMC. Полный whitelist, closure,
 query guarantee и контрпример определены в
 `DATA_PROFILES_TYPES_TOPOLOGY_CONTRACT.md`.
+
+## `objects.metrics_basis` v1
+
+Профиль сохраняет все classes, fields и methods, target-only standalone
+functions и минимальную ownership closure. Он включает exact typed/access/call
+topology, положительные canonical call weights, все type references и полные
+complexity facts real methods. Synthetic methods сохраняют identity, но не
+являются metric callers или complexity terms.
+
+Call weights и type-reference occurrence details являются provenance; текущие
+CBO/RFC используют distinct unweighted adjacency. Validator проверяет строгий
+whitelist, ownership/path closure, endpoint kinds, synthetic policy, function
+target population, complexity и точное соответствие exact type references
+typed topology. Полный metric-to-facts контракт и контрпримеры определены в
+`DATA_PROFILES_OBJECTS_METRICS_BASIS_CONTRACT.md`.
