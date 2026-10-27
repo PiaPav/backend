@@ -138,6 +138,13 @@ def test_full_source_schema_rejects_malformed_nonprojected_metrics(mutate) -> No
         validate_metrics_source_v1(source)
 
 
+def test_full_source_rejects_object_population_mismatching_size_classes() -> None:
+    source = _source()
+    source["metrics"]["size"]["classes"] += 1
+    with pytest.raises(ValueError, match="size.classes"):
+        validate_metrics_source_v1(source)
+
+
 @pytest.mark.parametrize(
     "section,field,value",
     [

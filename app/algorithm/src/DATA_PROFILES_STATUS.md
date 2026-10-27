@@ -16,7 +16,7 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 | 1. Общий envelope | **выполнено для Graph View, Graph Summary и Metrics View v1** |
 | 2. Первые безопасные Graph Views | **выполнено для initial scope** |
 | 3. Domain Graph Views | **выполнено для всех пяти domain profiles v1** |
-| 4. Metrics Views | **в работе: initial profiles выполнены** |
+| 4. Metrics Views | **в работе: overview, architecture, quality и objects выполнены** |
 | 5. Aggregates | **не выполнено** |
 | 6. Consumer integration | **не выполнено** |
 
@@ -108,16 +108,17 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 2. **Выполнен для initial scope.** Versioned population/denominator descriptors
    сопровождают опубликованные averages, rates и density; отсутствующий в full
    DTO hybrid call-owner denominator явно помечен `not_materialized`.
-3. **Выполнен для `metrics.quality` v1.** Sidecar truncation descriptor фиксирует
-   limit, returned/total populations, признак усечения и tie-safe ordering для
-   `largest_callables`. Общий контракт будущих call-graph top-k остаётся
-   открытым, поскольку их total population не всегда материализован в DTO.
+3. **Выполнен для `metrics.quality` и `metrics.objects` v1.** Sidecar truncation
+   descriptors фиксируют limit, returned/total populations, признак усечения и
+   tie-safe ordering для quality и шести object rankings. Общий контракт будущих
+   call-graph top-k остаётся открытым, поскольку их total population не всегда
+   материализован в DTO.
 4. **Выполнен для initial scope.** Exact equality и сохранение типов каждого
    whitelisted metric leaf проверяются тестами.
-5. **Выполнен полностью для v1.** `metrics.overview`, `metrics.architecture` и
-   `metrics.quality` доступны через explicit profile API.
-6. **В работе.** `metrics.objects`, `metrics.calls` и `metrics.aggregate`
-   остаются в backlog; общий Metrics View envelope уже реализован.
+5. **Выполнен полностью для v1.** `metrics.overview`, `metrics.architecture`,
+   `metrics.quality` и `metrics.objects` доступны через explicit profile API.
+6. **В работе.** `metrics.calls` и `metrics.aggregate` остаются в backlog;
+   общий Metrics View envelope уже реализован.
 
 ## Этап 5. Aggregates
 
@@ -170,7 +171,7 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
     `28680 / 91853 = 31.2238%`. `inventory.minimal` измерен как
     `2003 / 37091 = 5.4002%` и `2811 / 91853 = 3.0603%`, но по-прежнему не имеет
     threshold.
-5. **Выполнен частично.** Критерии envelope, Graph profiles и первых трёх
+5. **Выполнен частично.** Критерии envelope, Graph profiles и первых четырёх
    Metrics Views подтверждены, но aggregates, golden fixtures будущих profiles
    и consumer integration остаются открытыми.
 
@@ -233,9 +234,10 @@ errors в `gpt_work_dir`; тесты в этом прогоне не испол�
 Первый набор безопасных Graph profiles реализован полностью. Для первых двух
 compact profiles зафиксирована и проверена benchmark family v2. Отклонённый
 draft v1 исторически не прошёл 45% из-за дефекта состава fixture. Начальные
-Metrics Views, `metrics.quality` и все пять domain Graph Views также реализованы;
-остальные Metrics profiles, расширение truncation contract для call-graph
-rankings, aggregates и consumer integration остаются в backlog.
+Metrics Views, `metrics.quality`, `metrics.objects` и все пять domain Graph Views
+также реализованы; `metrics.calls`, `metrics.aggregate`, расширение truncation
+contract для call-graph rankings, aggregates и consumer integration остаются в
+backlog.
 
 Для Metrics size benchmark исходная family v1 на Graph fixture с 4/10
 компонентами сохранена как отклонённая история: `metrics.overview` дал
@@ -245,15 +247,19 @@ rankings, aggregates и consumer integration остаются в backlog.
 неизменённые targets: overview `4560/23838 = 19.1291%` и
 `4565/40974 = 11.1412%`; architecture `6902/23838 = 28.9538%` и
 `10593/40974 = 25.8530%`; quality `3211/23838 = 13.4701%` и
-`3213/40974 = 7.8416%`.
+`3213/40974 = 7.8416%`; objects `11464/23838 = 48.0913%` и
+`14674/40974 = 35.8139%`.
 
-Финальная проверка milestone собрала 99 релевантных тестов, 291 тест `views` и
-463 теста безопасной области без `gpt_work_dir`; все проверки passed, failures
-и skips отсутствуют.
+Для `metrics.objects` профиль копирует полный `object_oriented` без пересчёта и
+добавляет только populations `classes/methods/fields`, exact internal topology,
+nullable LCOM/DIT и truncation metadata. Окончательный golden-прогон дал
+**24 passed**, профильный — **25 passed**; после усиления source population
+validation все views дали **315 passed**, а полный безопасный прогон без
+`gpt_work_dir` — **487 passed, 0 failed, 0 skipped**.
 
 ## Приоритет доработок
 
-1. Расширять truncation contract только вместе со следующим top-k Metrics
-   profile, явно учитывая доступность total population в полном DTO.
-2. Приступить к следующему Metrics View из этапа 4 без пересчёта значений из
-   сокращённого графа; для него заранее зафиксировать query need и benchmark.
+1. Расширять truncation contract для call graph только вместе с
+   `metrics.calls`, явно учитывая доступность total population в полном DTO.
+2. Реализовать `metrics.calls` без пересчёта значений из сокращённого графа;
+   заранее зафиксировать query need, resolution coverage и benchmark.

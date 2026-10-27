@@ -26,6 +26,14 @@
             "id": "metrics.quality",
             "version": 1
           }
+        },
+        {
+          "compact_bytes": 11464,
+          "full_compact_sha256": "93575c058e4b28acec3885f3b58dbee868a88f4b0747f01e4d90c7a5af38b61f",
+          "profile": {
+            "id": "metrics.objects",
+            "version": 1
+          }
         }
       ],
       "name": "medium",
@@ -47,6 +55,10 @@
       },
       "targets": {
         "metrics.architecture": {
+          "maximum_view_basis": 50,
+          "source_basis": 100
+        },
+        "metrics.objects": {
           "maximum_view_basis": 50,
           "source_basis": 100
         },
@@ -85,6 +97,14 @@
             "id": "metrics.quality",
             "version": 1
           }
+        },
+        {
+          "compact_bytes": 14674,
+          "full_compact_sha256": "d153913c0de7b1b2bc60e9c4918e6046dc2019a57860374cc4f7efa7c44583db",
+          "profile": {
+            "id": "metrics.objects",
+            "version": 1
+          }
         }
       ],
       "name": "large",
@@ -106,6 +126,10 @@
       },
       "targets": {
         "metrics.architecture": {
+          "maximum_view_basis": 50,
+          "source_basis": 100
+        },
+        "metrics.objects": {
           "maximum_view_basis": 50,
           "source_basis": 100
         },

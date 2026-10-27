@@ -92,6 +92,44 @@ Threshold-filtered списки не являются усечёнными. Ед
 ranking. Изменение limit, порядка, tie policy или смысла population требует
 новой версии profile.
 
+## `metrics.objects` v1
+
+Whitelist `payload.metrics`:
+
+- `size.classes`, `size.methods` и `size.fields`;
+- полный текущий `object_oriented`, включая полную таблицу `classes` и все
+  шесть rankings.
+
+Профиль является query-lossless для текущей object-oriented секции полного
+Metrics DTO. Значения, типы и порядок строк копируются без пересчёта,
+повторного округления или сортировки. `classes_analyzed`, `size.classes` и
+длина `classes` обязаны совпадать.
+
+Object-specific population metadata различает canonical classes,
+не синтетические directly owned methods, directly owned fields и exact
+canonical callable targets. Полная population callable targets в Metrics DTO
+не материализована и не восстанавливается из опубликованных counts.
+
+`topology_policy` фиксирует basis Metrics semantics 4: object metrics используют
+уникальную exact internal canonical adjacency; `calls` и `awaits` образуют
+unweighted adjacency, поэтому веса и повторные occurrences не увеличивают CBO
+или RFC. Ownership является непосредственным. Synthetic methods исключены как
+declared methods и callers, но exact synthetic target может учитываться;
+standalone function target может учитываться в RFC. Отсутствие exact relation
+не доказывает отсутствие runtime relation.
+
+LCOM имеет denominator из неупорядоченных пар directly declared
+non-synthetic methods. При менее чем двух таких methods либо при отсутствии
+directly declared fields результат равен `null`, а не `0.0`. `dit: null`
+означает цикл во внутренней exact inheritance topology. Поле `class` является
+display label, а не canonical ID.
+
+Каждый из шести rankings имеет limit 10, fixed-size tie policy и порядок
+`metric descending`, затем `class ascending`. Rankings являются точными
+полнострочными срезами таблицы `classes`. `total_matching` равен
+`classes_analyzed` для WMC/CBO/RFC/NOC и числу non-null строк для LCOM/DIT;
+`lowest_cohesion` сортируется по LCOM descending.
+
 ## Population metadata
 
 Все профили содержат `population_metadata` descriptor version 1. Он определяет
@@ -126,7 +164,8 @@ average/rate/density. Descriptor не является новым результ
 
 Для `metrics.quality` descriptor содержит только callable population и bindings
 трёх averages к `code_quality.analyzed_callables`; при пустой population полный
-Metrics DTO публикует `0.0`.
+Metrics DTO публикует `0.0`. Для `metrics.objects` descriptor содержит только
+object-specific populations и отдельную nullable LCOM semantics.
 
 ## Инварианты
 
@@ -145,6 +184,9 @@ Metrics DTO публикует `0.0`.
   новой profile version;
 - для quality выполняются `analyzed_callables = size.functions + size.methods`
   и `len(largest_callables) = min(analyzed_callables, 10)`;
+- для objects выполняются
+  `classes_analyzed = size.classes = len(classes)`, а каждый ranking равен
+  нормативному top-10 срезу полной таблицы classes;
 - строки quality rankings имеют канонический порядок, положительные `lines` и
   cyclomatic complexity, а threshold rows удовлетворяют опубликованным
   включительным границам;

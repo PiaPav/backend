@@ -39,6 +39,26 @@ DEFINITIONS = [
     {"id": "root", "population": "canonical file and module roots", "includes": ["file roots", "module roots"], "excludes": ["declarations"]},
 ]
 
+OBJECT_TOPOLOGY_POLICY = {
+    "descriptor_version": 1,
+    "adjacency": "canonical internal exact unique adjacency",
+    "call_relations": "calls and awaits are unweighted; occurrence multiplicity does not affect CBO or RFC",
+    "ownership": "direct declaration ownership",
+    "synthetic_methods": "excluded as declared methods and callers; exact synthetic method targets may count",
+    "standalone_function_targets": "may count in RFC",
+    "non_exact_relations": "absence does not prove absence of a runtime relation",
+}
+OBJECT_INTERPRETATION_POLICY = {
+    "descriptor_version": 1,
+    "class_label": "display label, not canonical identifier",
+    "lcom": {
+        "denominator": "unordered pairs of directly declared non-synthetic methods",
+        "null_when": ["fewer than two eligible methods", "no directly declared fields"],
+        "zero_is_not_null": True,
+    },
+    "dit_null": "internal inheritance cycle",
+}
+
 
 def _bindings(profile: str) -> list[dict[str, Any]]:
     if profile == "metrics.quality":
@@ -46,6 +66,12 @@ def _bindings(profile: str) -> list[dict[str, Any]]:
             {"metric": f"metrics.code_quality.{metric}", "denominator": "metrics.code_quality.analyzed_callables", "zero_denominator_result": 0.0}
             for metric in ("average_cognitive_complexity", "average_cyclomatic_complexity", "average_lines_per_callable")
         ]
+    if profile == "metrics.objects":
+        return [{
+            "metric": "metrics.object_oriented.classes[*].lcom",
+            "denominator": "unordered pairs of directly declared non-synthetic methods",
+            "null_result_when": "fewer than two eligible methods or no directly declared fields",
+        }]
     common = [
         {"metric": "metrics.dependency_graph.density", "denominator": "ordered distinct root pairs: n*(n-1)", "zero_denominator_result": 0.0},
         {"metric": "metrics.dependency_graph.average_fan_in", "denominator": "dependency graph roots", "zero_denominator_result": 0.0},
@@ -66,8 +92,17 @@ def _bindings(profile: str) -> list[dict[str, Any]]:
 
 
 def population_metadata(profile: str) -> dict[str, Any]:
-    definitions = ([row for row in DEFINITIONS if row["id"] == "callable"]
-                   if profile == "metrics.quality" else DEFINITIONS)
+    if profile == "metrics.quality":
+        definitions = [row for row in DEFINITIONS if row["id"] == "callable"]
+    elif profile == "metrics.objects":
+        definitions = [
+            {"id": "class", "population": "canonical class nodes", "includes": ["all canonical classes"], "excludes": []},
+            {"id": "declared_method", "population": "methods directly owned by a class", "includes": ["non-synthetic methods"], "excludes": ["synthetic methods", "inherited methods"]},
+            {"id": "declared_field", "population": "fields directly owned by a class", "includes": ["directly declared fields"], "excludes": ["inherited fields"]},
+            {"id": "callable_target", "population": "exact canonical function or method targets", "includes": ["functions", "methods including synthetic targets"], "excludes": ["non-exact targets"], "materialization": "complete callable target population not_materialized"},
+        ]
+    else:
+        definitions = DEFINITIONS
     return {"descriptor_version": 1, "rounding_policy": deepcopy(ROUNDING_POLICY), "definitions": deepcopy(definitions), "metric_denominators": _bindings(profile)}
 
 
@@ -228,20 +263,29 @@ def _validate_quality(value: Any, where: str, *, exact: bool = False, expected_p
         _error(f"{where} empty population is inconsistent")
 
 
-def _validate_object_oriented(value: Any, where: str) -> None:
-    item = _obj(value, set(OBJECT_ORIENTED), where, exact=False); _count(item["classes_analyzed"], f"{where}.classes_analyzed")
+def _validate_object_oriented(value: Any, where: str, *, exact: bool = False,
+                              expected_population: int | None = None) -> None:
+    item = _obj(value, set(OBJECT_ORIENTED), where, exact=exact); _count(item["classes_analyzed"], f"{where}.classes_analyzed")
     fields = {"class", "wmc", "cbo", "rfc", "lcom", "dit", "noc"}
     def class_row(row: Mapping[str, Any], place: str) -> None:
-        _string(row["class"], f"{place}.class")
+        _string(row["class"], f"{place}.class", nonempty=True)
         for key in ("wmc", "cbo", "rfc", "noc"): _count(row[key], f"{place}.{key}")
         if row["dit"] is not None: _count(row["dit"], f"{place}.dit")
         if row["lcom"] is not None: _number(row["lcom"], f"{place}.lcom", rate=True)
     rankings = {"highest_weighted_method_complexity": "wmc", "highest_class_coupling": "cbo", "largest_response_sets": "rfc", "lowest_cohesion": "lcom", "deepest_inheritance": "dit", "most_direct_children": "noc"}
     for name, key in rankings.items():
-        rows = _rows(item[name], fields, f"{where}.{name}", class_row)
-        if any(row[key] is None for row in rows) or rows != sorted(rows, key=lambda row: (-row[key], row["class"])) or len(rows) != len({row["class"] for row in rows}): _error(f"{where}.{name} is not canonical")
-    classes = _rows(item["classes"], fields, f"{where}.classes", class_row)
+        rows = _rows(item[name], fields, f"{where}.{name}", class_row, exact=exact)
+        if any(row[key] is None for row in rows) or len(rows) != len({row["class"] for row in rows}): _error(f"{where}.{name} is not canonical")
+    classes = _rows(item["classes"], fields, f"{where}.classes", class_row, exact=exact)
     if classes != sorted(classes, key=lambda row: row["class"]) or len(classes) != len({row["class"] for row in classes}): _error(f"{where}.classes is not canonical")
+    if item["classes_analyzed"] != len(classes): _error(f"{where}.classes_analyzed does not match classes")
+    if expected_population is not None and item["classes_analyzed"] != expected_population: _error(f"{where}.classes_analyzed does not match size.classes")
+    for name, key in rankings.items():
+        eligible = [row for row in classes if row[key] is not None]
+        expected = sorted(eligible, key=lambda row: (-row[key], row["class"]))[:10]
+        actual_rows = [{field: row[field] for field in fields} for row in item[name]]
+        expected_rows = [{field: row[field] for field in fields} for row in expected]
+        if not _typed_tree_equal(actual_rows, expected_rows): _error(f"{where}.{name} is not an exact class ranking")
 
 
 def _validate_call_graph(value: Any, where: str) -> None:
@@ -284,7 +328,8 @@ def validate_metrics_source_v1(source: Mapping[str, Any]) -> None:
     _validate_dependency(metrics["dependency_graph"], "source.metrics.dependency_graph", exact=False, details=True)
     _validate_architecture(metrics["architecture"], "source.metrics.architecture", exact=False)
     _validate_quality(metrics["code_quality"], "source.metrics.code_quality", expected_population=size["functions"] + size["methods"])
-    _validate_object_oriented(metrics["object_oriented"], "source.metrics.object_oriented")
+    _validate_object_oriented(metrics["object_oriented"], "source.metrics.object_oriented",
+                              expected_population=size["classes"])
     _validate_call_graph(metrics["call_graph"], "source.metrics.call_graph")
 
 
@@ -333,6 +378,34 @@ def validate_metrics_view_v1(view: Mapping[str, Any], *, verify_fingerprint: boo
             "metrics.code_quality.largest_callables": expected_descriptor,
         }}
         if not _typed_tree_equal(truncation, expected_truncation): _error("truncation_metadata is inconsistent")
+    elif profile["id"] == "metrics.objects":
+        payload = _obj(payload, {"metrics", "population_metadata", "topology_policy",
+                                 "interpretation_policy", "truncation_metadata"}, "payload")
+        metrics = _obj(payload["metrics"], {"size", "object_oriented"}, "payload.metrics")
+        size = _obj(metrics["size"], {"classes", "methods", "fields"}, "payload.metrics.size")
+        for key in ("classes", "methods", "fields"): _count(size[key], f"payload.metrics.size.{key}")
+        objects = metrics["object_oriented"]
+        _validate_object_oriented(objects, "payload.metrics.object_oriented", exact=True,
+                                  expected_population=size["classes"])
+        if not _typed_tree_equal(payload["topology_policy"], OBJECT_TOPOLOGY_POLICY): _error("topology_policy does not match static contract")
+        if not _typed_tree_equal(payload["interpretation_policy"], OBJECT_INTERPRETATION_POLICY): _error("interpretation_policy does not match static contract")
+        names = {
+            "highest_weighted_method_complexity": ("wmc", "wmc descending", objects["classes_analyzed"]),
+            "highest_class_coupling": ("cbo", "cbo descending", objects["classes_analyzed"]),
+            "largest_response_sets": ("rfc", "rfc descending", objects["classes_analyzed"]),
+            "lowest_cohesion": ("lcom", "lcom descending", sum(row["lcom"] is not None for row in objects["classes"])),
+            "deepest_inheritance": ("dit", "dit descending", sum(row["dit"] is not None for row in objects["classes"])),
+            "most_direct_children": ("noc", "noc descending", objects["classes_analyzed"]),
+        }
+        expected_rankings = {}
+        for name, (_, ordering, total) in names.items():
+            returned = len(objects[name])
+            expected_rankings[f"metrics.object_oriented.{name}"] = {
+                "limit": 10, "returned_count": returned, "total_matching": total,
+                "truncated": total > returned, "ordering": [ordering, "class ascending"],
+            }
+        expected_truncation = {"descriptor_version": 1, "rankings": expected_rankings}
+        if not _typed_tree_equal(payload["truncation_metadata"], expected_truncation): _error("truncation_metadata is inconsistent")
     else:
         _error("unsupported metrics profile dispatch")
     if not _typed_tree_equal(payload["population_metadata"], population_metadata(profile["id"])): _error("population_metadata does not match static contract")
@@ -345,4 +418,6 @@ def serialize_metrics_view(view: Mapping[str, Any]) -> bytes:
     return (json.dumps(view, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
 
 
-__all__ = ["PACKAGE_GROUPING", "THRESHOLD_POLICY", "metrics_view_fingerprint", "population_metadata", "serialize_metrics_view", "validate_metrics_source_v1", "validate_metrics_view_v1"]
+__all__ = ["OBJECT_INTERPRETATION_POLICY", "OBJECT_TOPOLOGY_POLICY", "PACKAGE_GROUPING",
+           "THRESHOLD_POLICY", "metrics_view_fingerprint", "population_metadata",
+           "serialize_metrics_view", "validate_metrics_source_v1", "validate_metrics_view_v1"]

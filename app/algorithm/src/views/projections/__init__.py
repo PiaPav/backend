@@ -7,6 +7,7 @@ from .inventory_minimal import project_inventory_minimal_v1
 from .metrics_architecture import project_metrics_architecture_v1
 from .metrics_overview import project_metrics_overview_v1
 from .metrics_quality import project_metrics_quality_v1
+from .metrics_objects import project_metrics_objects_v1
 from .calls_topology import project_calls_topology_v1
 from .calls_detailed import project_calls_detailed_v1
 from .types_topology import project_types_topology_v1
@@ -17,6 +18,7 @@ __all__ = [
     "project_structure_declarations_v1",
     "project_metrics_architecture_v1", "project_metrics_overview_v1",
     "project_metrics_quality_v1",
+    "project_metrics_objects_v1",
     "project_calls_topology_v1",
     "project_calls_detailed_v1",
     "project_types_topology_v1",

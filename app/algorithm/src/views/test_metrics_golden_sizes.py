@@ -16,8 +16,9 @@ from views import project_metrics_view, validate_metrics_source_v1, validate_met
 from views.testdata.representative_metrics_v2 import build_representative_metrics_v2
 
 _FIXTURES = ("medium", "large")
-_PROFILES = ("metrics.overview", "metrics.architecture", "metrics.quality")
-_TARGETS = {"metrics.overview": 20, "metrics.architecture": 50, "metrics.quality": 50}
+_PROFILES = ("metrics.overview", "metrics.architecture", "metrics.quality", "metrics.objects")
+_TARGETS = {"metrics.overview": 20, "metrics.architecture": 50, "metrics.quality": 50,
+            "metrics.objects": 50}
 _MANIFEST = Path(__file__).with_name("testdata") / "metrics_profiles_golden_v2.json"
 
 
