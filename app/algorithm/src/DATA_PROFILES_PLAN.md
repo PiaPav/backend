@@ -371,10 +371,17 @@ Metrics profiles копируют значения из полного Metrics D
 
 ### 7.7. `metrics.aggregate`
 
-- scalar totals;
-- будущие histograms/quantiles, если они появятся в полном DTO;
-- top-k с truncation metadata;
-- никаких утверждений, что relative risk является вероятностью.
+V1 является scalar-only one-way projection:
+
+- только явно зафиксированные integer totals полного Metrics DTO;
+- раздельные entity, occurrence, unique-topology и topology-partition
+  populations;
+- без averages, rates, density и derived totals;
+- без histograms, quantiles и top-k.
+
+Histograms/quantiles могут копироваться только после их появления в полном DTO.
+Добавление их или rankings меняет whitelist/population semantics и требует
+новой версии profile. Relative risk нельзя трактовать как вероятность.
 
 ## 8. Совместимость Graph и Metrics profiles
 

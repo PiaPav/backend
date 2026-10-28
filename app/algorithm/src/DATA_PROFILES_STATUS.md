@@ -118,8 +118,10 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 5. **Выполнен полностью для v1.** `metrics.overview`, `metrics.architecture`,
    `metrics.quality` и `metrics.objects` доступны через explicit profile API.
 6. **В работе.** Draft `metrics.calls` v1 отклонён по обязательному size target
-   и отозван из публичного API; `metrics.calls` и `metrics.aggregate` остаются в
-   backlog. Общий Metrics View envelope уже реализован.
+   и отозван из публичного API. Для `metrics.aggregate` v1 до реализации
+   зафиксированы scalar-only whitelist, population semantics, отсутствие top-k
+   и отдельный benchmark gate `<=15%`; runtime-профиль пока не зарегистрирован.
+   Общий Metrics View envelope уже реализован.
 
 ## Этап 5. Aggregates
 
@@ -272,10 +274,11 @@ golden manifest, а результаты сохранены как rejected hist
 
 ## Приоритет доработок
 
-1. До новой реализации `metrics.calls` принять отдельное product-решение:
+1. Реализовать `metrics.aggregate` v1 строго по заранее зафиксированным
+   `DATA_PROFILES_METRICS_AGGREGATE_CONTRACT.md` и benchmark gate, не добавляя
+   derived totals или rankings; после реализации зафиксировать artifact hashes
+   и подтвердить target `<=15%`.
+2. До новой реализации `metrics.calls` принять отдельное product-решение:
    изменить size target либо спроектировать новую несовместимую wire-форму с
    нормативным decoder и decoded typed-tree equality. Повторять отклонённый v1
    при тех же ограничениях нельзя.
-2. Для `metrics.aggregate` заранее зафиксировать whitelist scalar totals,
-   доступность total populations для каждого top-k и отдельный benchmark до
-   реализации.

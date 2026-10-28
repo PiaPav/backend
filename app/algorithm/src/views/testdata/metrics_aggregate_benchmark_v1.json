@@ -1,0 +1,138 @@
+{
+  "contract": {
+    "aggregate_policy": {
+      "derived_metric_values": "forbidden",
+      "descriptor_version": 1,
+      "top_k": {"kind": "omitted", "rankings": []},
+      "value_policy": "exact_recursive_whitelist_copy"
+    },
+    "path_populations": {
+      "metrics.activity.calls": {"count_kind": "occurrence", "population": "structural call occurrences of activity owners"},
+      "metrics.activity.external_imports": {"count_kind": "occurrence", "population": "non-project direct import occurrences"},
+      "metrics.activity.local_imports": {"count_kind": "occurrence", "population": "project-local direct import occurrences"},
+      "metrics.architecture.package_edges": {"count_kind": "unique_topology", "population": "distinct directed cross-package pairs"},
+      "metrics.call_graph.callsites_in_local_edges": {"count_kind": "occurrence", "population": "local exact callsite occurrences represented by edges"},
+      "metrics.call_graph.edges": {"count_kind": "unique_topology", "population": "exact directed canonical call-owner pairs"},
+      "metrics.call_graph.external_or_builtin_callsites": {"count_kind": "occurrence", "population": "external/builtin callsite occurrences"},
+      "metrics.call_graph.nodes": {"count_kind": "unique_topology", "population": "call-graph owners"},
+      "metrics.call_graph.unresolved_callsites": {"count_kind": "occurrence", "population": "unresolved callsite occurrences"},
+      "metrics.call_graph.unresolved_or_external_callsites": {"count_kind": "occurrence", "population": "union of external/builtin and unresolved callsite occurrences"},
+      "metrics.code_quality.analyzed_callables": {"count_kind": "entity", "population": "functions and non-synthetic methods"},
+      "metrics.code_quality.async.functions": {"count_kind": "entity", "population": "async functions in analyzed callables"},
+      "metrics.code_quality.exceptions.callables_raising": {"count_kind": "entity", "population": "analyzed callables containing raise statements"},
+      "metrics.code_quality.exceptions.raise_statements": {"count_kind": "occurrence", "population": "raise statement occurrences"},
+      "metrics.dependency_graph.edges": {"count_kind": "unique_topology", "population": "exact directed non-self root pairs"},
+      "metrics.dependency_graph.nodes": {"count_kind": "unique_topology", "population": "dependency graph roots"},
+      "metrics.dependency_graph.weakly_connected_components": {"count_kind": "topology_partition", "population": "weak components of dependency roots"},
+      "metrics.object_oriented.classes_analyzed": {"count_kind": "entity", "population": "canonical classes"},
+      "metrics.size.abstract_classes": {"count_kind": "entity", "population": "canonical abstract classes"},
+      "metrics.size.classes": {"count_kind": "entity", "population": "canonical classes"},
+      "metrics.size.constants": {"count_kind": "entity", "population": "canonical constants"},
+      "metrics.size.dataclasses": {"count_kind": "entity", "population": "canonical dataclasses"},
+      "metrics.size.directories": {"count_kind": "entity", "population": "unique source directories"},
+      "metrics.size.fields": {"count_kind": "entity", "population": "canonical fields"},
+      "metrics.size.files": {"count_kind": "entity", "population": "canonical file/module roots"},
+      "metrics.size.functions": {"count_kind": "entity", "population": "non-synthetic functions"},
+      "metrics.size.methods": {"count_kind": "entity", "population": "non-synthetic methods"}
+    },
+    "population_metadata": {
+      "definitions": [
+        {"id": "entity", "meaning": "counts of named entities or eligible entity subsets"},
+        {"id": "occurrence", "meaning": "counts of occurrences; repeated facts count repeatedly"},
+        {"id": "topology_partition", "meaning": "counts of components partitioning exact topology"},
+        {"id": "unique_topology", "meaning": "counts of unique exact topology nodes or relations"}
+      ],
+      "descriptor_version": 1,
+      "metric_denominators": [],
+      "rounding_policy": {"applies_to": "ratio_metrics", "kind": "decimal_places", "places": 4}
+    },
+    "whitelist": {
+      "activity": ["calls", "local_imports", "external_imports"],
+      "architecture": ["package_edges"],
+      "call_graph": ["nodes", "edges", "callsites_in_local_edges", "external_or_builtin_callsites", "unresolved_callsites", "unresolved_or_external_callsites"],
+      "code_quality": {
+        "async": ["functions"],
+        "exceptions": ["raise_statements", "callables_raising"],
+        "fields": ["analyzed_callables"]
+      },
+      "dependency_graph": ["nodes", "edges", "weakly_connected_components"],
+      "object_oriented": ["classes_analyzed"],
+      "size": ["directories", "files", "classes", "abstract_classes", "dataclasses", "functions", "methods", "fields", "constants"]
+    }
+  },
+  "fixture_family": "representative_metrics_v2",
+  "fixtures": [
+    {
+      "artifact": {
+        "profile": {
+          "id": "metrics.aggregate",
+          "version": 1
+        },
+        "status": "contract_gate_not_implemented"
+      },
+      "name": "medium",
+      "source": {
+        "compact_bytes": 23838,
+        "full_compact_sha256": "c34eaa715e6f9119ab64262b466276d64b20673d020aa0caefcd27a185f5747d",
+        "graph_fingerprint": "c9fe1b22d4ae705706782cb8813c24f776c3cef47a324bdd2f7df48124edb15f",
+        "graph_schema_version": 1,
+        "metrics_schema_version": 1,
+        "metrics_semantics_version": 4,
+        "populations": {
+          "analyzed_callables": 40,
+          "call_graph_nodes": 60,
+          "classes_analyzed": 20,
+          "dependency_nodes": 21,
+          "functions": 20,
+          "methods": 20
+        }
+      },
+      "target": {
+        "maximum_compact_bytes": 3575,
+        "maximum_view_basis": 15,
+        "source_basis": 100
+      }
+    },
+    {
+      "artifact": {
+        "profile": {
+          "id": "metrics.aggregate",
+          "version": 1
+        },
+        "status": "contract_gate_not_implemented"
+      },
+      "name": "large",
+      "source": {
+        "compact_bytes": 40974,
+        "full_compact_sha256": "ca768197cd784a5df83a99d9502b4f8f1cb9912c6d18f2d74b3ea6d9b3c031a7",
+        "graph_fingerprint": "bc84cf0eda2012e69f307ff9100b141738e382aa2c8cbbbbab3405789f3ef4e6",
+        "graph_schema_version": 1,
+        "metrics_schema_version": 1,
+        "metrics_semantics_version": 4,
+        "populations": {
+          "analyzed_callables": 100,
+          "call_graph_nodes": 150,
+          "classes_analyzed": 50,
+          "dependency_nodes": 51,
+          "functions": 50,
+          "methods": 50
+        }
+      },
+      "target": {
+        "maximum_compact_bytes": 6146,
+        "maximum_view_basis": 15,
+        "source_basis": 100
+      }
+    }
+  ],
+  "manifest_schema_version": 1,
+  "serialization": {
+    "encoding": "utf-8",
+    "ensure_ascii": false,
+    "separators": [
+      ",",
+      ":"
+    ],
+    "sort_keys": true
+  }
+}

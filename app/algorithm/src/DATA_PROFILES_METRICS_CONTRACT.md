@@ -130,6 +130,18 @@ display label, а не canonical ID.
 `classes_analyzed` для WMC/CBO/RFC/NOC и числу non-null строк для LCOM/DIT;
 `lowest_cohesion` сортируется по LCOM descending.
 
+## `metrics.aggregate` v1
+
+Профиль заранее зафиксирован как scalar-only one-way projection. Он копирует
+только явно разрешённые integer totals, разводит entity, occurrence и unique
+topology populations и не публикует averages/rates, derived totals или top-k.
+Отдельный нормативный whitelist, причины отсутствия rankings и неизменяемый
+benchmark target `<=15%` описаны в
+`DATA_PROFILES_METRICS_AGGREGATE_CONTRACT.md`.
+
+Runtime-регистрация допускается только после прохождения зафиксированного
+contract/benchmark gate на accepted `representative_metrics_v2` family.
+
 ## Population metadata
 
 Все профили содержат `population_metadata` descriptor version 1. Он определяет
