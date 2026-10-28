@@ -1,6 +1,6 @@
 {
   "manifest_schema_version": 1,
-  "status": "source_measured",
+  "status": "runtime_rejected_size_target",
   "composition": {
     "family": "representative_packages_v1",
     "package_counts": {"medium": 4, "large": 10},
@@ -46,7 +46,7 @@
     },
     "canonical_ordering": {"nodes": "id", "edges": "id"},
     "artifact_serialization": {"encoding": "utf-8", "ensure_ascii": false, "sort_keys": true, "separators": [",", ":"], "fingerprint_algorithm": "sha256", "fingerprint_scope": "full envelope without summary_fingerprint", "benchmark_scope": "full compact artifact including summary_fingerprint"},
-    "artifact_status": "contract_gate_not_implemented"
+    "artifact_status": "rejected_size_target"
   },
   "fixtures": [
     {
@@ -74,6 +74,14 @@
           "distinct_cross_package_pairs": 8,
           "quotient_cycle_without_file_scc": true
         }
+      },
+      "rejected_artifact": {
+        "compact_bytes": 7054,
+        "full_compact_sha256": "ab26f30ef0876fb76d7c66bb0e4ae96e2ee5d6f93a458ea4e0df301f9744d7fa",
+        "summary_fingerprint": "dfd89948f25ddbb277275d01a9db7e4dcfe10619abac9a3c380da2c6b8a5fb8b",
+        "populations": {"package_count": 5, "quotient_edge_count": 8, "file_count": 15, "declaration_count": 25, "class_count": 10, "abstract_class_count": 5, "exact_import_occurrence_count": 26},
+        "size_cap_bytes": 4665,
+        "contract_lower_bound_bytes": 5246
       }
     },
     {
@@ -101,6 +109,14 @@
           "distinct_cross_package_pairs": 20,
           "quotient_cycle_without_file_scc": true
         }
+      },
+      "rejected_artifact": {
+        "compact_bytes": 14314,
+        "full_compact_sha256": "1f4941671fd0f3f55dc08f7f18b1dfbb572ce2144cd2a04732cb492f2718544d",
+        "summary_fingerprint": "a604bea360357facfeb4f1cd7cfc4794b1b0e3afd3895239716f12e2004e5337",
+        "populations": {"package_count": 11, "quotient_edge_count": 20, "file_count": 33, "declaration_count": 55, "class_count": 22, "abstract_class_count": 11, "exact_import_occurrence_count": 62},
+        "size_cap_bytes": 10688,
+        "contract_lower_bound_bytes": 12512
       }
     }
   ]

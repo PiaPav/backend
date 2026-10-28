@@ -237,3 +237,23 @@ artifact_compact_bytes * 100 <= source_compact_bytes * 15
 
 Размер и SHA-256 относятся к полному compact UTF-8 artifact, включая
 `summary_fingerprint`. Target является fixture-scoped product acceptance.
+
+## Результат acceptance v1
+
+Runtime-кандидат сохранил точную schema и прошёл semantic tests, но не прошёл
+неизменяемый size target:
+
+| Fixture | Source bytes | Cap 15% | Artifact bytes | Доля |
+|---|---:|---:|---:|---:|
+| medium | 31 100 | 4 665 | 7 054 | 22.6817% |
+| large | 71 256 | 10 688 | 14 314 | 20.0881% |
+
+Одни обязательные object records имеют нижнюю границу 5 246 и 12 512 bytes,
+то есть превышают caps ещё без envelope, completeness, grouping и fingerprint.
+Следовательно, точная v1 wire schema не может выполнить target. Runtime v1
+отозван и не зарегистрирован. Fixture, target и contract после измерения не
+менялись; manifest сохраняет rejected artifact hashes/fingerprints как evidence.
+
+Повторная реализация требует новой versioned compact wire schema (например,
+columnar rows и индексированные endpoints) с заранее зафиксированным decoder и
+benchmark gate. Ослаблять target или заменять fixture постфактум нельзя.

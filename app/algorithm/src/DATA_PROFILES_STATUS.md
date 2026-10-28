@@ -131,7 +131,10 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    существующего descriptor.
 2. **Выполнен на уровне контракта.** Unique file pairs, canonical import edges,
    exact occurrences и internal relations разведены в aggregate schema.
-3. **Не выполнен.** `aggregate.packages` не реализован.
+3. **V1 отклонён по size target.** Семантически корректный runtime-кандидат
+   object-wire v1 дал 22.68%/20.09% вместо `<=15%` и полностью отозван из API.
+   Frozen source-side rejection gate сохранён; повторная реализация требует
+   новой compact wire version.
 4. **Не выполнен.** `aggregate.overview` и его top-k policy не реализованы.
 5. **Выполнен на уровне контракта.** Обязательный marker
    `graph_kind: "quotient"` зафиксирован; runtime ещё не реализован.
@@ -156,8 +159,9 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    scenarios покрывают repeated, awaited, self/reverse, non-exact occurrences,
    multiple inheritance и cycles; quality truncation покрывает empty, границу
    limit, fixed-size ties и threshold boundaries. Для `aggregate.packages`
-   добавлена frozen source-side family с repeated/self/internal/cross imports и
-   package cycle без file SCC; runtime semantic tests появятся с projector.
+   frozen source-side family покрывает repeated/self/internal/cross imports и
+   package cycle без file SCC; отклонённый runtime-кандидат прошёл semantic
+   scenarios, а rejection gate фиксирует недостижимость size target v1.
 2. **Выполнен частично.** Проверены determinism, source immutability,
    referential closure, whitelist, fingerprint changes и version policy для
    `structure.declarations`, `dependency.files` и `dependency.architecture`;
@@ -289,5 +293,8 @@ golden manifest, а результаты сохранены как rejected hist
    изменить size target либо спроектировать новую несовместимую wire-форму с
    нормативным decoder и decoded typed-tree equality. Повторять отклонённый v1
    при тех же ограничениях нельзя.
-2. Следующий незаблокированный этап — реализовать `aggregate.packages` по
-   принятому contract/benchmark gate и подтвердить semantic/size invariants.
+2. До новой реализации `aggregate.packages` принять compact wire contract новой
+   version с нормативным decoder и заранее проверить schema lower bound против
+   frozen caps. Повторять object-wire v1 нельзя.
+3. После решения по package wire перейти к контракту `aggregate.overview`,
+   заранее зафиксировав top-k populations и target 8%.

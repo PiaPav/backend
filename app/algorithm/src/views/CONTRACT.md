@@ -122,6 +122,8 @@ unique file pairs, canonical import edges и exact import occurrences. Package
 self-edges отсутствуют; internal exact relations остаются в отдельных counters,
 а external/unresolved occurrences — в importer-package status counts. Полный
 нормативный контракт находится в `DATA_PROFILES_AGGREGATE_PACKAGES_CONTRACT.md`.
+Object-wire v1 не прошёл обязательный size target и не зарегистрирован в
+runtime API; описание сохраняется как rejected contract/evidence.
 
 ## `calls.topology` v1
 

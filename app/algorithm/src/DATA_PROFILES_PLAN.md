@@ -300,6 +300,8 @@ file-level SCC.
 
 Точная schema v1, grouping/ID policy, internal relation counters и benchmark
 gate зафиксированы в `DATA_PROFILES_AGGREGATE_PACKAGES_CONTRACT.md`.
+Object-wire v1 не прошёл неизменяемый target 15% и не публикуется runtime;
+компактная несовместимая wire schema требует новой profile version.
 
 ### 6.11. `aggregate.overview`
 

@@ -1,4 +1,4 @@
-"""Source-side benchmark gate for the future aggregate.packages v1 projector."""
+"""Frozen source-side rejection gate for aggregate.packages v1."""
 from __future__ import annotations
 
 from collections import Counter
@@ -88,7 +88,7 @@ CONTRACT = {"artifact_identity": {"artifact_kind": "graph_summary", "summary_sch
                 "fingerprint_scope": "full envelope without summary_fingerprint",
                 "benchmark_scope": "full compact artifact including summary_fingerprint",
             },
-            "artifact_status": "contract_gate_not_implemented"}
+            "artifact_status": "rejected_size_target"}
 EXPECTED_POPULATIONS = {
     "medium": {"package_count": 5, "package_labels": ["<root>", "pkg01", "pkg02", "pkg03", "pkg04"],
                "roots": 15, "declarations": 25, "classes": 10, "abstract_classes": 5,
@@ -115,6 +115,28 @@ FROZEN_SOURCE_MEASUREMENTS = {
               "graph_fingerprint": "414dd2e5aa9df7ed2ff51fb318ed7b8ca01f92882a286f9210d834cc6bdde79c",
               "compact_bytes": 71256,
               "full_compact_sha256": "cb07ab3676e2f10218dd67ccaf0679655391ced987ead7ca6219e67ce7bda333"},
+}
+REJECTED_ARTIFACT_MEASUREMENTS = {
+    "medium": {
+        "compact_bytes": 7054,
+        "full_compact_sha256": "ab26f30ef0876fb76d7c66bb0e4ae96e2ee5d6f93a458ea4e0df301f9744d7fa",
+        "summary_fingerprint": "dfd89948f25ddbb277275d01a9db7e4dcfe10619abac9a3c380da2c6b8a5fb8b",
+        "populations": {"package_count": 5, "quotient_edge_count": 8, "file_count": 15,
+                        "declaration_count": 25, "class_count": 10, "abstract_class_count": 5,
+                        "exact_import_occurrence_count": 26},
+        "size_cap_bytes": 4665,
+        "contract_lower_bound_bytes": 5246,
+    },
+    "large": {
+        "compact_bytes": 14314,
+        "full_compact_sha256": "1f4941671fd0f3f55dc08f7f18b1dfbb572ce2144cd2a04732cb492f2718544d",
+        "summary_fingerprint": "a604bea360357facfeb4f1cd7cfc4794b1b0e3afd3895239716f12e2004e5337",
+        "populations": {"package_count": 11, "quotient_edge_count": 20, "file_count": 33,
+                        "declaration_count": 55, "class_count": 22, "abstract_class_count": 11,
+                        "exact_import_occurrence_count": 62},
+        "size_cap_bytes": 10688,
+        "contract_lower_bound_bytes": 12512,
+    },
 }
 _MANIFEST = Path(__file__).with_name("testdata") / "aggregate_packages_benchmark_v1.json"
 
@@ -202,6 +224,15 @@ def build_source_manifest_candidate() -> dict[str, Any]:
             "target": TARGET, "contract": CONTRACT, "fixtures": fixtures}
 
 
+def build_rejection_spec() -> dict[str, Any]:
+    candidate = build_source_manifest_candidate()
+    candidate["status"] = "runtime_rejected_size_target"
+    candidate["contract"] = dict(candidate["contract"], artifact_status="rejected_size_target")
+    for fixture in candidate["fixtures"]:
+        fixture["rejected_artifact"] = REJECTED_ARTIFACT_MEASUREMENTS[fixture["name"]]
+    return candidate
+
+
 def test_fixed_contract_and_fixture_composition() -> None:
     manifest = json.loads(_MANIFEST.read_text(encoding="utf-8"))
     assert manifest["composition"] == FIXTURE_COMPOSITION
@@ -209,7 +240,7 @@ def test_fixed_contract_and_fixture_composition() -> None:
     assert manifest["contract"] == CONTRACT
     assert manifest["contract"]["nested_node_fields"] == NESTED_NODE_FIELDS
     assert manifest["contract"]["completeness"] == COMPLETENESS
-    assert manifest["status"] == "source_measured"
+    assert manifest["status"] == "runtime_rejected_size_target"
     frozen_sources = {fixture["name"]: fixture["source"] for fixture in manifest["fixtures"]}
     for name in ("medium", "large"):
         graph = build_representative_packages_v1(name)
@@ -228,7 +259,22 @@ def test_source_measurements_are_frozen() -> None:
     assert manifest["status"] != "source_measurement_pending", (
         "source measurement pending; run this module with --print-manifest and replace only status/fixtures"
     )
-    assert manifest == build_source_manifest_candidate()
+    candidate = build_source_manifest_candidate()
+    assert manifest["composition"] == candidate["composition"]
+    assert manifest["target"] == candidate["target"]
+    for actual, expected in zip(manifest["fixtures"], candidate["fixtures"]):
+        assert actual["name"] == expected["name"]
+        assert actual["source"] == expected["source"]
+
+
+def test_rejected_runtime_measurements_are_frozen() -> None:
+    manifest = json.loads(_MANIFEST.read_text(encoding="utf-8"))
+    assert manifest == build_rejection_spec()
+    for fixture in manifest["fixtures"]:
+        rejected = fixture["rejected_artifact"]
+        assert rejected["contract_lower_bound_bytes"] > rejected["size_cap_bytes"]
+        assert rejected["compact_bytes"] >= rejected["contract_lower_bound_bytes"]
+        assert rejected["compact_bytes"] > rejected["size_cap_bytes"]
 
 
 if __name__ == "__main__":
@@ -236,4 +282,4 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--print-manifest", action="store_true", required=True)
     parser.parse_args()
-    print(json.dumps(build_source_manifest_candidate(), ensure_ascii=False, sort_keys=True, indent=2))
+    print(json.dumps(build_rejection_spec(), ensure_ascii=False, sort_keys=True, indent=2))
