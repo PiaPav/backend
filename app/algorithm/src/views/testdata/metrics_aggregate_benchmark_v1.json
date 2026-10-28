@@ -64,11 +64,12 @@
   "fixtures": [
     {
       "artifact": {
+        "compact_bytes": 2135,
+        "full_compact_sha256": "1cf7acc167596adf6ead443c9f61abd1e0fab7fe0a61f97180db1052717b154f",
         "profile": {
           "id": "metrics.aggregate",
           "version": 1
-        },
-        "status": "contract_gate_not_implemented"
+        }
       },
       "name": "medium",
       "source": {
@@ -95,11 +96,12 @@
     },
     {
       "artifact": {
+        "compact_bytes": 2140,
+        "full_compact_sha256": "9d22dc45a8f49f556b8fe2320827b3bb2da10577ab311150e2e7dff0abf93da1",
         "profile": {
           "id": "metrics.aggregate",
           "version": 1
-        },
-        "status": "contract_gate_not_implemented"
+        }
       },
       "name": "large",
       "source": {

@@ -51,6 +51,26 @@ def test_stale_hash_and_bad_types_are_rejected() -> None:
     with pytest.raises(ValueError, match="fingerprint"): validate_metrics_view_v1(view)
 
 
+@pytest.mark.parametrize("mutation", ["bool", "metadata", "policy", "callables", "classes", "callsites"])
+def test_aggregate_rejects_bad_counts_metadata_and_cross_field_invariants(mutation: str) -> None:
+    view = project_metrics_view(_source(), profile_id="metrics.aggregate", profile_version=1)
+    metrics = view["payload"]["metrics"]
+    if mutation == "bool":
+        metrics["size"]["files"] = True
+    elif mutation == "metadata":
+        view["payload"]["population_metadata"]["definitions"][0]["meaning"] += "!"
+    elif mutation == "policy":
+        view["payload"]["aggregate_policy"]["top_k"]["rankings"] = ["x"]
+    elif mutation == "callables":
+        metrics["code_quality"]["analyzed_callables"] += 1
+    elif mutation == "classes":
+        metrics["object_oriented"]["classes_analyzed"] += 1
+    else:
+        metrics["call_graph"]["unresolved_or_external_callsites"] += 1
+    with pytest.raises(ValueError):
+        validate_metrics_view_v1(view, verify_fingerprint=False)
+
+
 @pytest.mark.parametrize(
     ("mutate", "match"),
     [

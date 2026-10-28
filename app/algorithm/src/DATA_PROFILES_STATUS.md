@@ -16,7 +16,7 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 | 1. Общий envelope | **выполнено для Graph View, Graph Summary и Metrics View v1** |
 | 2. Первые безопасные Graph Views | **выполнено для initial scope** |
 | 3. Domain Graph Views | **выполнено для всех пяти domain profiles v1** |
-| 4. Metrics Views | **в работе: overview, architecture, quality и objects выполнены** |
+| 4. Metrics Views | **в работе: overview, architecture, quality, objects и aggregate выполнены** |
 | 5. Aggregates | **не выполнено** |
 | 6. Consumer integration | **не выполнено** |
 
@@ -117,10 +117,11 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    whitelisted metric leaf проверяются тестами.
 5. **Выполнен полностью для v1.** `metrics.overview`, `metrics.architecture`,
    `metrics.quality` и `metrics.objects` доступны через explicit profile API.
-6. **В работе.** Draft `metrics.calls` v1 отклонён по обязательному size target
-   и отозван из публичного API. Для `metrics.aggregate` v1 до реализации
-   зафиксированы scalar-only whitelist, population semantics, отсутствие top-k
-   и отдельный benchmark gate `<=15%`; runtime-профиль пока не зарегистрирован.
+6. **Выполнен для `metrics.aggregate` v1.** Scalar-only профиль реализован по
+   заранее зафиксированным whitelist/population semantics, не пересчитывает
+   значения, не публикует top-k и прошёл отдельный benchmark gate `<=15%`.
+   Draft `metrics.calls` v1 отклонён по обязательному size target и отозван из
+   публичного API; он остаётся заблокированным до отдельного product-решения.
    Общий Metrics View envelope уже реализован.
 
 ## Этап 5. Aggregates
@@ -237,10 +238,10 @@ errors в `gpt_work_dir`; тесты в этом прогоне не испол�
 Первый набор безопасных Graph profiles реализован полностью. Для первых двух
 compact profiles зафиксирована и проверена benchmark family v2. Отклонённый
 draft v1 исторически не прошёл 45% из-за дефекта состава fixture. Начальные
-Metrics Views, `metrics.quality`, `metrics.objects` и все пять domain Graph Views
-также реализованы; `metrics.calls`, `metrics.aggregate`, расширение truncation
-contract для call-graph rankings, aggregates и consumer integration остаются в
-backlog.
+Metrics Views, `metrics.quality`, `metrics.objects`, scalar-only
+`metrics.aggregate` и все пять domain Graph Views также реализованы;
+`metrics.calls`, расширение truncation contract для call-graph rankings, Graph
+aggregates и consumer integration остаются в backlog.
 
 Для Metrics size benchmark исходная family v1 на Graph fixture с 4/10
 компонентами сохранена как отклонённая история: `metrics.overview` дал
@@ -260,6 +261,14 @@ nullable LCOM/DIT и truncation metadata. Окончательный golden-пр
 validation все views дали **315 passed**, а полный безопасный прогон без
 `gpt_work_dir` — **487 passed, 0 failed, 0 skipped**.
 
+Для `metrics.aggregate` v1 projector копирует ровно 27 integer leaves и
+публикует отдельные entity, occurrence, unique-topology и topology-partition
+semantics без averages, rates, derived totals и rankings. Golden artifact на
+неизменённой Metrics family v2 занял medium `2135/23838 = 8.9563%` и large
+`2140/40974 = 5.2228%`, пройдя target 15% с caps 3575/6146. После записи
+фактических bytes и SHA-256 benchmark дал **1 passed**, а все `views` —
+**328 passed, 0 failed**.
+
 Экспериментальный draft `metrics.calls` v1 семантически копировал полный
 `call_graph` и корректно разводил activity, topology, callsite resolution и risk
 populations, но провалил неизменный section target 50% на accepted Metrics
@@ -274,11 +283,10 @@ golden manifest, а результаты сохранены как rejected hist
 
 ## Приоритет доработок
 
-1. Реализовать `metrics.aggregate` v1 строго по заранее зафиксированным
-   `DATA_PROFILES_METRICS_AGGREGATE_CONTRACT.md` и benchmark gate, не добавляя
-   derived totals или rankings; после реализации зафиксировать artifact hashes
-   и подтвердить target `<=15%`.
-2. До новой реализации `metrics.calls` принять отдельное product-решение:
+1. До новой реализации `metrics.calls` принять отдельное product-решение:
    изменить size target либо спроектировать новую несовместимую wire-форму с
    нормативным decoder и decoded typed-tree equality. Повторять отклонённый v1
    при тех же ограничениях нельзя.
+2. Следующий незаблокированный этап — формально зафиксировать package grouping,
+   topology/occurrence weights и schema `aggregate.packages` до runtime-
+   реализации этапа 5.

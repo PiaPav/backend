@@ -1,4 +1,4 @@
-"""Contract benchmark specification for the future metrics.aggregate v1 profile."""
+"""Golden benchmark for metrics.aggregate v1."""
 from __future__ import annotations
 
 import hashlib
@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
-from views import validate_metrics_source_v1
+from views import project_metrics_view, validate_metrics_source_v1, validate_metrics_view_v1
 from views.testdata.representative_metrics_v2 import build_representative_metrics_v2
 
 _FIXTURES = ("medium", "large")
@@ -107,6 +107,9 @@ def build_benchmark_spec() -> dict[str, Any]:
         source = build_representative_metrics_v2(name)
         validate_metrics_source_v1(source)
         raw = _compact(source)
+        artifact = project_metrics_view(source, profile_id="metrics.aggregate", profile_version=1)
+        validate_metrics_view_v1(artifact)
+        artifact_raw = _compact(artifact)
         fixtures.append({
             "name": name,
             "source": {
@@ -120,7 +123,8 @@ def build_benchmark_spec() -> dict[str, Any]:
             },
             "artifact": {
                 "profile": {"id": "metrics.aggregate", "version": 1},
-                "status": "contract_gate_not_implemented",
+                "compact_bytes": len(artifact_raw),
+                "full_compact_sha256": hashlib.sha256(artifact_raw).hexdigest(),
             },
             "target": {
                 "source_basis": 100,
@@ -138,7 +142,7 @@ def build_benchmark_spec() -> dict[str, Any]:
     }
 
 
-def test_manifest_equals_deterministic_contract_gate_specification() -> None:
+def test_manifest_equals_deterministic_golden_benchmark() -> None:
     expected = build_benchmark_spec()
     manifest = json.loads(_MANIFEST.read_text(encoding="utf-8"))
     assert manifest == expected
@@ -166,3 +170,17 @@ def test_manifest_equals_deterministic_contract_gate_specification() -> None:
     maximums = {fixture["name"]: fixture["target"]["maximum_compact_bytes"]
                 for fixture in manifest["fixtures"]}
     assert maximums == {"medium": 3575, "large": 6146}
+    for fixture in manifest["fixtures"]:
+        artifact = fixture["artifact"]
+        assert type(artifact["compact_bytes"]) is int
+        assert isinstance(artifact["full_compact_sha256"], str)
+        assert len(artifact["full_compact_sha256"]) == 64
+        assert artifact["compact_bytes"] * fixture["target"]["source_basis"] <= fixture["source"]["compact_bytes"] * fixture["target"]["maximum_view_basis"]
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--print-manifest", action="store_true", required=True)
+    parser.parse_args()
+    print(json.dumps(build_benchmark_spec(), ensure_ascii=False, sort_keys=True, indent=2))

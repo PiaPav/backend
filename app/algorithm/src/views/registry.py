@@ -19,6 +19,8 @@ METRICS_QUALITY_ID = "metrics.quality"
 METRICS_QUALITY_VERSION = 1
 METRICS_OBJECTS_ID = "metrics.objects"
 METRICS_OBJECTS_VERSION = 1
+METRICS_AGGREGATE_ID = "metrics.aggregate"
+METRICS_AGGREGATE_VERSION = 1
 CALLS_TOPOLOGY_ID = "calls.topology"
 CALLS_TOPOLOGY_VERSION = 1
 CALLS_DETAILED_ID = "calls.detailed"
@@ -29,6 +31,17 @@ OBJECTS_METRICS_BASIS_ID = "objects.metrics_basis"
 OBJECTS_METRICS_BASIS_VERSION = 1
 
 _METRICS_PROFILES = {
+    METRICS_AGGREGATE_ID: (
+        METRICS_AGGREGATE_VERSION,
+        "one_way_projection",
+        ("scalar_metric_totals", "metric_population_semantics", "source_graph_identity"),
+        (
+            "averages_rates_and_density", "architecture_details",
+            "call_graph_rankings_and_topology_details", "code_quality_details_except_counts",
+            "dependency_details_except_counts", "histograms_and_quantiles",
+            "object_oriented_details_except_population_count", "top_k_rankings",
+        ),
+    ),
     METRICS_OVERVIEW_ID: (
         METRICS_OVERVIEW_VERSION,
         "one_way_projection",
@@ -357,6 +370,7 @@ __all__ = [
     "STRUCTURE_DECLARATIONS_ID",
     "STRUCTURE_DECLARATIONS_VERSION",
     "METRICS_ARCHITECTURE_ID", "METRICS_ARCHITECTURE_VERSION",
+    "METRICS_AGGREGATE_ID", "METRICS_AGGREGATE_VERSION",
     "METRICS_OVERVIEW_ID", "METRICS_OVERVIEW_VERSION",
     "METRICS_QUALITY_ID", "METRICS_QUALITY_VERSION",
     "METRICS_OBJECTS_ID", "METRICS_OBJECTS_VERSION",

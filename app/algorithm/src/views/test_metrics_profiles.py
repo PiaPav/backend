@@ -8,7 +8,7 @@ from graph_dto import graph_fingerprint
 from metrics import calculate_graph_metrics
 from metrics.test_core import _graph
 from views import materialize_metrics_profile, project_metrics_view, validate_metrics_view_v1
-from views.metrics_contract import OBJECT_INTERPRETATION_POLICY, OBJECT_TOPOLOGY_POLICY
+from views.metrics_contract import AGGREGATE_POLICY, OBJECT_INTERPRETATION_POLICY, OBJECT_TOPOLOGY_POLICY
 from views.registry import metrics_profile_metadata
 from views.testdata.representative_metrics_v2 import build_representative_metrics_v2
 
@@ -105,11 +105,60 @@ def test_source_identity_is_selected_but_unselected_extensions_are_omitted_from_
 def test_projectors_do_not_import_metrics_core() -> None:
     projection_dir = Path(__file__).with_name("projections")
     for filename in ("metrics_overview.py", "metrics_architecture.py", "metrics_quality.py",
-                     "metrics_objects.py"):
+                     "metrics_objects.py", "metrics_aggregate.py"):
         tree = ast.parse((projection_dir / filename).read_text(encoding="utf-8"))
         imports = [node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
         imports += [alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names]
         assert all(name != "metrics" and not name.startswith("metrics.") for name in imports)
+
+
+def test_aggregate_is_exact_recursive_whitelist_detached_and_extension_free() -> None:
+    source = _source()
+    source["metrics"]["size"]["extension"] = {"secret": [1]}
+    view = project_metrics_view(source, profile_id="metrics.aggregate", profile_version=1)
+    projected = view["payload"]["metrics"]
+    assert sum(1 for section in projected.values() for _ in _integer_leaves(section)) == 27
+    assert all(type(value) is int for section in projected.values() for value in _integer_leaves(section))
+    _assert_selected_leaves_equal_source(projected, source["metrics"])
+    assert "extension" not in projected["size"]
+    assert view["payload"]["aggregate_policy"] == AGGREGATE_POLICY
+    before = deepcopy(view)
+    source["metrics"]["code_quality"]["exceptions"]["raise_statements"] += 1
+    assert view == before
+    view["payload"]["metrics"]["size"]["files"] += 1
+    assert source["metrics"]["size"]["files"] != view["payload"]["metrics"]["size"]["files"]
+
+
+def _integer_leaves(value: object):
+    if isinstance(value, dict):
+        for child in value.values():
+            yield from _integer_leaves(child)
+    else:
+        yield value
+
+
+def _assert_selected_leaves_equal_source(projected: dict, source: dict) -> None:
+    for key, value in projected.items():
+        if isinstance(value, dict):
+            _assert_selected_leaves_equal_source(value, source[key])
+        else:
+            assert type(value) is type(source[key])
+            assert value == source[key]
+
+
+def test_aggregate_fingerprint_tracks_only_selected_content() -> None:
+    source = _source()
+    first = project_metrics_view(source, profile_id="metrics.aggregate", profile_version=1)
+    source["metrics"]["activity"]["average_calls_per_callable"] += 1
+    assert project_metrics_view(source, profile_id="metrics.aggregate", profile_version=1)["view_fingerprint"] == first["view_fingerprint"]
+    source["metrics"]["activity"]["calls"] += 1
+    assert project_metrics_view(source, profile_id="metrics.aggregate", profile_version=1)["view_fingerprint"] != first["view_fingerprint"]
+
+
+@pytest.mark.parametrize("version", [True, 0, 2, "1"])
+def test_aggregate_dispatch_has_no_version_fallback(version: object) -> None:
+    with pytest.raises(ValueError):
+        project_metrics_view(_source(), profile_id="metrics.aggregate", profile_version=version)  # type: ignore[arg-type]
 
 
 def test_quality_is_exact_detached_and_has_consistent_sidecars() -> None:

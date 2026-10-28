@@ -16,6 +16,7 @@ from .projections.metrics_architecture import _project_metrics_architecture_v1
 from .projections.metrics_overview import _project_metrics_overview_v1
 from .projections.metrics_quality import _project_metrics_quality_v1
 from .projections.metrics_objects import _project_metrics_objects_v1
+from .projections.metrics_aggregate import _project_metrics_aggregate_v1
 from .projections.inventory_minimal import _project_inventory_minimal_v1
 from .projections.dependency_files import _project_dependency_files_v1
 from .projections.dependency_architecture import _project_dependency_architecture_v1
@@ -34,6 +35,8 @@ def materialize_metrics_profile(
     """Materialize an explicitly selected Metrics profile."""
     validate_metrics_source_v1(source_metrics)
     metrics_profile_metadata(profile_id, profile_version)
+    if profile_id == "metrics.aggregate":
+        return _project_metrics_aggregate_v1(source_metrics)
     if profile_id == "metrics.overview":
         return _project_metrics_overview_v1(source_metrics)
     if profile_id == "metrics.architecture":

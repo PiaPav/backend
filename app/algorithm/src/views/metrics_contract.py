@@ -22,6 +22,23 @@ OBJECT_ORIENTED = ("classes_analyzed", "highest_weighted_method_complexity", "hi
 CALL_GRAPH = CALL_OVERVIEW + ("heaviest_edges", "entrypoints", "leaf_callables", "isolated_callables", "highest_fan_in", "highest_fan_out", "maximum_transitive_reach", "longest_call_chain", "deepest_nested_call_owners", "recursive_components", "pagerank_top", "betweenness_top", "risk_top", "node_kinds")
 
 ROUNDING_POLICY = {"kind": "decimal_places", "places": 4, "applies_to": "ratio_metrics"}
+AGGREGATE_POLICY = {
+    "descriptor_version": 1,
+    "value_policy": "exact_recursive_whitelist_copy",
+    "derived_metric_values": "forbidden",
+    "top_k": {"kind": "omitted", "rankings": []},
+}
+AGGREGATE_POPULATION_METADATA = {
+    "descriptor_version": 1,
+    "rounding_policy": deepcopy(ROUNDING_POLICY),
+    "definitions": [
+        {"id": "entity", "meaning": "counts of named entities or eligible entity subsets"},
+        {"id": "occurrence", "meaning": "counts of occurrences; repeated facts count repeatedly"},
+        {"id": "topology_partition", "meaning": "counts of components partitioning exact topology"},
+        {"id": "unique_topology", "meaning": "counts of unique exact topology nodes or relations"},
+    ],
+    "metric_denominators": [],
+}
 THRESHOLD_POLICY = {
     "descriptor_version": 1,
     "high_complexity": {"cyclomatic_gte": 10, "cognitive_gte": 15, "operator": "or"},
@@ -92,6 +109,8 @@ def _bindings(profile: str) -> list[dict[str, Any]]:
 
 
 def population_metadata(profile: str) -> dict[str, Any]:
+    if profile == "metrics.aggregate":
+        return deepcopy(AGGREGATE_POPULATION_METADATA)
     if profile == "metrics.quality":
         definitions = [row for row in DEFINITIONS if row["id"] == "callable"]
     elif profile == "metrics.objects":
@@ -348,7 +367,32 @@ def validate_metrics_view_v1(view: Mapping[str, Any], *, verify_fingerprint: boo
     completeness = _obj(root["completeness"], {"kind", "preserves", "omits"}, "completeness")
     if not _typed_tree_equal(completeness, expected): _error("completeness does not match registry")
     payload = root["payload"]
-    if profile["id"] == "metrics.overview":
+    if profile["id"] == "metrics.aggregate":
+        payload = _obj(payload, {"metrics", "population_metadata", "aggregate_policy"}, "payload")
+        metrics = _obj(payload["metrics"], {"size", "activity", "dependency_graph", "architecture", "code_quality", "object_oriented", "call_graph"}, "payload.metrics")
+        size = _obj(metrics["size"], set(SIZE), "payload.metrics.size")
+        for key in SIZE: _count(size[key], f"payload.metrics.size.{key}")
+        activity = _obj(metrics["activity"], set(ACTIVITY[:3]), "payload.metrics.activity")
+        for key in ACTIVITY[:3]: _count(activity[key], f"payload.metrics.activity.{key}")
+        dependency = _obj(metrics["dependency_graph"], {"nodes", "edges", "weakly_connected_components"}, "payload.metrics.dependency_graph")
+        for key in dependency: _count(dependency[key], f"payload.metrics.dependency_graph.{key}")
+        architecture = _obj(metrics["architecture"], {"package_edges"}, "payload.metrics.architecture")
+        _count(architecture["package_edges"], "payload.metrics.architecture.package_edges")
+        quality = _obj(metrics["code_quality"], {"analyzed_callables", "async", "exceptions"}, "payload.metrics.code_quality")
+        _count(quality["analyzed_callables"], "payload.metrics.code_quality.analyzed_callables")
+        async_ = _obj(quality["async"], {"functions"}, "payload.metrics.code_quality.async")
+        _count(async_["functions"], "payload.metrics.code_quality.async.functions")
+        exceptions = _obj(quality["exceptions"], {"raise_statements", "callables_raising"}, "payload.metrics.code_quality.exceptions")
+        for key in exceptions: _count(exceptions[key], f"payload.metrics.code_quality.exceptions.{key}")
+        objects = _obj(metrics["object_oriented"], {"classes_analyzed"}, "payload.metrics.object_oriented")
+        _count(objects["classes_analyzed"], "payload.metrics.object_oriented.classes_analyzed")
+        calls = _obj(metrics["call_graph"], set(CALL_OVERVIEW[:6]), "payload.metrics.call_graph")
+        for key in calls: _count(calls[key], f"payload.metrics.call_graph.{key}")
+        if quality["analyzed_callables"] != size["functions"] + size["methods"]: _error("aggregate callable population is inconsistent")
+        if objects["classes_analyzed"] != size["classes"]: _error("aggregate class population is inconsistent")
+        if calls["unresolved_or_external_callsites"] != calls["external_or_builtin_callsites"] + calls["unresolved_callsites"]: _error("aggregate callsite buckets are inconsistent")
+        if not _typed_tree_equal(payload["aggregate_policy"], AGGREGATE_POLICY): _error("aggregate_policy does not match static contract")
+    elif profile["id"] == "metrics.overview":
         payload = _obj(payload, {"metrics", "population_metadata"}, "payload"); metrics = _obj(payload["metrics"], {"size", "activity", "dependency_graph", "code_quality", "object_oriented", "call_graph"}, "payload.metrics")
         size = _obj(metrics["size"], set(SIZE), "payload.metrics.size"); [ _count(size[k], f"size.{k}") for k in SIZE ]
         activity = _obj(metrics["activity"], set(ACTIVITY), "payload.metrics.activity"); [ _count(activity[k], f"activity.{k}") for k in ACTIVITY[:3] ]; [ _number(activity[k], f"activity.{k}") for k in ACTIVITY[3:] ]
@@ -418,6 +462,6 @@ def serialize_metrics_view(view: Mapping[str, Any]) -> bytes:
     return (json.dumps(view, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
 
 
-__all__ = ["OBJECT_INTERPRETATION_POLICY", "OBJECT_TOPOLOGY_POLICY", "PACKAGE_GROUPING",
+__all__ = ["AGGREGATE_POLICY", "AGGREGATE_POPULATION_METADATA", "OBJECT_INTERPRETATION_POLICY", "OBJECT_TOPOLOGY_POLICY", "PACKAGE_GROUPING",
            "THRESHOLD_POLICY", "metrics_view_fingerprint", "population_metadata",
            "serialize_metrics_view", "validate_metrics_source_v1", "validate_metrics_view_v1"]
