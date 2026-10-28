@@ -126,14 +126,15 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 
 ## Этап 5. Aggregates
 
-1. **Не выполнен.** Текущую package grouping policy Metrics необходимо описать
-   как версионируемую часть aggregate contract.
-2. **Не выполнен.** Topology edges, canonical edges и occurrence weights пока
-   не разведены в aggregate schema.
+1. **Выполнен на уровне контракта.** Текущая package grouping policy Metrics
+   зафиксирована как versioned часть `aggregate.packages` v1 без изменения
+   существующего descriptor.
+2. **Выполнен на уровне контракта.** Unique file pairs, canonical import edges,
+   exact occurrences и internal relations разведены в aggregate schema.
 3. **Не выполнен.** `aggregate.packages` не реализован.
 4. **Не выполнен.** `aggregate.overview` и его top-k policy не реализованы.
-5. **Не выполнен.** Machine-readable признак quotient graph появится вместе с
-   aggregate envelope.
+5. **Выполнен на уровне контракта.** Обязательный marker
+   `graph_kind: "quotient"` зафиксирован; runtime ещё не реализован.
 
 ## Этап 6. Consumer integration
 
@@ -154,8 +155,9 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    и unresolved imports, включая detailed architecture view; call и inheritance
    scenarios покрывают repeated, awaited, self/reverse, non-exact occurrences,
    multiple inheritance и cycles; quality truncation покрывает empty, границу
-   limit, fixed-size ties и threshold boundaries; aggregate scenarios ещё не
-   добавлены.
+   limit, fixed-size ties и threshold boundaries. Для `aggregate.packages`
+   добавлена frozen source-side family с repeated/self/internal/cross imports и
+   package cycle без file SCC; runtime semantic tests появятся с projector.
 2. **Выполнен частично.** Проверены determinism, source immutability,
    referential closure, whitelist, fingerprint changes и version policy для
    `structure.declarations`, `dependency.files` и `dependency.architecture`;
@@ -287,6 +289,5 @@ golden manifest, а результаты сохранены как rejected hist
    изменить size target либо спроектировать новую несовместимую wire-форму с
    нормативным decoder и decoded typed-tree equality. Повторять отклонённый v1
    при тех же ограничениях нельзя.
-2. Следующий незаблокированный этап — формально зафиксировать package grouping,
-   topology/occurrence weights и schema `aggregate.packages` до runtime-
-   реализации этапа 5.
+2. Следующий незаблокированный этап — реализовать `aggregate.packages` по
+   принятому contract/benchmark gate и подтвердить semantic/size invariants.

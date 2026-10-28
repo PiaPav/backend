@@ -114,6 +114,15 @@ exact non-self file pairs и distinct cross-package pairs. View не созда�
 objects и не вычисляет Metrics. Полный нормативный контракт и контрпримеры
 зафиксированы в `DATA_PROFILES_DEPENDENCY_ARCHITECTURE_CONTRACT.md`.
 
+## `aggregate.packages` v1
+
+Package quotient использует Graph Summary DTO schema 1 с обязательным
+`graph_kind: "quotient"`. Он агрегирует package populations и раздельно хранит
+unique file pairs, canonical import edges и exact import occurrences. Package
+self-edges отсутствуют; internal exact relations остаются в отдельных counters,
+а external/unresolved occurrences — в importer-package status counts. Полный
+нормативный контракт находится в `DATA_PROFILES_AGGREGATE_PACKAGES_CONTRACT.md`.
+
 ## `calls.topology` v1
 
 Профиль использует тот же строгий Graph View envelope. Payload содержит все

@@ -298,6 +298,9 @@ Package edge раздельно хранит:
 Package cycle означает цикл агрегированного quotient graph и не обязательно
 file-level SCC.
 
+Точная schema v1, grouping/ID policy, internal relation counters и benchmark
+gate зафиксированы в `DATA_PROFILES_AGGREGATE_PACKAGES_CONTRACT.md`.
+
 ### 6.11. `aggregate.overview`
 
 Назначение: минимальный dashboard/LLM payload.
