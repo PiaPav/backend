@@ -117,8 +117,9 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    whitelisted metric leaf проверяются тестами.
 5. **Выполнен полностью для v1.** `metrics.overview`, `metrics.architecture`,
    `metrics.quality` и `metrics.objects` доступны через explicit profile API.
-6. **В работе.** `metrics.calls` и `metrics.aggregate` остаются в backlog;
-   общий Metrics View envelope уже реализован.
+6. **В работе.** Draft `metrics.calls` v1 отклонён по обязательному size target
+   и отозван из публичного API; `metrics.calls` и `metrics.aggregate` остаются в
+   backlog. Общий Metrics View envelope уже реализован.
 
 ## Этап 5. Aggregates
 
@@ -257,9 +258,24 @@ nullable LCOM/DIT и truncation metadata. Окончательный golden-пр
 validation все views дали **315 passed**, а полный безопасный прогон без
 `gpt_work_dir` — **487 passed, 0 failed, 0 skipped**.
 
+Экспериментальный draft `metrics.calls` v1 семантически копировал полный
+`call_graph` и корректно разводил activity, topology, callsite resolution и risk
+populations, но провалил неизменный section target 50% на accepted Metrics
+family v2: medium `17311/23838 = 72.6193%`, large
+`27547/40974 = 67.2304%`. Для large один обязательный неизменённый subtree
+`call_graph` занимает `21415` байт и уже превышает полный бюджет `20487` байт.
+Следовательно, target недостижим без изменения wire-формы, typed-tree equality,
+fixture либо product target. Draft полностью отозван из registry, API, tests и
+golden manifest, а результаты сохранены как rejected history. После rollback
+три metrics-файла дали **117 passed**, все views — **315 passed**, полный
+безопасный прогон без `gpt_work_dir` — **487 passed, 0 failed, 0 skipped**.
+
 ## Приоритет доработок
 
-1. Расширять truncation contract для call graph только вместе с
-   `metrics.calls`, явно учитывая доступность total population в полном DTO.
-2. Реализовать `metrics.calls` без пересчёта значений из сокращённого графа;
-   заранее зафиксировать query need, resolution coverage и benchmark.
+1. До новой реализации `metrics.calls` принять отдельное product-решение:
+   изменить size target либо спроектировать новую несовместимую wire-форму с
+   нормативным decoder и decoded typed-tree equality. Повторять отклонённый v1
+   при тех же ограничениях нельзя.
+2. Для `metrics.aggregate` заранее зафиксировать whitelist scalar totals,
+   доступность total populations для каждого top-k и отдельный benchmark до
+   реализации.

@@ -62,7 +62,7 @@ medium и 50 для large. Каждый компонент сохраняет т
 рассчитывает полный Metrics DTO только через неизменённый Metrics Core.
 Populations составляют 40/100 анализируемых callables, 60/150 call-graph nodes
 и 21/51 dependency roots. Targets до измерения зафиксированы как overview 20%,
-architecture 50% и quality 50%.
+architecture 50%, quality 50% и objects 50%.
 
 Все targets пройдены на полном compact UTF-8 JSON:
 
@@ -71,7 +71,9 @@ architecture 50% и quality 50%.
 - architecture: `6902 / 23838 = 28.9538%` и
   `10593 / 40974 = 25.8530%`;
 - quality: `3211 / 23838 = 13.4701%` и
-  `3213 / 40974 = 7.8416%`.
+  `3213 / 40974 = 7.8416%`;
+- objects: `11464 / 23838 = 48.0913%` и
+  `14674 / 40974 = 35.8139%`.
 
 Candidate manifest печатается, но никогда не записывается автоматически:
 
