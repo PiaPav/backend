@@ -17,7 +17,7 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 | 2. Первые безопасные Graph Views | **выполнено для initial scope** |
 | 3. Domain Graph Views | **выполнено для всех пяти domain profiles v1** |
 | 4. Metrics Views | **в работе: overview, architecture, quality, objects и aggregate выполнены** |
-| 5. Aggregates | **не выполнено** |
+| 5. Aggregates | **в работе: `aggregate.packages` v2 выполнен** |
 | 6. Consumer integration | **не выполнено** |
 
 ## Этап 0. Спецификация
@@ -131,13 +131,14 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    существующего descriptor.
 2. **Выполнен на уровне контракта.** Unique file pairs, canonical import edges,
    exact occurrences и internal relations разведены в aggregate schema.
-3. **V1 отклонён по size target.** Семантически корректный runtime-кандидат
-   object-wire v1 дал 22.68%/20.09% вместо `<=15%` и полностью отозван из API.
-   Frozen source-side rejection gate сохранён; повторная реализация требует
-   новой compact wire version.
+3. **V2 выполнен и принят.** Object-wire v1 остаётся отклонённым: он дал
+   22.68%/20.09% вместо `<=15%` и полностью отозван из API. Runtime profile
+   `aggregate.packages` / 2 использует indexed positional wire, нормативный
+   decoder и отдельный aggregate grouping descriptor. Frozen v1 rejection gate
+   сохранён без изменений; v1 по-прежнему не поддерживается.
 4. **Не выполнен.** `aggregate.overview` и его top-k policy не реализованы.
-5. **Выполнен на уровне контракта.** Обязательный marker
-   `graph_kind: "quotient"` зафиксирован; runtime ещё не реализован.
+5. **Выполнен для `aggregate.packages` v2.** Обязательный marker
+   `graph_kind: "quotient"` публикуется runtime и проверяется strict decoder.
 
 ## Этап 6. Consumer integration
 
@@ -160,8 +161,9 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    multiple inheritance и cycles; quality truncation покрывает empty, границу
    limit, fixed-size ties и threshold boundaries. Для `aggregate.packages`
    frozen source-side family покрывает repeated/self/internal/cross imports и
-   package cycle без file SCC; отклонённый runtime-кандидат прошёл semantic
-   scenarios, а rejection gate фиксирует недостижимость size target v1.
+    package cycle без file SCC мощности больше 1; отклонённый v1 runtime-кандидат
+    прошёл semantic scenarios, rejection gate фиксирует недостижимость target
+    object-wire v1, а compact v2 прошёл неизменённый target.
 2. **Выполнен частично.** Проверены determinism, source immutability,
    referential closure, whitelist, fingerprint changes и version policy для
    `structure.declarations`, `dependency.files` и `dependency.architecture`;
@@ -181,9 +183,10 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
     `28680 / 91853 = 31.2238%`. `inventory.minimal` измерен как
     `2003 / 37091 = 5.4002%` и `2811 / 91853 = 3.0603%`, но по-прежнему не имеет
     threshold.
-5. **Выполнен частично.** Критерии envelope, Graph profiles и первых четырёх
-   Metrics Views подтверждены, но aggregates, golden fixtures будущих profiles
-   и consumer integration остаются открытыми.
+5. **Выполнен частично.** Критерии envelope, Graph profiles, первых четырёх
+   Metrics Views и `aggregate.packages` v2 подтверждены, но
+   `aggregate.overview`, golden fixtures будущих profiles и consumer integration
+   остаются открытыми.
 
 ## Текущая итерация
 
@@ -246,8 +249,8 @@ compact profiles зафиксирована и проверена benchmark fami
 draft v1 исторически не прошёл 45% из-за дефекта состава fixture. Начальные
 Metrics Views, `metrics.quality`, `metrics.objects`, scalar-only
 `metrics.aggregate` и все пять domain Graph Views также реализованы;
-`metrics.calls`, расширение truncation contract для call-graph rankings, Graph
-aggregates и consumer integration остаются в backlog.
+`metrics.calls`, расширение truncation contract для call-graph rankings,
+`aggregate.overview` и consumer integration остаются в backlog.
 
 Для Metrics size benchmark исходная family v1 на Graph fixture с 4/10
 компонентами сохранена как отклонённая история: `metrics.overview` дал
@@ -287,14 +290,24 @@ golden manifest, а результаты сохранены как rejected hist
 три metrics-файла дали **117 passed**, все views — **315 passed**, полный
 безопасный прогон без `gpt_work_dir` — **487 passed, 0 failed, 0 skipped**.
 
+Для `aggregate.packages` v2 реализован compact indexed wire с отдельными
+package/import rows и нормативным strict decoder, который восстанавливает
+logical object tree с раздельными unique file pair, canonical edge и exact
+occurrence populations. Profile зарегистрирован только точной парой version 2;
+v1 остаётся unsupported. На неизменённой `representative_packages_v1` family
+полный compact artifact занял medium `1322/31100 = 4.2508%` и large
+`1614/71256 = 2.2651%`, пройдя target 15% с caps 4665/10688. Frozen manifest
+фиксирует bytes, SHA-256, summary fingerprints и воспроизводимый preflight.
+Итоговый профильный прогон дал **17 passed**, benchmark v2 — **1 passed**,
+frozen v1 — **3 passed**, все `views` — **349 passed, 0 failed**.
+
 ## Приоритет доработок
 
 1. До новой реализации `metrics.calls` принять отдельное product-решение:
    изменить size target либо спроектировать новую несовместимую wire-форму с
    нормативным decoder и decoded typed-tree equality. Повторять отклонённый v1
    при тех же ограничениях нельзя.
-2. До новой реализации `aggregate.packages` принять compact wire contract новой
-   version с нормативным decoder и заранее проверить schema lower bound против
-   frozen caps. Повторять object-wire v1 нельзя.
-3. После решения по package wire перейти к контракту `aggregate.overview`,
-   заранее зафиксировав top-k populations и target 8%.
+2. Следующий Graph aggregate — контракт `aggregate.overview`: до реализации
+   заранее зафиксировать top-k populations, truncation semantics и target 8%.
+3. После aggregate contracts перейти к consumer integration без defaults,
+   `latest` и silent fallback.
