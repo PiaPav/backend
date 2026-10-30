@@ -19,6 +19,8 @@ from .projections.metrics_objects import _project_metrics_objects_v1
 from .projections.metrics_aggregate import _project_metrics_aggregate_v1
 from .projections.inventory_minimal import _project_inventory_minimal_v1
 from .projections.aggregate_packages import _project_aggregate_packages_v2
+from .projections.aggregate_overview import _project_aggregate_overview_v1
+from .aggregate_overview_contract import aggregate_overview_package_id, decode_aggregate_overview_v1
 from .aggregate_packages_contract import (
     aggregate_package_edge_id, aggregate_package_grouping_v1, aggregate_package_id,
     decode_aggregate_packages_v2,
@@ -84,6 +86,8 @@ def materialize_graph_profile(
         return _project_inventory_minimal_v1(source_graph)
     if profile_id == "aggregate.packages" and profile_kind == "graph_summary":
         return _project_aggregate_packages_v2(source_graph)
+    if profile_id == "aggregate.overview" and profile_kind == "graph_summary":
+        return _project_aggregate_overview_v1(source_graph)
     if profile_id == "canonical.full" and profile_kind == "canonical":
         if source_graph["schema_version"] != 1 or source_graph["parser_semantics_version"] != 7:
             raise ValueError("canonical.full v1 requires Graph DTO schema 1 / parser semantics 7")
@@ -124,12 +128,15 @@ def project_graph_summary(
         return _project_inventory_minimal_v1(source_graph)
     if profile_id == "aggregate.packages":
         return _project_aggregate_packages_v2(source_graph)
+    if profile_id == "aggregate.overview":
+        return _project_aggregate_overview_v1(source_graph)
     raise ValueError(f"Unsupported graph summary profile {profile_id!r}")
 
 
 __all__ = [
     "aggregate_package_edge_id", "aggregate_package_grouping_v1", "aggregate_package_id",
     "decode_aggregate_packages_v2",
+    "aggregate_overview_package_id", "decode_aggregate_overview_v1",
     "aggregate_import_edge_id", "graph_summary_fingerprint", "graph_view_fingerprint",
     "materialize_graph_profile",
     "materialize_metrics_profile", "metrics_view_fingerprint", "project_metrics_view",

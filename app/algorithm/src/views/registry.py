@@ -7,6 +7,8 @@ INVENTORY_MINIMAL_ID = "inventory.minimal"
 INVENTORY_MINIMAL_VERSION = 1
 AGGREGATE_PACKAGES_ID = "aggregate.packages"
 AGGREGATE_PACKAGES_VERSION = 2
+AGGREGATE_OVERVIEW_ID = "aggregate.overview"
+AGGREGATE_OVERVIEW_VERSION = 1
 DEPENDENCY_FILES_ID = "dependency.files"
 DEPENDENCY_FILES_VERSION = 1
 DEPENDENCY_ARCHITECTURE_ID = "dependency.architecture"
@@ -147,6 +149,16 @@ _AGGREGATE_PACKAGES_OMITS = (
     "intra_package_import_topology", "node_and_edge_locations", "owner_structural_facts",
     "type_references_and_relations",
 )
+_AGGREGATE_OVERVIEW_PRESERVES = (
+    "source_graph_identity", "graph_native_size_and_activity_totals",
+    "file_and_package_topology_counts", "resolution_occurrence_counts",
+    "three_homogeneous_topology_rankings",
+)
+_AGGREGATE_OVERVIEW_OMITS = (
+    "canonical_descriptors_and_locations", "individual_references_and_callsites",
+    "diagnostics", "exact_edge_lists", "metrics_formulas_risk_pagerank",
+    "object_metrics_averages_and_rates",
+)
 
 _DEPENDENCY_FILES_PRESERVES = (
     "canonical_root_descriptors",
@@ -266,6 +278,9 @@ def select_graph_profile(profile_id: object, profile_version: object) -> str:
     elif profile_id == AGGREGATE_PACKAGES_ID:
         expected_version = AGGREGATE_PACKAGES_VERSION
         artifact_kind = "graph_summary"
+    elif profile_id == AGGREGATE_OVERVIEW_ID:
+        expected_version = AGGREGATE_OVERVIEW_VERSION
+        artifact_kind = "graph_summary"
     elif profile_id == STRUCTURE_DECLARATIONS_ID:
         expected_version = STRUCTURE_DECLARATIONS_VERSION
         artifact_kind = "graph_view"
@@ -354,6 +369,9 @@ def summary_profile_metadata(profile_id: object, profile_version: object) -> dic
     elif profile_id == AGGREGATE_PACKAGES_ID:
         expected = AGGREGATE_PACKAGES_VERSION
         preserves, omits = _AGGREGATE_PACKAGES_PRESERVES, _AGGREGATE_PACKAGES_OMITS
+    elif profile_id == AGGREGATE_OVERVIEW_ID:
+        expected = AGGREGATE_OVERVIEW_VERSION
+        preserves, omits = _AGGREGATE_OVERVIEW_PRESERVES, _AGGREGATE_OVERVIEW_OMITS
     else:
         raise ValueError(f"Unsupported graph summary profile {profile_id!r}")
     if type(profile_version) is not int or profile_version != expected:
@@ -381,6 +399,7 @@ def metrics_profile_metadata(profile_id: object, profile_version: object) -> dic
 
 __all__ = [
     "AGGREGATE_PACKAGES_ID", "AGGREGATE_PACKAGES_VERSION",
+    "AGGREGATE_OVERVIEW_ID", "AGGREGATE_OVERVIEW_VERSION",
     "CANONICAL_FULL_ID",
     "CANONICAL_FULL_VERSION",
     "CALLS_TOPOLOGY_ID", "CALLS_TOPOLOGY_VERSION",

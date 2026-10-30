@@ -17,7 +17,7 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 | 2. Первые безопасные Graph Views | **выполнено для initial scope** |
 | 3. Domain Graph Views | **выполнено для всех пяти domain profiles v1** |
 | 4. Metrics Views | **в работе: overview, architecture, quality, objects и aggregate выполнены** |
-| 5. Aggregates | **в работе: `aggregate.packages` v2 выполнен** |
+| 5. Aggregates | **выполнено: `aggregate.packages` v2 и `aggregate.overview` v1** |
 | 6. Consumer integration | **не выполнено** |
 
 ## Этап 0. Спецификация
@@ -136,9 +136,12 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    `aggregate.packages` / 2 использует indexed positional wire, нормативный
    decoder и отдельный aggregate grouping descriptor. Frozen v1 rejection gate
    сохранён без изменений; v1 по-прежнему не поддерживается.
-4. **Не выполнен.** `aggregate.overview` и его top-k policy не реализованы.
+4. **Выполнен для v1.** `aggregate.overview` использует compact positional wire,
+   graph-native size/activity/topology/status populations и три homogeneous
+   topology rankings с fixed-size top-10 truncation metadata.
 5. **Выполнен для `aggregate.packages` v2.** Обязательный marker
-   `graph_kind: "quotient"` публикуется runtime и проверяется strict decoder.
+   `graph_kind: "quotient"` публикуется runtime и проверяется strict decoder;
+   `aggregate.overview` аналогично маркируется `graph_kind: "overview"`.
 
 ## Этап 6. Consumer integration
 
@@ -148,9 +151,9 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    `source.graph_fingerprint`; consumer-level связывание ещё не реализовано.
 4. **Не выполнен.** Протокол явного запроса более полного профиля пока не
    определён.
-5. **Выполнен только на уровне Graph View registry.** Текущий projector не имеет
-   fallback между версиями или профилями, но consumer-level запрет ещё не
-   реализован.
+5. **Выполнен на уровне Graph View, Graph Summary и Metrics View registries.**
+   Projectors не имеют fallback между версиями или профилями, но consumer-level
+   запрет ещё не реализован.
 
 ## Проверки и критерии готовности
 
@@ -184,8 +187,8 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
     `2003 / 37091 = 5.4002%` и `2811 / 91853 = 3.0603%`, но по-прежнему не имеет
     threshold.
 5. **Выполнен частично.** Критерии envelope, Graph profiles, первых четырёх
-   Metrics Views и `aggregate.packages` v2 подтверждены, но
-   `aggregate.overview`, golden fixtures будущих profiles и consumer integration
+   Metrics Views, `aggregate.packages` v2 и `aggregate.overview` v1 подтверждены.
+   `metrics.calls`, golden fixtures будущих profiles и consumer integration
    остаются открытыми.
 
 ## Текущая итерация
@@ -249,8 +252,8 @@ compact profiles зафиксирована и проверена benchmark fami
 draft v1 исторически не прошёл 45% из-за дефекта состава fixture. Начальные
 Metrics Views, `metrics.quality`, `metrics.objects`, scalar-only
 `metrics.aggregate` и все пять domain Graph Views также реализованы;
-`metrics.calls`, расширение truncation contract для call-graph rankings,
-`aggregate.overview` и consumer integration остаются в backlog.
+`metrics.calls`, расширение truncation contract для call-graph rankings и
+consumer integration остаются в backlog.
 
 Для Metrics size benchmark исходная family v1 на Graph fixture с 4/10
 компонентами сохранена как отклонённая история: `metrics.overview` дал
@@ -301,13 +304,25 @@ v1 остаётся unsupported. На неизменённой `representative_p
 Итоговый профильный прогон дал **17 passed**, benchmark v2 — **1 passed**,
 frozen v1 — **3 passed**, все `views` — **349 passed, 0 failed**.
 
+Для `aggregate.overview` v1 зафиксированы Graph-only source semantics,
+19 positional totals, 12 domain-separated resolution counters и три независимых
+topology rankings: files by fan-in/fan-out и packages by efferent coupling.
+Нормативный decoder восстанавливает logical sections и truncation metadata;
+Metrics formulas, risk, PageRank, averages и rates не пересчитываются. Frozen
+family заранее фиксирует 12/24 packages, все resolution statuses, file/package
+SCC distinction, boundary ties и Unicode paths. Полный runtime artifact занял
+medium `3244/111278 = 2.9152%` и large `3257/223591 = 1.4567%`, пройдя target 8%
+с caps 8902/17887. Профильные и preflight проверки дали **18 passed**,
+summary/registry — **80 passed**, `aggregate.packages` regression — **21 passed**,
+все `views` — **367 passed, 0 failed, 0 skipped**.
+
 ## Приоритет доработок
 
 1. До новой реализации `metrics.calls` принять отдельное product-решение:
    изменить size target либо спроектировать новую несовместимую wire-форму с
    нормативным decoder и decoded typed-tree equality. Повторять отклонённый v1
    при тех же ограничениях нельзя.
-2. Следующий Graph aggregate — контракт `aggregate.overview`: до реализации
-   заранее зафиксировать top-k populations, truncation semantics и target 8%.
-3. После aggregate contracts перейти к consumer integration без defaults,
-   `latest` и silent fallback.
+2. Перейти к consumer integration: explicit profile ID/version, обязательная
+   проверка completeness и запрос более полного profile без silent fallback.
+3. Зафиксировать consumer-level связывание sibling Graph/Metrics artifacts по
+   `source.graph_fingerprint` без смешения их собственных fingerprints.

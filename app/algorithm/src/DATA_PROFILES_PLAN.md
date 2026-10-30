@@ -301,7 +301,8 @@ file-level SCC.
 Точная schema v1, grouping/ID policy, internal relation counters и benchmark
 gate зафиксированы в `DATA_PROFILES_AGGREGATE_PACKAGES_CONTRACT.md`.
 Object-wire v1 не прошёл неизменяемый target 15% и не публикуется runtime;
-компактная несовместимая wire schema требует новой profile version.
+compact indexed wire schema опубликована как `aggregate.packages` v2 с
+нормативным decoder и прошла неизменяемый target.
 
 ### 6.11. `aggregate.overview`
 
@@ -326,6 +327,10 @@ Object-wire v1 не прошёл неизменяемый target 15% и не п�
   "truncated": true
 }
 ```
+
+Точный Graph Summary contract v1, graph-native populations, positional wire,
+top-k policy и benchmark gate зафиксированы в
+`DATA_PROFILES_AGGREGATE_OVERVIEW_CONTRACT.md`.
 
 ## 7. Предлагаемые Metrics profiles
 
