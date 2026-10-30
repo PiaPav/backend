@@ -34,6 +34,12 @@ from .projections.types_topology import _project_types_topology_v1
 from .projections.objects_metrics_basis import _project_objects_metrics_basis_v1
 from .registry import profile_metadata, select_graph_profile, summary_profile_metadata
 from .registry import metrics_profile_metadata
+from .consumer_contract import (
+    ProfileCompletenessError,
+    validate_graph_artifact_for_consumer,
+    validate_metrics_artifact_for_consumer,
+    validate_sibling_artifacts,
+)
 
 
 def materialize_metrics_profile(
@@ -143,4 +149,6 @@ __all__ = [
     "project_graph_summary", "project_graph_view", "serialize_graph_summary",
     "serialize_graph_view", "validate_graph_summary_v1", "validate_graph_view_v1",
     "serialize_metrics_view", "validate_metrics_source_v1", "validate_metrics_view_v1",
+    "ProfileCompletenessError", "validate_graph_artifact_for_consumer",
+    "validate_metrics_artifact_for_consumer", "validate_sibling_artifacts",
 ]

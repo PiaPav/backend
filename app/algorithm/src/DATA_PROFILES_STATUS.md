@@ -18,7 +18,7 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 | 3. Domain Graph Views | **выполнено для всех пяти domain profiles v1** |
 | 4. Metrics Views | **в работе: overview, architecture, quality, objects и aggregate выполнены** |
 | 5. Aggregates | **выполнено: `aggregate.packages` v2 и `aggregate.overview` v1** |
-| 6. Consumer integration | **не выполнено** |
+| 6. Consumer integration | **в работе: library consumer contract выполнен** |
 
 ## Этап 0. Спецификация
 
@@ -145,15 +145,21 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 
 ## Этап 6. Consumer integration
 
-1. **Не выполнен.** Consumer API ещё не запрашивает явные profile ID/version.
-2. **Не выполнен.** Проверка `completeness` на стороне consumer отсутствует.
-3. **Выполнен на уровне артефактов.** Graph и Metrics views публикуют один
-   `source.graph_fingerprint`; consumer-level связывание ещё не реализовано.
-4. **Не выполнен.** Протокол явного запроса более полного профиля пока не
-   определён.
-5. **Выполнен на уровне Graph View, Graph Summary и Metrics View registries.**
-   Projectors не имеют fallback между версиями или профилями, но consumer-level
-   запрет ещё не реализован.
+1. **Выполнен на уровне library contract.** Consumer validation требует точные
+   profile ID/version для каждого Graph, Graph Summary и Metrics artifact;
+   transport/service-shell request schema остаётся будущей работой.
+2. **Выполнен на уровне library contract.** После строгой проверки artifact
+   consumer обязан подтвердить все required capabilities по
+   `completeness.preserves`; недостаток данных является отдельной ошибкой.
+3. **Выполнен на consumer library level.** Graph и Metrics siblings независимо
+   валидируются и связываются только по fingerprint полного source graph, без
+   смешения `view_fingerprint` или `summary_fingerprint`.
+4. **Выполнен как явный retry contract.** Library не выбирает замену и не
+   материализует artifact; повторный запрос обязан передать новую точную пару
+   ID/version. Интеграция retry в transport/service shell остаётся открытой.
+5. **Выполнен на library level.** Defaults, `latest`, version negotiation и
+   silent fallback отсутствуют как в registries/projectors, так и в consumer
+   validation.
 
 ## Проверки и критерии готовности
 
@@ -188,8 +194,8 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
     threshold.
 5. **Выполнен частично.** Критерии envelope, Graph profiles, первых четырёх
    Metrics Views, `aggregate.packages` v2 и `aggregate.overview` v1 подтверждены.
-   `metrics.calls`, golden fixtures будущих profiles и consumer integration
-   остаются открытыми.
+   `metrics.calls`, golden fixtures будущих profiles и transport-level consumer
+   integration остаются открытыми.
 
 ## Текущая итерация
 
@@ -253,7 +259,7 @@ draft v1 исторически не прошёл 45% из-за дефекта �
 Metrics Views, `metrics.quality`, `metrics.objects`, scalar-only
 `metrics.aggregate` и все пять domain Graph Views также реализованы;
 `metrics.calls`, расширение truncation contract для call-graph rankings и
-consumer integration остаются в backlog.
+transport-level consumer integration остаются в backlog.
 
 Для Metrics size benchmark исходная family v1 на Graph fixture с 4/10
 компонентами сохранена как отклонённая история: `metrics.overview` дал
@@ -316,6 +322,13 @@ medium `3244/111278 = 2.9152%` и large `3257/223591 = 1.4567%`, пройдя ta
 summary/registry — **80 passed**, `aggregate.packages` regression — **21 passed**,
 все `views` — **367 passed, 0 failed, 0 skipped**.
 
+Для consumer library contract добавлены exact profile selection, обязательная
+capability-проверка, структурированная ошибка недостаточной полноты, явный retry
+без materialization/fallback и sibling linkage по canonical source graph
+fingerprint. Профильный прогон дал **6 passed**, все `views` — **373 passed,
+0 failed, 0 skipped**. Legacy transport/service shell не подключался, поскольку
+он не потребляет canonical Graph/Metrics artifacts.
+
 ## Приоритет доработок
 
 1. До новой реализации `metrics.calls` принять отдельное product-решение:
@@ -324,5 +337,8 @@ summary/registry — **80 passed**, `aggregate.packages` regression — **21 pas
    при тех же ограничениях нельзя.
 2. Перейти к consumer integration: explicit profile ID/version, обязательная
    проверка completeness и запрос более полного profile без silent fallback.
-3. Зафиксировать consumer-level связывание sibling Graph/Metrics artifacts по
-   `source.graph_fingerprint` без смешения их собственных fingerprints.
+   Library contract выполнен; следующий шаг — подключение к будущему актуальному
+   transport/service shell, потребляющему canonical artifacts.
+3. Расширять consumer integration только с отдельной analysis/tenant identity:
+   общий `source.graph_fingerprint` связывает содержимое siblings, но не заменяет
+   transport authorization или принадлежность одному запуску анализа.
