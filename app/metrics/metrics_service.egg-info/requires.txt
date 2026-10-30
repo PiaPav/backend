@@ -1,0 +1,5 @@
+aio-pika<10,>=9.5.7
+aioboto3<16,>=15.5.0
+
+[test]
+pytest<10,>=8

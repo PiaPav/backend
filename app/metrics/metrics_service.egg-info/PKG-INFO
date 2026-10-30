@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: metrics-service
+Version: 0.1.0
+Summary: Graph artifact metrics worker
+Requires-Python: >=3.13
+Requires-Dist: aio-pika<10,>=9.5.7
+Requires-Dist: aioboto3<16,>=15.5.0
+Provides-Extra: test
+Requires-Dist: pytest<10,>=8; extra == "test"
