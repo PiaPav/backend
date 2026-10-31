@@ -20,8 +20,8 @@ from views.testdata import build_representative_graph_v2
 
 _FIXTURES = ("medium", "large")
 _PROFILES = (
-    "inventory.minimal", "structure.declarations", "dependency.architecture", "calls.topology",
-    "calls.detailed",
+    "inventory.minimal", "structure.declarations", "dependency.files",
+    "dependency.architecture", "calls.topology", "calls.detailed",
 )
 _MANIFEST = Path(__file__).with_name("testdata") / "graph_profiles_golden_v2.json"
 _COMPONENT_COUNTS = {"medium": 4, "large": 10}
@@ -78,6 +78,32 @@ def _artifact_record(artifact: Mapping[str, Any], source: Mapping[str, Any]) -> 
             "omitted": {"declaration_descriptors": sum(node["kind"] not in {"file", "module"} for node in source["nodes"]),
                         "edges": len(source["edges"]),
                         "occurrence_details": len(source["callsites"]) + len(source["import_references"]) + len(source["type_references"])}}
+    elif profile["id"] == "dependency.files":
+        payload = artifact["payload"]
+        resolution_counts = payload["import_resolution_counts"]
+        populations = {
+            "kept": {
+                "root_descriptors": len(payload["nodes"]),
+                "unique_aggregate_import_edges": len(payload["edges"]),
+                "exact_import_occurrences": sum(
+                    edge["exact_occurrence_count"] for edge in payload["edges"]
+                ),
+                "exact_resolution_occurrences": resolution_counts["exact"],
+                "external_resolution_occurrences": resolution_counts["external"],
+                "unresolved_resolution_occurrences": resolution_counts["unresolved"],
+            },
+            "omitted": {
+                "declaration_descriptors": sum(
+                    node["kind"] not in {"file", "module"} for node in source["nodes"]
+                ),
+                "occurrence_level_import_details": len(source["import_references"]),
+                "non_import_edges": sum(edge["kind"] != "imports" for edge in source["edges"]),
+                "callsites": len(source["callsites"]),
+                "type_references": len(source["type_references"]),
+                "diagnostics": len(source["diagnostics"]),
+                "owner_structural_facts": len(source["owner_structural_facts"]),
+            },
+        }
     elif profile["id"] == "dependency.architecture":
         populations = {
             "kept": {"nodes": len(artifact["payload"]["nodes"]),
@@ -185,6 +211,8 @@ def build_golden_manifest() -> dict[str, Any]:
             "budgets": {"inventory.minimal": None,
                         "structure.declarations": {"kind": "product_target", "source_basis": 100,
                                                     "maximum_view_basis": 45},
+                        "dependency.files": {"kind": "product_target", "source_basis": 100,
+                                             "maximum_view_basis": 20},
                         "dependency.architecture": {"kind": "product_target", "source_basis": 100,
                                                     "maximum_view_basis": 30},
                          "calls.topology": {"kind": "product_target", "source_basis": 100,
@@ -232,13 +260,17 @@ def test_manifest_identity_versions_hashes_provenance_and_populations():
         assert [(artifact["profile"]["id"], artifact["profile"]["version"])
                 for artifact in fixture["artifacts"]] == [
             ("inventory.minimal", 1), ("structure.declarations", 1),
-            ("dependency.architecture", 1), ("calls.topology", 1),
+            ("dependency.files", 1), ("dependency.architecture", 1),
+            ("calls.topology", 1),
             ("calls.detailed", 1),
         ]
         assert fixture["budgets"] == {
             "inventory.minimal": None,
             "structure.declarations": {
                 "kind": "product_target", "source_basis": 100, "maximum_view_basis": 45,
+            },
+            "dependency.files": {
+                "kind": "product_target", "source_basis": 100, "maximum_view_basis": 20,
             },
             "dependency.architecture": {
                 "kind": "product_target", "source_basis": 100, "maximum_view_basis": 30,
@@ -319,6 +351,56 @@ def test_v2_source_population_contract_is_exact(fixture_name, n):
     assert Counter((item["kind"], item["status"]) for item in graph["diagnostics"]) == {
         ("import_resolution", "warning"): n, ("call_resolution", "info"): n,
     }
+
+
+@pytest.mark.parametrize("fixture_name,n", tuple(_COMPONENT_COUNTS.items()))
+def test_dependency_files_current_v2_populations_are_exact(fixture_name, n):
+    source = build_representative_graph_v2(fixture_name)
+    artifact = materialize_graph_profile(
+        source, profile_id="dependency.files", profile_version=1
+    )
+    payload = artifact["payload"]
+
+    assert _artifact_record(artifact, source)["populations"] == {
+        "kept": {
+            "root_descriptors": n + 1,
+            "unique_aggregate_import_edges": n,
+            "exact_import_occurrences": n,
+            "exact_resolution_occurrences": n,
+            "external_resolution_occurrences": n,
+            "unresolved_resolution_occurrences": n,
+        },
+        "omitted": {
+            "declaration_descriptors": 6 * n,
+            "occurrence_level_import_details": 3 * n,
+            "non_import_edges": 9 * n,
+            "callsites": 5 * n,
+            "type_references": 4 * n,
+            "diagnostics": 2 * n,
+            "owner_structural_facts": 1 + 3 * n,
+        },
+    }
+    assert set(payload) == {"nodes", "edges", "import_resolution_counts"}
+    assert all(node["kind"] in {"file", "module"} for node in payload["nodes"])
+    assert all(set(node) == {"id", "kind", "qualified_name", "path"}
+               for node in payload["nodes"])
+    assert len(payload["edges"]) == n
+    assert sum(edge["exact_occurrence_count"] for edge in payload["edges"]) == n
+    assert payload["import_resolution_counts"] == {
+        "exact": n, "external": n, "unresolved": n,
+    }
+    exact_pairs = Counter(
+        (reference["importer_id"], reference["target_id"])
+        for reference in source["import_references"] if reference["resolution"] == "exact"
+    )
+    aggregate_pairs = Counter({
+        (edge["source_id"], edge["target_id"]): edge["exact_occurrence_count"]
+        for edge in payload["edges"]
+    })
+    assert aggregate_pairs == exact_pairs
+    assert len(aggregate_pairs) == n
+    assert sum(aggregate_pairs.values()) == n
+    assert len(payload["edges"]) < len(source["import_references"])
 
 
 @pytest.mark.parametrize("fixture_name,n", tuple(_COMPONENT_COUNTS.items()))
@@ -478,6 +560,23 @@ def test_structure_declarations_meets_fixture_scoped_product_target(fixture_name
     fixture = next(item for item in _load_manifest()["fixtures"] if item["name"] == fixture_name)
     structure = next(item for item in fixture["artifacts"] if item["profile"]["id"] == "structure.declarations")
     assert _within_budget(structure["compact_bytes"], fixture["source"]["compact_bytes"], 45, 100)
+
+
+@pytest.mark.parametrize("fixture_name", _FIXTURES)
+def test_dependency_files_meets_fixture_scoped_product_target(fixture_name):
+    fixture = next(item for item in _load_manifest()["fixtures"] if item["name"] == fixture_name)
+    manifest_record = next(
+        item for item in fixture["artifacts"] if item["profile"]["id"] == "dependency.files"
+    )
+    assert _within_budget(
+        manifest_record["compact_bytes"], fixture["source"]["compact_bytes"], 20, 100
+    )
+
+    source = build_representative_graph_v2(fixture_name)
+    artifact = materialize_graph_profile(source, profile_id="dependency.files", profile_version=1)
+    assert _within_budget(
+        _measurement(artifact)["compact_bytes"], _measurement(source)["compact_bytes"], 20, 100
+    )
 
 
 @pytest.mark.parametrize("fixture_name", _FIXTURES)

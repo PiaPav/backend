@@ -145,6 +145,12 @@ len(edges) <= import_resolution_counts.exact
 Non-exact references не создают topology. Профиль не сохраняет occurrence IDs,
 locations, aliases и source spelling.
 
+Для принятой `representative_graph_v2` benchmark family профиль имеет
+неизменяемый fixture-scoped product target `<=20%` полного canonical Graph DTO.
+Golden manifest измеряет полный compact sorted-key UTF-8 artifact вместе с
+`view_fingerprint`, фиксирует SHA-256 тех же байтов и раздельно проверяет
+unique ordered pairs, сумму exact occurrences и resolution populations.
+
 Payload имеет строго форму `nodes`, `edges`, `import_resolution_counts`.
 Root nodes имеют ровно `id`, `kind`, `qualified_name`, `path`; edges — ровно
 `id`, `kind`, `source_id`, `target_id`, `exact_occurrence_count`. Ordered endpoint

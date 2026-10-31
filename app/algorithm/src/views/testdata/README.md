@@ -8,10 +8,16 @@ six `contains` edges, one synthetic method, two complexity-bearing callables,
 three owner facts, five callsites (one per status), three imports (one per
 status), four type references (one per status), two diagnostics, and four
 non-`contains` edges. Exact targets advance cyclically to the next component.
-This composition, the 45/100 `structure.declarations` target, the 30/100
-`dependency.architecture` target, the 35/100 `calls.topology` target, and the
-60/100 `calls.detailed` target were fixed before their measurements; target
-claims are scoped only to these v2 fixtures. The architecture profile measures
+This composition, the 45/100 `structure.declarations` target, the 20/100
+`dependency.files` target, the 30/100 `dependency.architecture` target, the
+35/100 `calls.topology` target, and the 60/100 `calls.detailed` target were
+fixed before their measurements; target claims are scoped only to these v2
+fixtures. The dependency files profile measures
+`2367 / 37091 = 6.3816%` for medium and
+`4512 / 91853 = 4.9122%` for large. Its populations keep unique exact ordered
+pairs, exact occurrence multiplicity and resolution occurrence counts separate;
+external and unresolved occurrences never create topology. The architecture
+profile measures
 `7910 / 37091 = 21.3259%` for medium and
 `17723 / 91853 = 19.2949%` for large using compact sorted-key UTF-8 JSON.
 The calls topology profile measures `9375 / 37091 = 25.2757%` for medium and
