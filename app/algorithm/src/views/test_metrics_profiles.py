@@ -44,6 +44,39 @@ def test_registry_returns_fresh_copies() -> None:
     assert metrics_profile_metadata("metrics.overview", 1)["preserves"]
 
 
+def test_metrics_full_is_an_exact_deeply_detached_identity() -> None:
+    source = _source()
+    source["extension"] = {"future": [1]}
+    full = materialize_metrics_profile(source, profile_id="metrics.full", profile_version=1)
+    assert full == source
+    source["extension"]["future"].append(2)
+    assert full["extension"]["future"] == [1]
+    full["metrics"]["size"]["files"] += 1
+    assert full["metrics"]["size"]["files"] != source["metrics"]["size"]["files"]
+
+
+@pytest.mark.parametrize("version", [True, 0, 2, "1"])
+def test_metrics_full_has_exact_version_and_no_fallback(version: object) -> None:
+    with pytest.raises(ValueError):
+        materialize_metrics_profile(
+            _source(), profile_id="metrics.full", profile_version=version  # type: ignore[arg-type]
+        )
+
+
+def test_metrics_view_api_rejects_full_profile() -> None:
+    with pytest.raises(ValueError):
+        project_metrics_view(_source(), profile_id="metrics.full", profile_version=1)
+
+
+def test_metrics_source_is_validated_before_profile_dispatch() -> None:
+    invalid = _source()
+    invalid["schema_version"] = True
+    with pytest.raises(ValueError, match="Metrics DTO"):
+        materialize_metrics_profile(
+            invalid, profile_id="unknown.metrics", profile_version=1
+        )
+
+
 def test_omitted_values_do_not_affect_fingerprint_but_selected_values_do() -> None:
     source = _source(); first = project_metrics_view(source, profile_id="metrics.overview", profile_version=1)
     source["metrics"]["code_quality"]["average_cyclomatic_complexity"] += 1

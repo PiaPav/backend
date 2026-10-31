@@ -7,11 +7,12 @@ from typing import Any
 from graph_dto import validate_graph_v1
 
 from .contract import validate_graph_view_v1
-from .metrics_contract import validate_metrics_view_v1
+from .metrics_contract import validate_metrics_source_v1, validate_metrics_view_v1
 from .registry import (
     metrics_profile_metadata,
     profile_metadata,
     select_graph_profile,
+    select_metrics_profile,
     summary_profile_metadata,
 )
 from .summary_contract import validate_graph_summary_v1
@@ -111,6 +112,12 @@ def validate_metrics_artifact_for_consumer(
 ) -> None:
     """Strictly validate one exact metrics profile and its capabilities."""
     required = _required_capabilities(required_preserves)
+    artifact_kind = select_metrics_profile(profile_id, profile_version)
+    if artifact_kind == "metrics":
+        validate_metrics_source_v1(artifact)
+        if artifact.get("schema_version") != 1 or artifact.get("metrics_semantics_version") != 4:
+            raise ValueError("metrics.full v1 requires Metrics DTO schema 1 / semantics 4")
+        return
     metadata = metrics_profile_metadata(profile_id, profile_version)
     validate_metrics_view_v1(artifact)
     if artifact["profile"] != {"id": profile_id, "version": profile_version}:
@@ -153,7 +160,13 @@ def validate_sibling_artifacts(
         if graph_kind == "canonical"
         else graph_artifact["source"]["graph_fingerprint"]
     )
-    if graph_fingerprint != metrics_artifact["source"]["graph_fingerprint"]:
+    metrics_kind = select_metrics_profile(metrics_profile_id, metrics_profile_version)
+    metrics_graph_fingerprint = (
+        metrics_artifact["input"]["graph_fingerprint"]
+        if metrics_kind == "metrics"
+        else metrics_artifact["source"]["graph_fingerprint"]
+    )
+    if graph_fingerprint != metrics_graph_fingerprint:
         raise ValueError("Graph and metrics artifacts have different source graph fingerprints")
     return graph_fingerprint
 

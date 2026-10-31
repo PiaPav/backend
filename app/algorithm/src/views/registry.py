@@ -3,6 +3,8 @@ from __future__ import annotations
 
 CANONICAL_FULL_ID = "canonical.full"
 CANONICAL_FULL_VERSION = 1
+METRICS_FULL_ID = "metrics.full"
+METRICS_FULL_VERSION = 1
 INVENTORY_MINIMAL_ID = "inventory.minimal"
 INVENTORY_MINIMAL_VERSION = 1
 AGGREGATE_PACKAGES_ID = "aggregate.packages"
@@ -386,7 +388,7 @@ def summary_profile_metadata(profile_id: object, profile_version: object) -> dic
 
 
 def metrics_profile_metadata(profile_id: object, profile_version: object) -> dict[str, object]:
-    """Return a fresh completeness descriptor for an exact Metrics profile."""
+    """Return a fresh completeness descriptor for an exact Metrics View profile."""
     if profile_id not in _METRICS_PROFILES:
         raise ValueError(f"Unsupported metrics profile {profile_id!r}")
     expected, kind, preserves, omits = _METRICS_PROFILES[profile_id]
@@ -395,6 +397,23 @@ def metrics_profile_metadata(profile_id: object, profile_version: object) -> dic
             f"Unsupported version {profile_version!r} for metrics profile {profile_id!r}"
         )
     return {"kind": kind, "preserves": list(preserves), "omits": list(omits)}
+
+
+def select_metrics_profile(profile_id: object, profile_version: object) -> str:
+    """Validate an exact Metrics profile and return its artifact kind."""
+    if profile_id == METRICS_FULL_ID:
+        expected_version = METRICS_FULL_VERSION
+        artifact_kind = "metrics"
+    elif profile_id in _METRICS_PROFILES:
+        expected_version = _METRICS_PROFILES[profile_id][0]
+        artifact_kind = "metrics_view"
+    else:
+        raise ValueError(f"Unsupported metrics profile {profile_id!r}")
+    if type(profile_version) is not int or profile_version != expected_version:
+        raise ValueError(
+            f"Unsupported version {profile_version!r} for metrics profile {profile_id!r}"
+        )
+    return artifact_kind
 
 
 __all__ = [
@@ -419,8 +438,10 @@ __all__ = [
     "METRICS_OVERVIEW_ID", "METRICS_OVERVIEW_VERSION",
     "METRICS_QUALITY_ID", "METRICS_QUALITY_VERSION",
     "METRICS_OBJECTS_ID", "METRICS_OBJECTS_VERSION",
+    "METRICS_FULL_ID", "METRICS_FULL_VERSION",
     "metrics_profile_metadata",
     "profile_metadata",
     "summary_profile_metadata",
     "select_graph_profile",
+    "select_metrics_profile",
 ]

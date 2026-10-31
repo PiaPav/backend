@@ -33,7 +33,7 @@ from .projections.calls_detailed import _project_calls_detailed_v1
 from .projections.types_topology import _project_types_topology_v1
 from .projections.objects_metrics_basis import _project_objects_metrics_basis_v1
 from .registry import profile_metadata, select_graph_profile, summary_profile_metadata
-from .registry import metrics_profile_metadata
+from .registry import metrics_profile_metadata, select_metrics_profile
 from .consumer_contract import (
     ProfileCompletenessError,
     validate_graph_artifact_for_consumer,
@@ -47,6 +47,11 @@ def materialize_metrics_profile(
 ) -> dict[str, Any]:
     """Materialize an explicitly selected Metrics profile."""
     validate_metrics_source_v1(source_metrics)
+    profile_kind = select_metrics_profile(profile_id, profile_version)
+    if profile_id == "metrics.full" and profile_kind == "metrics":
+        if source_metrics["schema_version"] != 1 or source_metrics["metrics_semantics_version"] != 4:
+            raise ValueError("metrics.full v1 requires Metrics DTO schema 1 / semantics 4")
+        return deepcopy(source_metrics)
     metrics_profile_metadata(profile_id, profile_version)
     if profile_id == "metrics.aggregate":
         return _project_metrics_aggregate_v1(source_metrics)
@@ -65,6 +70,8 @@ def project_metrics_view(
     source_metrics: Mapping[str, Any], *, profile_id: str, profile_version: int
 ) -> dict[str, Any]:
     """Project an exact Metrics View profile without fallback."""
+    validate_metrics_source_v1(source_metrics)
+    metrics_profile_metadata(profile_id, profile_version)
     return materialize_metrics_profile(source_metrics, profile_id=profile_id, profile_version=profile_version)
 
 

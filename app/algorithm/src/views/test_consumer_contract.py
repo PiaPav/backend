@@ -50,6 +50,26 @@ def test_graph_view_summary_canonical_and_metrics_are_accepted() -> None:
         metrics_view, profile_id="metrics.overview", profile_version=1,
         required_preserves=("project_size",),
     )
+    metrics_full = build_representative_metrics_v1("medium")
+    validate_metrics_artifact_for_consumer(
+        metrics_full, profile_id="metrics.full", profile_version=1,
+        required_preserves=("any_capability_is_allowed_for_full",),
+    )
+
+
+def test_metrics_full_and_view_are_not_interchangeable() -> None:
+    _, _, metrics_view = _artifacts()
+    metrics_full = build_representative_metrics_v1("medium")
+    with pytest.raises(ValueError):
+        validate_metrics_artifact_for_consumer(
+            metrics_view, profile_id="metrics.full", profile_version=1,
+            required_preserves=(),
+        )
+    with pytest.raises(ValueError):
+        validate_metrics_artifact_for_consumer(
+            metrics_full, profile_id="metrics.overview", profile_version=1,
+            required_preserves=(),
+        )
 
 
 def test_exact_selection_types_and_completeness_error_fields() -> None:
@@ -153,6 +173,22 @@ def test_siblings_use_source_identity_not_own_fingerprints() -> None:
         graph_required_preserves=(), metrics_profile_id="metrics.overview",
         metrics_profile_version=1, metrics_required_preserves=(),
     ) == graph_fingerprint
+    metrics_full = build_representative_metrics_v1("medium")
+    assert validate_sibling_artifacts(
+        graph, metrics_full,
+        graph_profile_id="canonical.full", graph_profile_version=1,
+        graph_required_preserves=(), metrics_profile_id="metrics.full",
+        metrics_profile_version=1, metrics_required_preserves=("anything",),
+    ) == graph_fingerprint
+    mismatched_full = deepcopy(metrics_full)
+    mismatched_full["input"]["graph_fingerprint"] = "0" * 64
+    with pytest.raises(ValueError, match="different source graph fingerprints"):
+        validate_sibling_artifacts(
+            graph, mismatched_full,
+            graph_profile_id="canonical.full", graph_profile_version=1,
+            graph_required_preserves=(), metrics_profile_id="metrics.full",
+            metrics_profile_version=1, metrics_required_preserves=(),
+        )
     assert validate_sibling_artifacts(
         graph, metrics_view,
         graph_profile_id="canonical.full", graph_profile_version=1,

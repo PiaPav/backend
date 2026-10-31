@@ -16,7 +16,7 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 | 1. Общий envelope | **выполнено для Graph View, Graph Summary и Metrics View v1** |
 | 2. Первые безопасные Graph Views | **выполнено для initial scope** |
 | 3. Domain Graph Views | **выполнено для всех пяти domain profiles v1** |
-| 4. Metrics Views | **в работе: overview, architecture, quality, objects и aggregate выполнены** |
+| 4. Metrics Views | **в работе: full baseline, overview, architecture, quality, objects и aggregate выполнены** |
 | 5. Aggregates | **выполнено: `aggregate.packages` v2 и `aggregate.overview` v1** |
 | 6. Consumer integration | **в работе: library consumer contract выполнен** |
 
@@ -123,6 +123,9 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    Draft `metrics.calls` v1 отклонён по обязательному size target и отозван из
    публичного API; он остаётся заблокированным до отдельного product-решения.
    Общий Metrics View envelope уже реализован.
+7. **Выполнен полностью для v1.** `metrics.full` доступен через unified profile
+   API как глубокая identity-копия полного Metrics DTO schema 1 / semantics 4
+   без Metrics View envelope. Специализированный Metrics View API его отклоняет.
 
 ## Этап 5. Aggregates
 
@@ -147,6 +150,7 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 
 1. **Выполнен на уровне library contract.** Consumer validation требует точные
    profile ID/version для каждого Graph, Graph Summary и Metrics artifact;
+   `metrics.full` служит globally-lossless явной целью retry, а
    transport/service-shell request schema остаётся будущей работой.
 2. **Выполнен на уровне library contract.** После строгой проверки artifact
    consumer обязан подтвердить все required capabilities по
@@ -255,8 +259,9 @@ errors в `gpt_work_dir`; тесты в этом прогоне не испол�
 
 Первый набор безопасных Graph profiles реализован полностью. Для первых двух
 compact profiles зафиксирована и проверена benchmark family v2. Отклонённый
-draft v1 исторически не прошёл 45% из-за дефекта состава fixture. Начальные
-Metrics Views, `metrics.quality`, `metrics.objects`, scalar-only
+draft v1 исторически не прошёл 45% из-за дефекта состава fixture.
+Globally-lossless `metrics.full`, начальные Metrics Views, `metrics.quality`,
+`metrics.objects`, scalar-only
 `metrics.aggregate` и все пять domain Graph Views также реализованы;
 `metrics.calls`, расширение truncation contract для call-graph rankings и
 transport-level consumer integration остаются в backlog.
@@ -328,6 +333,13 @@ capability-проверка, структурированная ошибка н�
 fingerprint. Профильный прогон дал **6 passed**, все `views` — **373 passed,
 0 failed, 0 skipped**. Legacy transport/service shell не подключался, поскольку
 он не потребляет canonical Graph/Metrics artifacts.
+
+Для `metrics.full` v1 добавлены отдельный artifact selector, глубокая
+identity-копия полного Metrics DTO и consumer validation без completeness
+ограничений. Full DTO и Metrics View строго разделены; sibling linkage извлекает
+canonical graph fingerprint из `input` полного DTO либо `source` view.
+Профильный прогон дал **45 passed**, все `views` — **381 passed**, полный
+безопасный прогон без `gpt_work_dir` — **553 passed, 0 failed, 0 skipped**.
 
 ## Приоритет доработок
 

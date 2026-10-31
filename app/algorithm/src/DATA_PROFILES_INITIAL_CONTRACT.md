@@ -18,12 +18,14 @@ populations, обязательных полей или правил агрег�
 | `calls.detailed` | 1 | Graph View DTO | реализован |
 | `types.topology` | 1 | Graph View DTO | реализован |
 | `objects.metrics_basis` | 1 | Graph View DTO | реализован |
+| `metrics.full` | 1 | Metrics DTO | реализован |
 | `metrics.overview` | 1 | Metrics View DTO | реализован |
 | `metrics.architecture` | 1 | Metrics View DTO | реализован |
 
 Выбор всегда требует точных `profile.id` и `profile.version`; default,
-`latest`, negotiation и fallback запрещены. Только `canonical.full` является
-globally lossless и допустим как вход Metrics Core.
+`latest`, negotiation и fallback запрещены. `canonical.full` является
+единственным globally-lossless Graph profile и допустим как вход Metrics Core;
+`metrics.full` является единственным globally-lossless Metrics profile.
 
 Точный field-level контракт начальных Metrics profiles, включая populations,
 denominators и package grouping, находится в

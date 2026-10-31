@@ -1,13 +1,28 @@
 # Контракт Metrics profiles v1
 
-Этот документ фиксирует Metrics View DTO schema 1 для полного Metrics DTO
-schema 1 / Metrics semantics 4. Projector принимает только versioned full
-Metrics DTO и копирует значения по явному whitelist без пересчёта, повторного
-округления и сортировки.
+Этот документ фиксирует identity-профиль полного Metrics DTO и Metrics View DTO
+schema 1 для Metrics DTO schema 1 / Metrics semantics 4. Projector сокращённых
+Metrics Views принимает только versioned full Metrics DTO и копирует значения
+по явному whitelist без пересчёта, повторного округления и сортировки.
+
+## `metrics.full` v1
+
+Профиль принимает только полностью валидный Metrics DTO schema 1 / Metrics
+semantics 4 и возвращает независимую глубокую копию без view envelope,
+фильтрации, пересортировки или нового fingerprint. Все совместимые расширения
+исходного DTO сохраняются. Identity означает равенство полного typed tree, а не
+тождество mutable Python-объекта.
+
+`metrics.full` является единственным globally-lossless Metrics profile. Он не
+является Metrics View DTO и поэтому отклоняется специализированным gateway
+`project_metrics_view`; unified gateway `materialize_metrics_profile` требует
+точную пару `metrics.full` / `1`. Consumer может использовать полный профиль
+как явную цель повторного запроса, но библиотека не выбирает его автоматически
+и не выполняет fallback.
 
 ## Envelope
 
-Metrics View содержит ровно поля `artifact_kind: "metrics_view"`,
+Сокращённый Metrics View содержит ровно поля `artifact_kind: "metrics_view"`,
 `view_schema_version: 1`, точные profile/source metadata, `completeness`,
 `payload` и `view_fingerprint`. Fingerprint — lowercase SHA-256 compact
 canonical UTF-8 JSON всего envelope без самого fingerprint. Serializer выдаёт
@@ -144,10 +159,10 @@ contract/benchmark gate на accepted `representative_metrics_v2` family.
 
 ## Population metadata
 
-Все профили содержат `population_metadata` descriptor version 1. Он определяет
-populations, rounding policy и denominator binding для каждого опубликованного
-average/rate/density. Descriptor не является новым результатом Metrics и не
-содержит пересчитанных denominator values.
+Все сокращённые Metrics Views содержат `population_metadata` descriptor version
+1. Он определяет populations, rounding policy и denominator binding для каждого
+опубликованного average/rate/density. Descriptor не является новым результатом
+Metrics и не содержит пересчитанных denominator values.
 
 Основные правила:
 
@@ -183,7 +198,8 @@ object-specific populations и отдельную nullable LCOM semantics.
 
 - каждый metric leaf равен одноимённому leaf полного Metrics DTO, включая тип;
 - source и result не мутируют друг друга;
-- совместимые source extensions не попадают в profile автоматически;
+- совместимые source extensions не попадают в сокращённые views автоматически;
+  `metrics.full` сохраняет их как часть identity-копии;
 - неканонический порядок source collections отклоняется, а не исправляется;
 - source schema 1 / semantics 4 обязан содержать все известные поля и корректные
   shapes/types семи Metrics sections; неизвестные extensions разрешены;
