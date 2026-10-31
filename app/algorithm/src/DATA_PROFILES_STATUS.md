@@ -183,8 +183,8 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    общие свойства будущих профилей не покрыты; для `calls.topology`,
    `types.topology` и `objects.metrics_basis` проверены determinism, source
    immutability, referential closure, canonical relations и non-exact boundary.
-3. **Выполнен для первых compact profiles, dependency files, dependency
-   architecture, calls topology и calls detailed.** Golden manifest family v2 хранит версии profiles, exact
+3. **Выполнен для всех текущих Graph View profiles и inventory summary.**
+   Golden manifest family v2 хранит версии profiles, exact
    populations, fingerprints, compact UTF-8 bytes и SHA-256 полного
    transferable artifact для medium/large fixtures.
 4. **V1 отклонён, V2 прошёл проверку.** Черновая family v1 дала medium
@@ -244,6 +244,14 @@ resolution counts; non-exact occurrences не создают topology.
 Golden-прогон дал **26 passed**, профильный regression-прогон — **80 passed**,
 все `views` — **385 passed**, а полный безопасный прогон без `gpt_work_dir` —
 **557 passed, 0 failed, 0 skipped**.
+
+Для `types.topology` и `objects.metrics_basis` добавлена measurement-only golden
+фиксация без нормативных thresholds. На medium/large fixtures первый профиль
+занял `10149/37091 = 27.362%` и `24147/91853 = 26.289%`, второй —
+`17413/37091 = 46.947%` и `42001/91853 = 45.726%`; budgets обоих профилей
+остаются `null`. Golden-прогон дал **30 passed**, профильный — **34 passed**,
+все `views` — **389 passed**, полный безопасный прогон без `gpt_work_dir` —
+**561 passed, 0 failed, 0 skipped**.
 
 Для `calls.topology` semantic-прогон дал **14 passed**, golden-прогон —
 **18 passed**, а полный прогон разрешённой области без `gpt_work_dir` —

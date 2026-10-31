@@ -35,6 +35,13 @@ benchmarks; no fixture data or target was adjusted after measurement. Awaited,
 repeated-weight, and module-level calls remain covered by semantic tests rather
 than being retrofitted into this accepted size family.
 
+The remaining domain profiles are recorded for deterministic measurement only:
+`types.topology` measures `10149 / 37091 = 27.362%` and
+`24147 / 91853 = 26.289%`; `objects.metrics_basis` measures
+`17413 / 37091 = 46.947%` and `42001 / 91853 = 45.726%`. Their manifest budgets
+are `null`: the plan defines no normative size target for either profile, so
+these ratios are observations rather than acceptance thresholds.
+
 The rejected draft family v1 did not scale its calls, imports, types, or
 diagnostics with its declaration population. Its measured structure results
 were medium `13569 / 26258 = 51.6757%` and large
