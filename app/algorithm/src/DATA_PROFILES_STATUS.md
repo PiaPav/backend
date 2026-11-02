@@ -18,7 +18,7 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 | 3. Domain Graph Views | **выполнено для всех пяти domain profiles v1** |
 | 4. Metrics Views | **в работе: full baseline, overview, architecture, quality, objects и aggregate выполнены** |
 | 5. Aggregates | **выполнено: `aggregate.packages` v2 и `aggregate.overview` v1** |
-| 6. Consumer integration | **в работе: library consumer contract выполнен** |
+| 6. Consumer integration | **в работе: library consumer contract и wire contracts service shells выполнены** |
 
 ## Этап 0. Спецификация
 
@@ -164,6 +164,12 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 5. **Выполнен на library level.** Defaults, `latest`, version negotiation и
    silent fallback отсутствуют как в registries/projectors, так и в consumer
    validation.
+6. **Выполнен transport prerequisite.** Добавлены независимые строгие wire
+   contracts Parser/Metrics service shells для `parser.start.v1`,
+   `graph.ready.v1`, `metrics.ready.v1` и stage-specific failure events.
+   `graph.ready.v1` передаёт ссылку только на полный canonical Graph DTO, а
+   producer/consumer representations проверяются общей compatibility fixture.
+   Profile request/materialization protocol намеренно ещё не определён.
 
 ## Проверки и критерии готовности
 
@@ -358,6 +364,14 @@ canonical graph fingerprint из `input` полного DTO либо `source` vi
 Профильный прогон дал **45 passed**, все `views` — **381 passed**, полный
 безопасный прогон без `gpt_work_dir` — **553 passed, 0 failed, 0 skipped**.
 
+В качестве первого transport prerequisite созданы независимые package shells
+`parser_service` и `metrics_service` со строгими immutable wire DTO schema v1,
+canonical JSON codecs и фиксированной compatibility fixture для
+`graph.ready.v1`. Контракты не импортируют друг друга, legacy infrastructure или
+внутренние модули ядер; full Graph/Metrics payload и profile negotiation в
+события не добавлены. Совместный contract-прогон дал **82 passed**, regression
+consumer library — **7 passed, 0 failed, 0 skipped**.
+
 ## Приоритет доработок
 
 1. До новой реализации `metrics.calls` принять отдельное product-решение:
@@ -366,8 +380,9 @@ canonical graph fingerprint из `input` полного DTO либо `source` vi
    при тех же ограничениях нельзя.
 2. Перейти к consumer integration: explicit profile ID/version, обязательная
    проверка completeness и запрос более полного profile без silent fallback.
-   Library contract выполнен; следующий шаг — подключение к будущему актуальному
-   transport/service shell, потребляющему canonical artifacts.
+   Library contract и базовые wire contracts service shells выполнены; следующий
+   шаг — application model/handlers для canonical artifacts. Protocol запроса и
+   materialization reduced profiles остаётся отдельным будущим решением.
 3. Расширять consumer integration только с отдельной analysis/tenant identity:
    общий `source.graph_fingerprint` связывает содержимое siblings, но не заменяет
    transport authorization или принадлежность одному запуску анализа.
