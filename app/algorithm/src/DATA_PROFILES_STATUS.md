@@ -18,7 +18,7 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 | 3. Domain Graph Views | **выполнено для всех пяти domain profiles v1** |
 | 4. Metrics Views | **в работе: full baseline, overview, architecture, quality, objects и aggregate выполнены** |
 | 5. Aggregates | **выполнено: `aggregate.packages` v2 и `aggregate.overview` v1** |
-| 6. Consumer integration | **в работе: library consumer contract и wire contracts service shells выполнены** |
+| 6. Consumer integration | **в работе: library contract, wire contracts и application model service shells выполнены** |
 
 ## Этап 0. Спецификация
 
@@ -170,6 +170,11 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    `graph.ready.v1` передаёт ссылку только на полный canonical Graph DTO, а
    producer/consumer representations проверяются общей compatibility fixture.
    Profile request/materialization protocol намеренно ещё не определён.
+7. **Выполнен application prerequisite.** Для обоих service shells добавлены
+   независимые immutable processing models, idempotency state/claim contracts,
+   синхронные Protocol ports и явная классификация `retry` / `failure` /
+   `reject`. Handlers, adapters и materialization reduced profiles в этот этап
+   не входят.
 
 ## Проверки и критерии готовности
 
@@ -372,6 +377,13 @@ canonical JSON codecs и фиксированной compatibility fixture для
 события не добавлены. Совместный contract-прогон дал **82 passed**, regression
 consumer library — **7 passed, 0 failed, 0 skipped**.
 
+Следующим отдельным этапом добавлен Application model обоих service shells:
+delivery context/decision, durable artifact descriptor, claim token и lease,
+processing state machine, Protocol ports и stage-specific safe errors. Все
+Parser/Metrics tests одним прогоном дали **125 passed**, regression consumer
+library — **7 passed, 0 failed, 0 skipped**. Application packages не импортируют
+соседний сервис, legacy infrastructure, внутренние модули ядер или views.
+
 ## Приоритет доработок
 
 1. До новой реализации `metrics.calls` принять отдельное product-решение:
@@ -380,9 +392,10 @@ consumer library — **7 passed, 0 failed, 0 skipped**.
    при тех же ограничениях нельзя.
 2. Перейти к consumer integration: explicit profile ID/version, обязательная
    проверка completeness и запрос более полного profile без silent fallback.
-   Library contract и базовые wire contracts service shells выполнены; следующий
-   шаг — application model/handlers для canonical artifacts. Protocol запроса и
-   materialization reduced profiles остаётся отдельным будущим решением.
+   Library contract, wire contracts и application model service shells
+   выполнены; следующий шаг — handlers/adapters для canonical artifacts.
+   Protocol запроса и materialization reduced profiles остаётся отдельным
+   будущим решением.
 3. Расширять consumer integration только с отдельной analysis/tenant identity:
    общий `source.graph_fingerprint` связывает содержимое siblings, но не заменяет
    transport authorization или принадлежность одному запуску анализа.
