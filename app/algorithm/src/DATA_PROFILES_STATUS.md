@@ -173,8 +173,13 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 7. **Выполнен application prerequisite.** Для обоих service shells добавлены
    независимые immutable processing models, idempotency state/claim contracts,
    синхронные Protocol ports и явная классификация `retry` / `failure` /
-   `reject`. Handlers, adapters и materialization reduced profiles в этот этап
-   не входят.
+   `reject`.
+8. **Выполнена canonical application orchestration.** Parser/Metrics handlers
+   реализуют claim/replay state machine, проверку и сохранение полных canonical
+   artifacts, публикацию ready/failure events и безопасные решения
+   `ack` / `retry` / `reject`. Тонкие adapters делегируют только публичным
+   Parser/Metrics API. Production broker/storage/idempotency adapters и
+   materialization reduced profiles в этот этап не входят.
 
 ## Проверки и критерии готовности
 
@@ -384,6 +389,16 @@ Parser/Metrics tests одним прогоном дали **125 passed**, regres
 library — **7 passed, 0 failed, 0 skipped**. Application packages не импортируют
 соседний сервис, legacy infrastructure, внутренние модули ядер или views.
 
+Canonical application pipeline замкнут handlers обоих service shells. Parser
+материализует source, создаёт и валидирует полный Graph DTO schema 1 / semantics
+7; Metrics до расчёта проверяет bytes, checksum, schema, semantics и fingerprint
+полного graph, а затем валидирует Metrics DTO schema 1 / semantics 4 и linkage.
+Ready/failure event сохраняется до публикации; повторная доставка переиздаёт
+точно сохранённое событие без повторного core-вызова. Неожиданные dependency
+сбои обрабатываются консервативно как `retry`, payload conflict — как `reject`.
+Fake-based state-machine матрицы и adapter tests дали **189 passed, 0 failed,
+0 skipped**, regression consumer contract — **7 passed, 0 failed, 0 skipped**.
+
 ## Приоритет доработок
 
 1. До новой реализации `metrics.calls` принять отдельное product-решение:
@@ -392,10 +407,11 @@ library — **7 passed, 0 failed, 0 skipped**. Application packages не имп�
    при тех же ограничениях нельзя.
 2. Перейти к consumer integration: explicit profile ID/version, обязательная
    проверка completeness и запрос более полного profile без silent fallback.
-   Library contract, wire contracts и application model service shells
-   выполнены; следующий шаг — handlers/adapters для canonical artifacts.
-   Protocol запроса и materialization reduced profiles остаётся отдельным
-   будущим решением.
+   Library contract, wire contracts, application models и handlers/adapters для
+   canonical artifacts выполнены. Следующий шаг — production transport,
+   artifact storage и durable idempotency adapters с явным ownership delivery
+   decisions. Protocol запроса и materialization reduced profiles остаётся
+   отдельным будущим решением.
 3. Расширять consumer integration только с отдельной analysis/tenant identity:
    общий `source.graph_fingerprint` связывает содержимое siblings, но не заменяет
    transport authorization или принадлежность одному запуску анализа.

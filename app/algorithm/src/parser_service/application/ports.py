@@ -50,3 +50,7 @@ class GraphArtifactStore(Protocol):
 
 class ParserGateway(Protocol):
     def parse(self, source_path: Path, output_path: Path) -> Path: ...
+
+
+class GraphValidator(Protocol):
+    def validate(self, graph_path: Path) -> str: ...

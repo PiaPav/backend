@@ -22,6 +22,10 @@ EXPECTED_SIGNATURES = {
     "MetricsStagingArea": {"create_target": ("self", "artifact_key")},
     "MetricsArtifactStore": {"save": ("self", "staged_path", "artifact_key")},
     "MetricsGateway": {"calculate": ("self", "graph_path", "output_path")},
+    "CanonicalValidator": {
+        "validate_graph": ("self", "graph_path"),
+        "validate_metrics": ("self", "metrics_path", "graph_fingerprint"),
+    },
 }
 
 
