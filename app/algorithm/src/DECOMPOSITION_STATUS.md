@@ -3,8 +3,7 @@
 Статус сопоставлен с `DECOMPOSITION_PLAN.md`, кодом и независимыми прогонами.
 Последний совместный прогон `graph_dto/test_contract.py`,
 `graph_dto/test_boundaries.py`, `parser/test_core.py` и `metrics/test_core.py`:
-172 passed, 0 failed, 0 skipped. Отдельный legacy regression
-`gpt_work_dir/tests/test_parser.py` и `test_metrics_serialization.py`: 16 passed.
+172 passed, 0 failed, 0 skipped.
 
 ## Общий итог
 
@@ -20,9 +19,9 @@
 
 ## Этапы 1–3. Контракты и файловые API
 
-Историческая семантика зафиксирована golden-тестами и архивным
-`metrics/LEGACY_GRAPH_CONTRACT.md`. Legacy fixtures в `gpt_work_dir` не
-переписывались и продолжают проверять прежний Parser/serializer сценарий.
+Историческая семантика Parser зафиксирована golden-тестами и архивным
+`metrics/LEGACY_GRAPH_CONTRACT.md`. Parser compatibility fixtures перенесены в
+`parser/testdata/golden_v1`; неиспользуемые legacy Metrics snapshots удалены.
 
 `parser/core.py::parse_project(source_path, output_path) -> Path` строит Graph
 DTO schema v1 / parser semantics v7, атомарно сохраняет его и возвращает
@@ -93,7 +92,7 @@ flags. Projection-only signatures внутренних calculators закреп�
 Файловые контракты документированы отдельно в `parser/CONTRACT.md`,
 `graph_dto/CONTRACT.md` и `metrics/CONTRACT.md`. Архивный legacy contract явно
 помечен как неактивный. Удаление adapters v1-v5 выполнено отдельно от сохранения
-`starter()` и подтверждено canonical, Parser и legacy regression-прогонами.
+`starter()` и подтверждено canonical и Parser regression-прогонами.
 
 ## Подтверждённые инварианты
 

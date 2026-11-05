@@ -9,10 +9,10 @@ reads `body`.
 
 The tables below describe historical consumers and are retained as migration
 evidence, not as an active input contract. Projects holding one of these graphs
-must regenerate it with `parser.parse_project()`. The separate
-`parser.starter()` compatibility result and the implementation under
-`gpt_work_dir` remain legacy facilities; they are not accepted by current
-Metrics.
+must regenerate it with `parser.parse_project()`. The `parser.starter()`
+compatibility result remains available, while the former implementation under
+`gpt_work_dir` has been removed. Current Metrics does not accept the legacy
+`body` result.
 
 ## Root and files
 

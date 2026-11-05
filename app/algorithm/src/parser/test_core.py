@@ -8,6 +8,9 @@ import pytest
 from parser import parse_project, starter
 
 
+GOLDEN_V1 = Path(__file__).with_name("testdata") / "golden_v1"
+
+
 def _legacy_file(source: Path, name: str) -> dict:
     return next(
         item["file"] for item in starter(source)["body"]
@@ -15,8 +18,8 @@ def _legacy_file(source: Path, name: str) -> dict:
     )
 
 
-def test_committed_source_matches_complete_graph_v1_golden(tmp_path: Path) -> None:
-    fixtures = Path(__file__).resolve().parents[1] / "gpt_work_dir/tests/golden_v1"
+def test_committed_source_matches_complete_graph_v1_golden() -> None:
+    fixtures = GOLDEN_V1
     actual = starter(fixtures / "source")
     expected = json.loads((fixtures / "graph.json").read_text(encoding="utf-8"))
 
@@ -25,10 +28,7 @@ def test_committed_source_matches_complete_graph_v1_golden(tmp_path: Path) -> No
 
 
 def test_package_calls_source_matches_complete_graph_v1_golden(tmp_path: Path) -> None:
-    fixtures = (
-        Path(__file__).resolve().parents[1]
-        / "gpt_work_dir/tests/golden_v1/package_calls"
-    )
+    fixtures = GOLDEN_V1 / "package_calls"
     actual = starter(fixtures / "source")
     canonical = json.loads(parse_project(
         fixtures / "source", tmp_path / "graph.json"
