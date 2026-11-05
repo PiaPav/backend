@@ -180,6 +180,12 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    `ack` / `retry` / `reject`. Тонкие adapters делегируют только публичным
    Parser/Metrics API. Production broker/storage/idempotency adapters и
    materialization reduced profiles в этот этап не входят.
+9. **Выполнен local-host persistence runtime.** Для обоих service shells
+   добавлены ограниченные configured roots filesystem resolvers/staging и
+   immutable artifact stores с atomic no-overwrite publication, а также
+   раздельные durable SQLite idempotency stores с lease reclaim, fencing token,
+   canonical event persistence и restart-safe replay. Production transport и
+   materialization reduced profiles остаются отдельными этапами.
 
 ## Проверки и критерии готовности
 
@@ -399,6 +405,15 @@ Ready/failure event сохраняется до публикации; повто
 Fake-based state-machine матрицы и adapter tests дали **189 passed, 0 failed,
 0 skipped**, regression consumer contract — **7 passed, 0 failed, 0 skipped**.
 
+Для local-host runtime добавлены service-local filesystem adapters и SQLite/WAL
+idempotency stores. File URI ограничены configured roots; staging очищается
+после обработки, а immutable artifacts публикуются атомарным hard-link без
+перезаписи конфликтующего содержимого. SQLite хранит canonical event bytes,
+поддерживает active lease, reclaim и claim-token fencing, поэтому saved event
+восстанавливается после открытия нового store instance. Итоговый adapter-прогон
+дал **86 passed, 0 failed, 0 skipped**, все Parser/Metrics tests — **275 passed,
+0 failed, 0 skipped**, consumer contract — **7 passed, 0 failed, 0 skipped**.
+
 ## Приоритет доработок
 
 1. До новой реализации `metrics.calls` принять отдельное product-решение:
@@ -407,10 +422,11 @@ Fake-based state-machine матрицы и adapter tests дали **189 passed, 
    при тех же ограничениях нельзя.
 2. Перейти к consumer integration: explicit profile ID/version, обязательная
    проверка completeness и запрос более полного profile без silent fallback.
-   Library contract, wire contracts, application models и handlers/adapters для
-   canonical artifacts выполнены. Следующий шаг — production transport,
-   artifact storage и durable idempotency adapters с явным ownership delivery
-   decisions. Protocol запроса и materialization reduced profiles остаётся
+   Library contract, wire contracts, application models, handlers и local-host
+   filesystem/SQLite adapters для canonical artifacts выполнены. Следующий шаг —
+   production transport с явным ownership delivery decisions, composition и
+   observability; remote artifact storage при необходимости проектируется
+   отдельно. Protocol запроса и materialization reduced profiles остаётся
    отдельным будущим решением.
 3. Расширять consumer integration только с отдельной analysis/tenant identity:
    общий `source.graph_fingerprint` связывает содержимое siblings, но не заменяет
