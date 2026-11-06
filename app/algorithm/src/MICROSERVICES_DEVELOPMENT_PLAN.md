@@ -693,6 +693,14 @@ prerequisite, а не реализация конкретного production bro
 3. Проверить локальную choreography.
 4. Проверить повторную доставку на обеих стадиях.
 
+Этап выполнен для local-host baseline. Интеграционные сценарии проходят через
+реальные публичные Parser/Metrics API, filesystem artifact stores, раздельные
+SQLite idempotency stores и transport-neutral runtime. Choreography передаёт
+`graph.ready.v1` через JSON wire boundary, а restart-сценарии подтверждают replay
+сохранённого события после publish failure без повторного вызова ядра. Это не
+определяет production broker adapter, remote artifact storage или protocol
+materialization сокращённых profiles.
+
 ## 16. Критерии готовности
 
 Parser Service готов, если:

@@ -18,7 +18,7 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
 | 3. Domain Graph Views | **выполнено для всех пяти domain profiles v1** |
 | 4. Metrics Views | **в работе: full baseline, overview, architecture, quality, objects и aggregate выполнены** |
 | 5. Aggregates | **выполнено: `aggregate.packages` v2 и `aggregate.overview` v1** |
-| 6. Consumer integration | **в работе: library contract, wire contracts и application model service shells выполнены** |
+| 6. Consumer integration | **в работе: canonical local choreography выполнена, production transport и profile materialization открыты** |
 
 ## Этап 0. Спецификация
 
@@ -192,6 +192,13 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
     manual source, recording publisher и privacy-safe observations. Исключение
     handler или некорректное решение консервативно дают `retry`; runtime сам не
     повторяет delivery. Конкретный broker adapter ещё не реализован.
+11. **Выполнена local-host интеграция canonical pipeline.** Оба shell проверены
+    с реальными публичными Parser/Metrics cores, filesystem artifact stores,
+    SQLite idempotency и runtime. Parser `graph.ready.v1` пересекает границу
+    сервисов как JSON wire data; Metrics независимо декодирует событие и создаёт
+    связанный `metrics.ready.v1`. Restart после publish failure переиздаёт точно
+    сохранённое событие без повторного вызова core, а повтор после `PUBLISHED`
+    завершается без пересчёта и новой публикации.
 
 ## Проверки и критерии готовности
 
@@ -428,6 +435,14 @@ runtime retry нет. После финальных исправлений це�
 0 failed, 0 skipped**, полная регрессия Parser/Metrics service shells —
 **310 passed, 0 failed, 0 skipped**.
 
+Этап local integration завершён сквозными сценариями с реальными ядрами,
+filesystem и SQLite: отдельно проверены Parser и Metrics restart-safe replay, а
+также Parser -> JSON wire -> Metrics choreography и повторные доставки обеих
+стадий. Целевой прогон новых integration-файлов дал **5 passed, 0 failed,
+0 skipped** за 7.56 s; полная регрессия Parser/Metrics service shells —
+**315 passed, 0 failed, 0 skipped** за 4.35 s. В неё вошли три проверки
+`graph.ready.v1` compatibility и production dependency boundary.
+
 ## Приоритет доработок
 
 1. До новой реализации `metrics.calls` принять отдельное product-решение:
@@ -438,10 +453,12 @@ runtime retry нет. После финальных исправлений це�
    проверка completeness и запрос более полного profile без silent fallback.
    Library contract, wire contracts, application models, handlers и local-host
    filesystem/SQLite adapters для canonical artifacts выполнены. Также выполнен
-   transport-neutral runtime prerequisite: source владеет settlement решений
+   transport-neutral runtime prerequisite и local-host integration завершены:
+   source владеет settlement решений
    `ack` / `retry` / `reject`, composition связывает local adapters, lifecycle
    поддерживает graceful drain, а runtime observations не раскрывают payload или
-   identity доставки. Следующий шаг — конкретный production transport adapter;
+   identity доставки; реальные cores, JSON choreography и restart-safe replay
+   проверены сквозными тестами. Следующий шаг — конкретный production transport adapter;
    remote artifact storage при необходимости проектируется отдельно. Protocol
    запроса и materialization reduced profiles остаётся отдельным будущим
    решением.
