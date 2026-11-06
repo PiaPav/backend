@@ -324,6 +324,11 @@ class IdempotencyStore(Protocol):
 
 Эти значения не содержат API конкретного брокера.
 
+`InputSignalSource` владеет settlement доставки: он применяет ровно одно
+возвращённое handler/runtime решение к broker delivery. Handler и runtime не
+вызывают broker ack/nack API и не повторяют delivery самостоятельно. Ошибка
+необязательной observability не изменяет решение.
+
 `DeliveryContext` содержит авторизованный `tenant_id`, полученный будущим
 transport adapter из доверенного контекста доставки. Handler обязан сверить его
 с `envelope.tenant_id`; значение из payload само по себе не считается
@@ -675,6 +680,11 @@ handler. В production code общей orchestration-функции не поя�
 2. Добавить local builders и manual input.
 3. Реализовать start/stop/graceful drain.
 4. Проверить независимый запуск каждого runtime.
+
+Текущий transport-neutral baseline этого этапа реализован для обоих сервисов:
+single-use lifecycle, graceful drain, dependency-injected local builders, manual
+source, recording publisher и privacy-safe runtime observations. Это
+prerequisite, а не реализация конкретного production broker adapter.
 
 ### Этап 7. Интеграция
 

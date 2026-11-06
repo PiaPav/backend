@@ -186,6 +186,12 @@ canonical baseline; Parser и Metrics cores при этом не изменял�
    раздельные durable SQLite idempotency stores с lease reclaim, fencing token,
    canonical event persistence и restart-safe replay. Production transport и
    materialization reduced profiles остаются отдельными этапами.
+10. **Выполнен transport-neutral runtime/composition prerequisite.** Для обоих
+    service shells добавлены single-use lifecycle, graceful drain, явная
+    передача delivery decision во владеющий settlement source, local composition,
+    manual source, recording publisher и privacy-safe observations. Исключение
+    handler или некорректное решение консервативно дают `retry`; runtime сам не
+    повторяет delivery. Конкретный broker adapter ещё не реализован.
 
 ## Проверки и критерии готовности
 
@@ -414,6 +420,14 @@ idempotency stores. File URI ограничены configured roots; staging оч
 дал **86 passed, 0 failed, 0 skipped**, все Parser/Metrics tests — **275 passed,
 0 failed, 0 skipped**, consumer contract — **7 passed, 0 failed, 0 skipped**.
 
+Для transport-neutral runtime и composition добавлены симметричные manual input,
+recording publisher, UTC clock/UUID generator, lifecycle/drain и observations без
+payload, tenant, URI или event identity. Source применяет ровно возвращённое
+handler/runtime решение и тем самым владеет broker settlement; автоматического
+runtime retry нет. После финальных исправлений целевой прогон дал **35 passed,
+0 failed, 0 skipped**, полная регрессия Parser/Metrics service shells —
+**310 passed, 0 failed, 0 skipped**.
+
 ## Приоритет доработок
 
 1. До новой реализации `metrics.calls` принять отдельное product-решение:
@@ -423,11 +437,14 @@ idempotency stores. File URI ограничены configured roots; staging оч
 2. Перейти к consumer integration: explicit profile ID/version, обязательная
    проверка completeness и запрос более полного profile без silent fallback.
    Library contract, wire contracts, application models, handlers и local-host
-   filesystem/SQLite adapters для canonical artifacts выполнены. Следующий шаг —
-   production transport с явным ownership delivery decisions, composition и
-   observability; remote artifact storage при необходимости проектируется
-   отдельно. Protocol запроса и materialization reduced profiles остаётся
-   отдельным будущим решением.
+   filesystem/SQLite adapters для canonical artifacts выполнены. Также выполнен
+   transport-neutral runtime prerequisite: source владеет settlement решений
+   `ack` / `retry` / `reject`, composition связывает local adapters, lifecycle
+   поддерживает graceful drain, а runtime observations не раскрывают payload или
+   identity доставки. Следующий шаг — конкретный production transport adapter;
+   remote artifact storage при необходимости проектируется отдельно. Protocol
+   запроса и materialization reduced profiles остаётся отдельным будущим
+   решением.
 3. Расширять consumer integration только с отдельной analysis/tenant identity:
    общий `source.graph_fingerprint` связывает содержимое siblings, но не заменяет
    transport authorization или принадлежность одному запуску анализа.

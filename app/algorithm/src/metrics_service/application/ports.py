@@ -16,6 +16,12 @@ class EventPublisher(Protocol):
 
 
 class InputSignalSource(Protocol):
+    """Owns delivery settlement.
+
+    The source must settle each delivery exactly once from the
+    :class:`DeliveryDecision` returned by ``handler``.  The handler/runtime
+    neither acknowledges nor retries a delivery themselves.
+    """
     def start(self, handler: DeliveryHandler) -> None: ...
     def stop(self) -> None: ...
 
