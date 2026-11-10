@@ -24,6 +24,11 @@ Parser и Metrics — независимые сервисные оболочки
 
 ```python
 parser.parse_project(source_path: Path, output_path: Path) -> Path
+parser.parse_project_with_source_index(
+    source_path: Path,
+    graph_output_path: Path,
+    source_index_output_path: Path,
+) -> tuple[Path, Path]
 ```
 
 Parser строит полный Graph DTO schema 1 / Parser semantics 7: файлы,
@@ -31,6 +36,10 @@ Parser строит полный Graph DTO schema 1 / Parser semantics 7: фай
 callsites, weighted `calls`/`awaits`, complexity/structural facts и diagnostics.
 Только `exact` relations создают внутреннюю топологию. Граф является
 консервативной статической моделью, а не полной моделью runtime Python.
+
+Второй API строит тот же canonical Graph DTO и одновременно создаёт Source
+Index schema 1 для прямого поиска файлов, классов, методов, функций и констант.
+Индекс содержит byte/line spans, SHA-256 файлов и fingerprint snapshot исходников.
 
 ### Metrics Core
 
@@ -52,7 +61,10 @@ score внутри одного проекта, а не вероятность �
 
 `parser_service` принимает только `parser.start.v1`, проверяет tenant и
 requested schema/semantics, вызывает Parser Core, валидирует и сохраняет Graph
-DTO, затем публикует `graph.ready.v1` либо `parser.failed.v1`.
+DTO и Source Index, затем публикует `graph.ready.v1` либо `parser.failed.v1`.
+Новые события `graph.ready.v1` содержат дескриптор `source_index` с URI,
+SHA-256, размером, версией схемы и project fingerprint. Consumer-контракт
+Metrics сохраняет совместимость со старыми событиями без этого поля.
 
 `metrics_service` принимает только `graph.ready.v1`, проверяет URI, размер,
 SHA-256, schema/semantics и graph fingerprint, вызывает Metrics Core, сохраняет

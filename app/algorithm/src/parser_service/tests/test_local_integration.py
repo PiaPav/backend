@@ -46,14 +46,14 @@ def test_local_parser_runtime_persists_canonical_graph_and_replays_after_restart
     context = DeliveryContext("tenant")
 
     calls = 0
-    real_parse = canonical_core.parser.parse_project
+    real_parse = canonical_core.parser.parse_project_with_source_index
 
-    def counted_parse(source: Path, output: Path) -> Path:
+    def counted_parse(source: Path, output: Path, source_index_output: Path) -> tuple[Path, Path]:
         nonlocal calls
         calls += 1
-        return real_parse(source, output)
+        return real_parse(source, output, source_index_output)
 
-    monkeypatch.setattr(canonical_core.parser, "parse_project", counted_parse)
+    monkeypatch.setattr(canonical_core.parser, "parse_project_with_source_index", counted_parse)
     failing, first_source = _FailingCapturePublisher(), ManualInputSignalSource()
     first_runtime = build_runtime(settings, source=first_source, publisher=failing)
     first_runtime.start()
@@ -82,6 +82,16 @@ def test_local_parser_runtime_persists_canonical_graph_and_replays_after_restart
     assert descriptor.schema_version == graph["schema_version"] == 1
     assert descriptor.parser_semantics_version == graph["parser_semantics_version"] == 7
     assert descriptor.graph_fingerprint == graph_dto.graph_fingerprint(graph)
+    index_descriptor = ready.payload.source_index
+    index_artifact = next((settings.artifact_root / "source-index").glob("*.json"))
+    index_raw = index_artifact.read_bytes()
+    source_index = json.loads(index_raw)
+    assert index_descriptor.uri == index_artifact.as_uri()
+    assert index_descriptor.size_bytes == len(index_raw)
+    assert index_descriptor.sha256 == hashlib.sha256(index_raw).hexdigest()
+    assert index_descriptor.schema_version == source_index["schema_version"] == 1
+    assert index_descriptor.project_fingerprint == source_index["project"]["fingerprint"]
+    assert source_index["files"]["sample.py"]["functions"]["answer"]
     assert (ready.correlation_id, ready.causation_id, ready.tenant_id) == (
         command.correlation_id, command.event_id, command.tenant_id,
     )

@@ -10,6 +10,14 @@ unversioned legacy graph, including `body`, for compatibility. That `starter()`
 result is not an input to the canonical Metrics core; Metrics accepts only
 Graph DTO schema v1 / parser semantics 6 or 7.
 
+`parse_project_with_source_index(source_path: Path, graph_output_path: Path,
+source_index_output_path: Path) -> tuple[Path, Path]` performs the same canonical
+analysis and additionally writes Source Index schema v1 during the same
+definition pass. The index contains the analyzed project root and fingerprint,
+file hashes and encodings, direct lookup maps, symbol ownership, and UTF-8 byte
+and line spans. Graph and index targets must differ; each file is published
+atomically and returned as a resolved `Path`.
+
 Every real function/method node carries canonical `complexity_facts`: callable
 span and async status, ordered structural controls with parent indices and
 cardinalities, and scoped occurrences. Nested function/class/lambda bodies are

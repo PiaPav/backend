@@ -21,8 +21,9 @@ EXPECTED_SIGNATURES = {
     "SourceResolver": {"materialize": ("self", "source_uri")},
     "GraphStagingArea": {"create_target": ("self", "artifact_key")},
     "GraphArtifactStore": {"save": ("self", "staged_path", "artifact_key")},
-    "ParserGateway": {"parse": ("self", "source_path", "output_path")},
-    "GraphValidator": {"validate": ("self", "graph_path")},
+    "ParserGateway": {"parse": ("self", "source_path", "graph_output_path", "source_index_output_path")},
+    "GraphValidator": {"validate": ("self", "graph_path"),
+                       "validate_source_index": ("self", "source_index_path")},
 }
 
 

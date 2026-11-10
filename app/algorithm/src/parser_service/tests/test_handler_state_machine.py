@@ -27,7 +27,9 @@ def wire():
 class Fakes:
     def __init__(self, tmp_path):
         self.source = tmp_path / "source"; self.source.write_bytes(b"source")
-        self.target = tmp_path / "graph"; self.output = b'{"nodes":[]}'
+        self.target = tmp_path / "graph"; self.index_target = tmp_path / "source-index"
+        self.output = b'{"nodes":[]}'
+        self.index_output = b'{"schema_version":1}'
         self.calls = []; self.record = None; self.disposition = ClaimDisposition.ACQUIRED
         self.publish_error = None; self.validator_error = None; self.core_error = None; self.core_calls = 0
         self.record_saved_error = None; self.record_failure_error = None; self.record_published_error = None
@@ -42,16 +44,23 @@ class Fakes:
         if self.id_error_on_call == self.id_calls: raise RuntimeError("id failed")
         return "generated-id"
     def materialize(self, uri): return nullcontext(self.source)
-    def create_target(self, key): return nullcontext(self.target)
-    def parse(self, source, target):
+    def create_target(self, key):
+        return nullcontext(self.index_target if key.startswith("source-index/") else self.target)
+    def parse(self, source, target, source_index_target):
         self.core_calls += 1
         if self.core_error: raise self.core_error
-        target.write_bytes(self.output); return target
+        target.write_bytes(self.output); source_index_target.write_bytes(self.index_output)
+        return target, source_index_target
     def validate(self, path):
         if self.validator_error: raise self.validator_error
         return "f" * 64
+    def validate_source_index(self, path):
+        if self.validator_error: raise self.validator_error
+        return "e" * 64
     def save(self, path, key):
-        return ArtifactDescriptor("file:///stored-graph", hashlib.sha256(self.output).hexdigest(), len(self.output))
+        content = path.read_bytes()
+        uri = "file:///stored-source-index" if key.startswith("source-index/") else "file:///stored-graph"
+        return ArtifactDescriptor(uri, hashlib.sha256(content).hexdigest(), len(content))
     def claim(self, key, digest, token, lease):
         self.key, self.digest = key, digest
         if self.record is None:
@@ -87,6 +96,11 @@ def test_happy_path_descriptor_fingerprint_and_order(tmp_path):
     assert event.payload.graph.size_bytes == len(f.output)
     assert (event.payload.graph.schema_version, event.payload.graph.parser_semantics_version) == (1, 7)
     assert event.payload.graph.graph_fingerprint == "f" * 64
+    assert event.payload.source_index.uri == "file:///stored-source-index"
+    assert event.payload.source_index.sha256 == hashlib.sha256(f.index_output).hexdigest()
+    assert event.payload.source_index.size_bytes == len(f.index_output)
+    assert event.payload.source_index.schema_version == 1
+    assert event.payload.source_index.project_fingerprint == "e" * 64
     assert (event.correlation_id, event.causation_id, event.tenant_id) == ("analysis-1", "event-1", "tenant-1")
     assert event.producer == Producer("parser-service", "1") and event.occurred_at == "2026-01-01T00:00:00Z"
 

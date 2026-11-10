@@ -11,6 +11,7 @@ EXPECTED = {
     errors.UnsupportedUriSchemeError: ("unsupported_uri_scheme", errors.ErrorDisposition.FAILURE),
     errors.SourceNotFoundError: ("source_not_found", errors.ErrorDisposition.FAILURE),
     errors.InvalidGraphDtoError: ("invalid_graph_dto", errors.ErrorDisposition.FAILURE),
+    errors.InvalidSourceIndexError: ("invalid_source_index", errors.ErrorDisposition.FAILURE),
     errors.ParserProcessingError: ("parser_processing_failed", errors.ErrorDisposition.FAILURE),
     errors.IdempotencyPayloadConflictError: ("idempotency_payload_conflict", errors.ErrorDisposition.FAILURE),
     errors.ArtifactConflictError: ("artifact_conflict", errors.ErrorDisposition.FAILURE),

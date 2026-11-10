@@ -23,7 +23,7 @@ from ..application.errors import (ArtifactConflictError, ArtifactStoreUnavailabl
                                   StagingUnavailableError, UnsupportedUriSchemeError)
 from ..application.models import ArtifactDescriptor
 
-_KEY = re.compile(r"graph/([0-9a-f]{64})\Z")
+_KEY = re.compile(r"(graph|source-index)/([0-9a-f]{64})\Z")
 
 
 def _contained(path: Path, root: Path) -> bool:
@@ -100,12 +100,13 @@ class LocalGraphStagingArea:
 
     @contextmanager
     def create_target(self, artifact_key: str) -> Iterator[Path]:
-        if _KEY.fullmatch(artifact_key) is None:
+        match = _KEY.fullmatch(artifact_key)
+        if match is None:
             raise StagingUnavailableError("Graph staging key is invalid")
         path: Path | None = None
         try:
             root = self._root.resolve(strict=True)
-            descriptor, name = tempfile.mkstemp(prefix="graph-", suffix=".json", dir=root)
+            descriptor, name = tempfile.mkstemp(prefix=f"{match.group(1)}-", suffix=".json", dir=root)
             os.close(descriptor)
             path = Path(name)
         except OSError as error:
@@ -134,12 +135,12 @@ class LocalGraphArtifactStore:
         match = _KEY.fullmatch(artifact_key)
         if match is None:
             raise ArtifactStoreUnavailableError("Graph artifact key is invalid")
-        digest_name = match.group(1)
+        artifact_kind, digest_name = match.groups()
         temporary: Path | None = None
         primary: BaseException | None = None
         try:
             root = self._root.resolve(strict=True)
-            destination_dir = root / "graph"
+            destination_dir = root / artifact_kind
             directory_existed = destination_dir.exists()
             destination_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
             destination_dir = destination_dir.resolve(strict=True)

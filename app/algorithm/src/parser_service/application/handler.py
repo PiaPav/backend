@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from datetime import timedelta, timezone
 from typing import Mapping
 
-from ..contracts import EventEnvelope, Failure, GraphDescriptor, GraphReady, Producer, from_mapping, to_mapping
+from ..contracts import (EventEnvelope, Failure, GraphDescriptor, GraphReady, Producer,
+                         SourceIndexDescriptor, from_mapping, to_mapping)
 from .errors import ApplicationError, ArtifactConflictError, ErrorDisposition, IdempotencyPayloadConflictError
 from .models import ClaimDisposition, DeliveryContext, DeliveryDecision, ProcessingState
 from .ports import Clock, EventIdGenerator, EventPublisher, GraphArtifactStore, GraphStagingArea, GraphValidator, IdempotencyStore, ParserGateway, SourceResolver
@@ -72,16 +73,30 @@ class ParserHandler:
             return DeliveryDecision.RETRY
         try:
             artifact_key = "graph/" + hashlib.sha256(f"{event.tenant_id}\0{event.event_id}\0{digest}".encode()).hexdigest()
-            with self._sources.materialize(event.payload.source_uri) as source, self._staging.create_target(artifact_key) as target:
-                output = self._parser.parse(source, target)
+            source_index_key = artifact_key.replace("graph/", "source-index/", 1)
+            with (self._sources.materialize(event.payload.source_uri) as source,
+                  self._staging.create_target(artifact_key) as graph_target,
+                  self._staging.create_target(source_index_key) as source_index_target):
+                output, source_index_output = self._parser.parse(
+                    source, graph_target, source_index_target
+                )
                 fingerprint = self._validator.validate(output)
+                project_fingerprint = self._validator.validate_source_index(source_index_output)
                 artifact_bytes = output.read_bytes()
+                source_index_bytes = source_index_output.read_bytes()
                 descriptor = self._artifacts.save(output, artifact_key)
+                source_index_descriptor = self._artifacts.save(
+                    source_index_output, source_index_key
+                )
                 if (descriptor.size_bytes != len(artifact_bytes)
-                        or descriptor.sha256 != hashlib.sha256(artifact_bytes).hexdigest()):
+                        or descriptor.sha256 != hashlib.sha256(artifact_bytes).hexdigest()
+                        or source_index_descriptor.size_bytes != len(source_index_bytes)
+                        or source_index_descriptor.sha256 != hashlib.sha256(source_index_bytes).hexdigest()):
                     raise ArtifactConflictError("Stored graph descriptor does not match canonical content")
             ready = self._envelope(event, "graph.ready.v1", GraphReady(event.payload.source_uri, GraphDescriptor(
-                descriptor.uri, descriptor.sha256, descriptor.size_bytes, 1, 7, fingerprint)))
+                descriptor.uri, descriptor.sha256, descriptor.size_bytes, 1, 7, fingerprint),
+                SourceIndexDescriptor(source_index_descriptor.uri, source_index_descriptor.sha256,
+                                      source_index_descriptor.size_bytes, 1, project_fingerprint)))
         except ApplicationError as error:
             if error.disposition is not ErrorDisposition.FAILURE:
                 return self._decision(error)

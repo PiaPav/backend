@@ -54,7 +54,8 @@ _errors(RejectedInputError, {
 })
 _errors(TerminalProcessingError, {
     "UnsupportedUriSchemeError": "unsupported_uri_scheme", "SourceNotFoundError": "source_not_found",
-    "InvalidGraphDtoError": "invalid_graph_dto", "ParserProcessingError": "parser_processing_failed",
+    "InvalidGraphDtoError": "invalid_graph_dto", "InvalidSourceIndexError": "invalid_source_index",
+    "ParserProcessingError": "parser_processing_failed",
     "IdempotencyPayloadConflictError": "idempotency_payload_conflict", "ArtifactConflictError": "artifact_conflict",
 })
 _errors(RetryableError, {
@@ -67,7 +68,7 @@ _errors(RetryableError, {
 __all__ = [
     "ApplicationError", "ErrorDisposition", "RejectedInputError", "RetryableError", "TerminalProcessingError", "classify_error",
     "MalformedEnvelopeError", "UnsupportedEnvelopeVersionError", "UnsupportedEventTypeError", "TenantMismatchError",
-    "UnsupportedUriSchemeError", "SourceNotFoundError", "InvalidGraphDtoError", "ParserProcessingError",
+    "UnsupportedUriSchemeError", "SourceNotFoundError", "InvalidGraphDtoError", "InvalidSourceIndexError", "ParserProcessingError",
     "IdempotencyPayloadConflictError", "ArtifactConflictError", "ClaimBusyError", "PublisherUnavailableError",
     "IdempotencyStoreUnavailableError", "SourceTemporarilyUnavailableError", "StagingUnavailableError",
     "ArtifactStoreUnavailableError", "TemporaryIoError",

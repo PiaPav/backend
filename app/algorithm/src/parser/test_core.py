@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from parser import parse_project, starter
+from parser import parse_project, parse_project_with_source_index, starter
 
 
 GOLDEN_V1 = Path(__file__).with_name("testdata") / "golden_v1"
@@ -246,6 +246,28 @@ def test_parse_project_removes_temporary_file_when_replace_fails(tmp_path: Path)
 
 def test_public_parser_does_not_import_source_index() -> None:
     assert "parser.logic.source_index" not in sys.modules
+
+
+def test_parse_project_with_source_index_writes_harness_compatible_index(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "sample.py").write_text(
+        "class Example:\n    def method(self):\n        return 1\n", encoding="utf-8"
+    )
+
+    graph_path, index_path = parse_project_with_source_index(
+        source, tmp_path / "graph.json", tmp_path / "source-index.json"
+    )
+
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    assert graph["parser_semantics_version"] == 7
+    assert index["schema_version"] == 1
+    assert index["project"]["root"] == str(source.resolve())
+    assert index["project"]["file_count"] == 1
+    class_id = index["files"]["sample.py"]["classes"]["Example"][0]
+    method_id = index["symbols"][class_id]["methods"]["method"][0]
+    assert index["symbols"][method_id]["span"]["start_byte"] >= 0
 
 
 def test_package_wins_module_name_collision_and_file_ids_do_not_collide(tmp_path: Path) -> None:

@@ -39,6 +39,18 @@ def test_staging_cleanup_and_immutable_store(tmp_path):
     assert (artifact_root / "graph" / ("a" * 64 + ".json")).read_bytes() == b"canonical"
 
 
+def test_source_index_staging_and_immutable_store(tmp_path):
+    staging_root = tmp_path / "stage"; staging_root.mkdir()
+    artifact_root = tmp_path / "artifacts"; artifact_root.mkdir()
+    key = "source-index/" + "b" * 64
+    staging = LocalGraphStagingArea(staging_root)
+    with staging.create_target(key) as target:
+        target.write_bytes(b"index")
+        saved = LocalGraphArtifactStore(artifact_root).save(target, key)
+    assert saved.uri.endswith("/source-index/" + "b" * 64 + ".json")
+    assert (artifact_root / "source-index" / ("b" * 64 + ".json")).read_bytes() == b"index"
+
+
 def test_source_uri_matrix_containment_and_type(tmp_path):
     source = tmp_path / "данные"; source.mkdir()
     resolver = LocalSourceResolver(tmp_path)

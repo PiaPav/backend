@@ -1,4 +1,5 @@
 import ast
+import json
 from pathlib import Path
 
 from metrics_service.contracts import GraphReady as ConsumerGraphReady
@@ -19,6 +20,21 @@ def test_fixed_producer_fixture_decodes_with_independent_consumer():
     assert type(consumer.payload) is ConsumerGraphReady
     assert producer_encode(producer) == wire.rstrip(b"\n")
     assert consumer.payload.to_mapping() == producer.payload.to_mapping()
+
+
+def test_source_index_descriptor_crosses_independent_wire_contracts():
+    mapping = producer_decode(FIXTURE.read_bytes()).to_mapping()
+    mapping["payload"]["source_index"] = {
+        "uri": "file:///artifacts/source-index.json",
+        "sha256": "c" * 64,
+        "size_bytes": 456,
+        "schema_version": 1,
+        "project_fingerprint": "d" * 64,
+    }
+    producer = producer_decode(json.dumps(mapping))
+    wire = producer_encode(producer)
+    consumer = consumer_decode(wire)
+    assert consumer.payload.source_index.to_mapping() == mapping["payload"]["source_index"]
 
 
 def test_metrics_contracts_do_not_import_parser_service():
