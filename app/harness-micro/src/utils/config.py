@@ -14,6 +14,7 @@ class LLMConfig:
     url: str
     apikey: str
     prompts_dir: str
+    model: str
 
 
 @dataclass
@@ -34,7 +35,8 @@ def load_config() -> Config:
             llm=LLMConfig(
                 url=yaml_config.get("llm_config").get("url"),
                 apikey=yaml_config.get("llm_config").get("apikey"),
-                prompts_dir=yaml_config.get("llm_config").get("prompts_dir")
+                prompts_dir=yaml_config.get("llm_config").get("prompts_dir"),
+                model=yaml_config.get("llm_config").get("model")
             )
         )
 
@@ -42,7 +44,8 @@ def load_config() -> Config:
         llm=LLMConfig(
             url=os.environ.get("llm_config").get("url"),
             apikey=os.environ.get("llm_config").get("apikey"),
-            prompts_dir=os.environ.get("llm_config").get("prompts_dir")
+            prompts_dir=os.environ.get("llm_config").get("prompts_dir"),
+            model=os.environ.get("llm_config").get("model")
         )
     )
 

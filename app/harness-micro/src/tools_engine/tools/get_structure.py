@@ -4,15 +4,11 @@ from pathlib import Path
 from rules.rules_config import RULES_CONFIG
 from tools_engine.interface.tool import AbstractTool
 from tools_engine.models.source_index_model import SourceIndex, SourceSymbol, SourceSpan
-from tools_engine.models.tool_models import ToolName, StructureType
+from response_models.models import StructureType, ToolName
 
 
 class GetStructure(AbstractTool):
     name = ToolName.Get_Structure
-
-    # def __init__(self, source_index_path: Path):
-    #
-    #     self.source_index: SourceIndex = self._load_source_index(source_index_path)
 
     @staticmethod
     def _load_source_index(path: Path) -> SourceIndex:

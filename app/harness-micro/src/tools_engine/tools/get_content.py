@@ -1,18 +1,14 @@
 import json
 from pathlib import Path
 
+from response_models.models import ToolName
 from rules.rules_config import RULES_CONFIG
 from tools_engine.interface.tool import AbstractTool
 from tools_engine.models.source_index_model import SourceIndex, SourceFile
-from tools_engine.models.tool_models import ToolName
 
 
 class GetContent(AbstractTool):
     name = ToolName.Get_Content
-
-    # def __init__(self, source_index_path: Path):
-    #
-    #     self.source_index: SourceIndex = self._load_source_index(source_index_path)
 
     @staticmethod
     def _load_source_index(path: Path) -> SourceIndex:

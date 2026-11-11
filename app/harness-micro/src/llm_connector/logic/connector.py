@@ -1,8 +1,8 @@
-import json
-
 from openai import AsyncOpenAI
+from utils.config import CONFIG
 
-from llm_connector.interfaces.connector import LLMConnectorInterface, AbstractLLMSession, MessageAuthors, Message
+from llm_connector.interfaces.connector import LLMConnectorInterface, AbstractLLMSession
+from response_models.models import Prompt, ModelMessage, ToolResponse, Request, ToolData, ModelResponse
 
 
 class LLMSession(AbstractLLMSession):
@@ -10,45 +10,61 @@ class LLMSession(AbstractLLMSession):
     Берет на себя ответственность за хранение прошлых сообщений"""
 
     def __init__(self, client: AsyncOpenAI):
-        self.history: list[Message] = []
+        self.messages: list[Prompt | ModelMessage | ToolResponse] = []
+        self.tools: list[ToolData] | None = None
         if client is None:
             raise
         self.client = client
 
-    def _load_history(self) -> str:
-        data = {}
 
-        for i in range(len(self.history)):
-            message = self.history[i]
-            data[f"message_{i + 1}"] = message.to_json()
+    async def send_start(self, messages: list[Prompt], tools: list[ToolData]) -> ModelResponse:
+        """Отправить стартовый запрос"""
+        for message in messages:
+            self.messages.append(message)
 
-        return json.dumps(data, ensure_ascii=False)
+        self.tools = tools
 
-    async def send(self, message: Message) -> str:
-        """Отправить запрос"""
-        self.history.append(message)
-
-        # TODO Отправка
-        request = {
-            "model": "",
-            "input": self._load_history(),
-        }
-
-        raw_answer = await self.client.responses.create(**request)
-
-        answer = Message(
-            author=MessageAuthors.agent,
-            instructions="",
-            content=raw_answer.output_text
+        request = Request(
+            model=CONFIG.llm.model,
+            messages=self.messages,
+            tools=self.tools
         )
 
-        self.history.append(answer)
+        response = await self.client.chat.completions.create(**request.model_dump())
 
-        return raw_answer.output_text
+        answer = ModelResponse.model_validate(
+            response.model_dump()
+        )
 
-    # async def receive(self):
-    #     """Извлечь результат"""
-    #     pass
+        self.messages.append(answer.choices[0].message)
+
+        return answer
+
+    async def send(self, messages: list[Prompt | ToolResponse]) -> ModelResponse:
+        """Отправить запрос"""
+        for message in messages:
+            self.messages.append(message)
+
+        request = Request(
+            model=CONFIG.llm.model,
+            messages=self.messages,
+            tools=self.tools
+        )
+
+        response = await self.client.chat.completions.create(**request.model_dump())
+
+        answer = ModelResponse.model_validate(
+            response.model_dump()
+        )
+
+        self.messages.append(answer.choices[0].message)
+
+        return answer
+
+
+    def close(self) -> bool:
+        del self
+        return True
 
 
 class LLMConnector(LLMConnectorInterface):
@@ -64,6 +80,14 @@ class LLMConnector(LLMConnectorInterface):
         session = LLMSession(client=self.client)
         self.sessions[unique_id] = session
         return session
+
+    async def close_session(self, session_id: int) -> bool:
+        """Закрыть сессию"""
+        if session_id not in self.sessions.keys():
+            raise  # Сессия с данным id не существует
+        session = self.sessions.pop(session_id)
+        session.close()
+        return True
 
     async def connect(self, url, apikey):
         """Подключиться к апи"""

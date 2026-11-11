@@ -14,7 +14,7 @@ class CoreInterface(ABC):
         pass
 
     @abstractmethod
-    def start(self, url, apikey):
+    async def start(self, url, apikey):
         """Запустить сервис"""
         pass
 

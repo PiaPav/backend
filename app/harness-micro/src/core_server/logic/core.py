@@ -5,9 +5,10 @@ from core_server.interfaces.core import CoreInterface
 from core_server.models.task_models import HarnessInputData, TaskStatus, TaskInfo
 from llm_connector.interfaces.connector import LLMConnectorInterface
 from llm_connector.interfaces.validator import ValidatorInterface
+from response_models.models import FinishReasonType, ToolCall
 from tools_engine.interface.engine import EngineInterface
-from tools_engine.models.tool_models import ExecuteToolData
 
+# TODO Вынести в конфиг?
 TASK_EXPIRED_TIME_MIN = 60
 COUNT_MESSAGES = 3
 
@@ -22,9 +23,9 @@ class Core(CoreInterface):
         self.tools_engine: EngineInterface = tools_engine
         self.message_validator: ValidatorInterface = validator
 
-    def start(self, url, apikey):
+    async def start(self, url, apikey):
         """Запустить систему"""
-        self.llm_connector.connect(url, apikey)
+        await self.llm_connector.connect(url, apikey)
         self.tools_engine.start()
 
     def _clear_old_tasks(self):
@@ -39,36 +40,57 @@ class Core(CoreInterface):
 
     def _load_file(self, path: Path) -> str:
         """Загрузчик файлов (в будущем мб перекатить на редис)"""
-        pass
+        return path.read_text(encoding="utf-8")
 
     async def _llm_loop(self, unique_id: int, graph: str, metrix: str, index: Path) -> str:
         """Цикл общения с нейронкой"""
         session = await self.llm_connector.create_session(unique_id)
 
-        message = self.message_validator.create_message(graph, metrix)
+        messages = self.message_validator.create_start_messages(graph, metrix)
 
-        answer = await session.send(message)
+        tools = self.message_validator.load_tools_models()
+
+        answer = await session.send_start(messages=messages, tools=tools)
 
         self.tasks[unique_id].current_iteration += 1
 
         # Цикл запрос-ответ
         while self.tasks[unique_id].current_iteration <= COUNT_MESSAGES:
-            valid_anwer = self.message_validator.validate_response(answer)
-            if valid_anwer.use_tool:
-                additional_data: str = self.tools_engine.entry_tool(
-                    source_index_path=index,
-                    data=ExecuteToolData(
-                        name=valid_anwer.tool_name,
-                        context=valid_anwer.tool_data
-                    ))
-                message = self.message_validator.create_tool_message(
-                    tool_name=valid_anwer.tool_name,
-                    data=additional_data
-                )
-            else:
-                return valid_anwer.message
+            # valid_anwer = self.message_validator.validate_response(answer)
+            choice = answer.choices[0]
 
-            await session.send(message)
+            if choice.finish_reason == FinishReasonType.stop:
+                return choice.message.content
+
+            if choice.finish_reason == FinishReasonType.tool_calls:
+                tool_calls: list[ToolCall] = choice.message.tool_calls
+
+                tool_messages = []
+
+                for tool_call in tool_calls:
+                    function = tool_call.function
+                    additional_data = self.tools_engine.entry_tool(
+                        source_index_path=index,
+                        name=function.name,
+                        arguments=function.arguments
+                    )
+
+                    message = self.message_validator.create_tool_message(
+                        tool_call=tool_call,
+                        data=additional_data
+                    )
+
+                    tool_messages.append(message)
+
+                answer = await session.send(messages=tool_messages)
+
+            else:
+                # TODO Обработка ошибок
+                pass
+
+            self.tasks[unique_id].current_iteration += 1
+
+        raise
 
         # TODO Что делать если цикл кончился, а результата не было??
 
