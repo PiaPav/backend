@@ -15,7 +15,5 @@ PYTHONPATH=app/parser/src:app/metrics/src:app/algorithm/src \
 ```
 
 `metrics_service.composition.build_application` and `build_runtime` construct
-the local service. There is currently no RabbitMQ/S3 adapter or standalone
-process entrypoint for this version. The previous worker and Compose profile
-were removed when this implementation became authoritative; a broker adapter
-must be added before deploying it as a worker.
+the local service. This version has no RabbitMQ/S3 adapter or standalone process
+entrypoint. The previous worker and its Compose profile remain in `legacy/`.
