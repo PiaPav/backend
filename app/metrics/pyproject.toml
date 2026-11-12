@@ -5,17 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "metrics-service"
 version = "0.1.0"
-description = "Graph artifact metrics worker"
+description = "Canonical metrics core and local service shell"
 requires-python = ">=3.13"
-dependencies = [
-    "aio-pika>=9.5.7,<10",
-    "aioboto3>=15.5.0,<16",
-]
+dependencies = ["networkx>=3.5"]
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10"]
 
 [tool.setuptools]
-packages = ["metrics", "metrics.logic", "metrics_service", "graph_dto"]
-package-dir = {metrics = "src/metrics", metrics_service = "src/metrics_service", graph_dto = "../algorithm/src/graph_dto"}
+packages = ["metrics", "metrics.logic", "metrics_service", "metrics_service.adapters", "metrics_service.application", "metrics_service.contracts", "graph_dto", "views", "views.projections"]
+package-dir = {metrics = "src/metrics", metrics_service = "src/metrics_service", graph_dto = "../algorithm/src/graph_dto", views = "../algorithm/src/views"}
 include-package-data = false

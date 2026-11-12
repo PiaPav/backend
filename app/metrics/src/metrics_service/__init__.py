@@ -1,1 +1,1 @@
-"""Independent event-driven Metrics service."""
+"""Metrics service shell."""
