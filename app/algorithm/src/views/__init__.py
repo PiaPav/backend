@@ -18,6 +18,13 @@ from .projections.metrics_quality import _project_metrics_quality_v1
 from .projections.metrics_objects import _project_metrics_objects_v1
 from .projections.metrics_aggregate import _project_metrics_aggregate_v1
 from .projections.inventory_minimal import _project_inventory_minimal_v1
+from .projections.aggregate_packages import _project_aggregate_packages_v2
+from .projections.aggregate_overview import _project_aggregate_overview_v1
+from .aggregate_overview_contract import aggregate_overview_package_id, decode_aggregate_overview_v1
+from .aggregate_packages_contract import (
+    aggregate_package_edge_id, aggregate_package_grouping_v1, aggregate_package_id,
+    decode_aggregate_packages_v2,
+)
 from .projections.dependency_files import _project_dependency_files_v1
 from .projections.dependency_architecture import _project_dependency_architecture_v1
 from .projections.structure_declarations import _project_structure_declarations_v1
@@ -26,7 +33,13 @@ from .projections.calls_detailed import _project_calls_detailed_v1
 from .projections.types_topology import _project_types_topology_v1
 from .projections.objects_metrics_basis import _project_objects_metrics_basis_v1
 from .registry import profile_metadata, select_graph_profile, summary_profile_metadata
-from .registry import metrics_profile_metadata
+from .registry import metrics_profile_metadata, select_metrics_profile
+from .consumer_contract import (
+    ProfileCompletenessError,
+    validate_graph_artifact_for_consumer,
+    validate_metrics_artifact_for_consumer,
+    validate_sibling_artifacts,
+)
 
 
 def materialize_metrics_profile(
@@ -34,6 +47,11 @@ def materialize_metrics_profile(
 ) -> dict[str, Any]:
     """Materialize an explicitly selected Metrics profile."""
     validate_metrics_source_v1(source_metrics)
+    profile_kind = select_metrics_profile(profile_id, profile_version)
+    if profile_id == "metrics.full" and profile_kind == "metrics":
+        if source_metrics["schema_version"] != 1 or source_metrics["metrics_semantics_version"] != 4:
+            raise ValueError("metrics.full v1 requires Metrics DTO schema 1 / semantics 4")
+        return deepcopy(source_metrics)
     metrics_profile_metadata(profile_id, profile_version)
     if profile_id == "metrics.aggregate":
         return _project_metrics_aggregate_v1(source_metrics)
@@ -52,6 +70,8 @@ def project_metrics_view(
     source_metrics: Mapping[str, Any], *, profile_id: str, profile_version: int
 ) -> dict[str, Any]:
     """Project an exact Metrics View profile without fallback."""
+    validate_metrics_source_v1(source_metrics)
+    metrics_profile_metadata(profile_id, profile_version)
     return materialize_metrics_profile(source_metrics, profile_id=profile_id, profile_version=profile_version)
 
 
@@ -77,6 +97,10 @@ def materialize_graph_profile(
         return _project_objects_metrics_basis_v1(source_graph)
     if profile_id == "inventory.minimal" and profile_kind == "graph_summary":
         return _project_inventory_minimal_v1(source_graph)
+    if profile_id == "aggregate.packages" and profile_kind == "graph_summary":
+        return _project_aggregate_packages_v2(source_graph)
+    if profile_id == "aggregate.overview" and profile_kind == "graph_summary":
+        return _project_aggregate_overview_v1(source_graph)
     if profile_id == "canonical.full" and profile_kind == "canonical":
         if source_graph["schema_version"] != 1 or source_graph["parser_semantics_version"] != 7:
             raise ValueError("canonical.full v1 requires Graph DTO schema 1 / parser semantics 7")
@@ -113,14 +137,25 @@ def project_graph_summary(
     """Project an explicitly selected Graph Summary profile."""
     validate_graph_v1(source_graph)
     summary_profile_metadata(profile_id, profile_version)
-    return _project_inventory_minimal_v1(source_graph)
+    if profile_id == "inventory.minimal":
+        return _project_inventory_minimal_v1(source_graph)
+    if profile_id == "aggregate.packages":
+        return _project_aggregate_packages_v2(source_graph)
+    if profile_id == "aggregate.overview":
+        return _project_aggregate_overview_v1(source_graph)
+    raise ValueError(f"Unsupported graph summary profile {profile_id!r}")
 
 
 __all__ = [
+    "aggregate_package_edge_id", "aggregate_package_grouping_v1", "aggregate_package_id",
+    "decode_aggregate_packages_v2",
+    "aggregate_overview_package_id", "decode_aggregate_overview_v1",
     "aggregate_import_edge_id", "graph_summary_fingerprint", "graph_view_fingerprint",
     "materialize_graph_profile",
     "materialize_metrics_profile", "metrics_view_fingerprint", "project_metrics_view",
     "project_graph_summary", "project_graph_view", "serialize_graph_summary",
     "serialize_graph_view", "validate_graph_summary_v1", "validate_graph_view_v1",
     "serialize_metrics_view", "validate_metrics_source_v1", "validate_metrics_view_v1",
+    "ProfileCompletenessError", "validate_graph_artifact_for_consumer",
+    "validate_metrics_artifact_for_consumer", "validate_sibling_artifacts",
 ]

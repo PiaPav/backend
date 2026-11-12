@@ -1,0 +1,27 @@
+{
+  "type": "function",
+  "function": {
+    "name": "GET-STRUCTURE",
+    "description": "Получить структуру из файла",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "FILEPATH": {
+          "type": "string",
+          "description": "путь к файлу в соответствии с путем, указанным в графе (части пути через \"/\" и название файла с расширением)"
+        },
+        "STRUCTURE-TYPE": {
+          "type": "string",
+          "description": "тип структуры (`CLASS`, `FUNCTION`, `METHOD`, `CONSTANT`)"
+        },
+        "STRUCTURE-PATH": {
+          "type": "string",
+          "description": "путь структуры. При разных типах: `CLASS` - название класса (пример: `AccountData`); `FUNCTION` - название функции (пример: `load_config`); `METHOD` - название класса и метода (пример: `ProjectService.delete_project`); `CONSTANT` - название константы (пример: `ERROR_SCHEMA`)"
+        }
+      },
+      "required": ["FILEPATH", "STRUCTURE-TYPE", "STRUCTURE-PATH"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+}

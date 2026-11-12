@@ -1,0 +1,19 @@
+{
+  "type": "function",
+  "function": {
+    "name": "GET-CONTENT",
+    "description": "Получить содержимое указанного файла",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "FILEPATH": {
+          "type": "string",
+          "description": "путь к файлу в соответствии с путем, указанным в графе (части пути через \"/\" и название файла с расширением)"
+        }
+      },
+      "required": ["FILEPATH"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+}

@@ -180,3 +180,27 @@ whitelist, ownership/path closure, endpoint kinds, synthetic policy, function
 target population, complexity и точное соответствие exact type references
 typed topology. Полный metric-to-facts контракт и контрпримеры определены в
 `DATA_PROFILES_OBJECTS_METRICS_BASIS_CONTRACT.md`.
+
+## Consumer contract
+
+Consumer обязан передавать точные `profile_id` и `profile_version` в
+`validate_graph_artifact_for_consumer` или
+`validate_metrics_artifact_for_consumer`. Проверка сначала применяет строгий
+validator соответствующего artifact, затем требует, чтобы все явно указанные
+consumer capabilities присутствовали в `completeness.preserves`. Для
+`canonical.full / 1` после полной проверки Graph DTO действует гарантия
+globally lossless.
+
+Недостаточная полнота приводит к `ProfileCompletenessError` с точной выбранной
+парой и детерминированными списками required/missing capabilities. Contract не
+выбирает замену и не материализует другой artifact: consumer может повторить
+запрос только с новой явно указанной парой ID/version. Defaults, `latest`,
+version negotiation и silent fallback запрещены.
+
+`validate_sibling_artifacts` независимо проверяет Graph и Metrics artifacts и
+связывает их только по fingerprint полного canonical graph: для
+`canonical.full` это `project.fingerprint`, для reduced Graph artifact и
+Metrics View — `source.graph_fingerprint`. Собственные `view_fingerprint` и
+`summary_fingerprint` не являются sibling identity. Совпадение source
+fingerprint не заменяет authorization, tenant или analysis identity будущего
+transport/service shell.

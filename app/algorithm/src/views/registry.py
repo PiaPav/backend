@@ -3,8 +3,14 @@ from __future__ import annotations
 
 CANONICAL_FULL_ID = "canonical.full"
 CANONICAL_FULL_VERSION = 1
+METRICS_FULL_ID = "metrics.full"
+METRICS_FULL_VERSION = 1
 INVENTORY_MINIMAL_ID = "inventory.minimal"
 INVENTORY_MINIMAL_VERSION = 1
+AGGREGATE_PACKAGES_ID = "aggregate.packages"
+AGGREGATE_PACKAGES_VERSION = 2
+AGGREGATE_OVERVIEW_ID = "aggregate.overview"
+AGGREGATE_OVERVIEW_VERSION = 1
 DEPENDENCY_FILES_ID = "dependency.files"
 DEPENDENCY_FILES_VERSION = 1
 DEPENDENCY_ARCHITECTURE_ID = "dependency.architecture"
@@ -132,6 +138,30 @@ _INVENTORY_MINIMAL_OMITS = (
     "type_relations",
 )
 
+_AGGREGATE_PACKAGES_PRESERVES = (
+    "package_declaration_population_counts", "package_file_and_class_population_counts",
+    "package_import_resolution_occurrence_counts", "package_internal_import_population_counts",
+    "package_quotient_exact_import_topology", "package_quotient_weight_populations",
+    "source_graph_identity",
+)
+_AGGREGATE_PACKAGES_OMITS = (
+    "call_relations", "callable_complexity_facts", "callsites",
+    "canonical_declaration_descriptors", "canonical_file_descriptors",
+    "canonical_import_edge_ids", "diagnostics", "import_occurrence_details",
+    "intra_package_import_topology", "node_and_edge_locations", "owner_structural_facts",
+    "type_references_and_relations",
+)
+_AGGREGATE_OVERVIEW_PRESERVES = (
+    "source_graph_identity", "graph_native_size_and_activity_totals",
+    "file_and_package_topology_counts", "resolution_occurrence_counts",
+    "three_homogeneous_topology_rankings",
+)
+_AGGREGATE_OVERVIEW_OMITS = (
+    "canonical_descriptors_and_locations", "individual_references_and_callsites",
+    "diagnostics", "exact_edge_lists", "metrics_formulas_risk_pagerank",
+    "object_metrics_averages_and_rates",
+)
+
 _DEPENDENCY_FILES_PRESERVES = (
     "canonical_root_descriptors",
     "exact_import_topology",
@@ -247,6 +277,12 @@ def select_graph_profile(profile_id: object, profile_version: object) -> str:
     elif profile_id == INVENTORY_MINIMAL_ID:
         expected_version = INVENTORY_MINIMAL_VERSION
         artifact_kind = "graph_summary"
+    elif profile_id == AGGREGATE_PACKAGES_ID:
+        expected_version = AGGREGATE_PACKAGES_VERSION
+        artifact_kind = "graph_summary"
+    elif profile_id == AGGREGATE_OVERVIEW_ID:
+        expected_version = AGGREGATE_OVERVIEW_VERSION
+        artifact_kind = "graph_summary"
     elif profile_id == STRUCTURE_DECLARATIONS_ID:
         expected_version = STRUCTURE_DECLARATIONS_VERSION
         artifact_kind = "graph_view"
@@ -328,22 +364,31 @@ def profile_metadata(profile_id: object, profile_version: object) -> dict[str, o
 
 
 def summary_profile_metadata(profile_id: object, profile_version: object) -> dict[str, object]:
-    """Return fresh completeness metadata for inventory.minimal v1 only."""
-    if profile_id != INVENTORY_MINIMAL_ID:
+    """Return fresh completeness metadata for an exact summary profile."""
+    if profile_id == INVENTORY_MINIMAL_ID:
+        expected = INVENTORY_MINIMAL_VERSION
+        preserves, omits = _INVENTORY_MINIMAL_PRESERVES, _INVENTORY_MINIMAL_OMITS
+    elif profile_id == AGGREGATE_PACKAGES_ID:
+        expected = AGGREGATE_PACKAGES_VERSION
+        preserves, omits = _AGGREGATE_PACKAGES_PRESERVES, _AGGREGATE_PACKAGES_OMITS
+    elif profile_id == AGGREGATE_OVERVIEW_ID:
+        expected = AGGREGATE_OVERVIEW_VERSION
+        preserves, omits = _AGGREGATE_OVERVIEW_PRESERVES, _AGGREGATE_OVERVIEW_OMITS
+    else:
         raise ValueError(f"Unsupported graph summary profile {profile_id!r}")
-    if type(profile_version) is not int or profile_version != INVENTORY_MINIMAL_VERSION:
+    if type(profile_version) is not int or profile_version != expected:
         raise ValueError(
             f"Unsupported version {profile_version!r} for graph summary profile {profile_id!r}"
         )
     return {
         "kind": "one_way_projection",
-        "preserves": list(_INVENTORY_MINIMAL_PRESERVES),
-        "omits": list(_INVENTORY_MINIMAL_OMITS),
+        "preserves": list(preserves),
+        "omits": list(omits),
     }
 
 
 def metrics_profile_metadata(profile_id: object, profile_version: object) -> dict[str, object]:
-    """Return a fresh completeness descriptor for an exact Metrics profile."""
+    """Return a fresh completeness descriptor for an exact Metrics View profile."""
     if profile_id not in _METRICS_PROFILES:
         raise ValueError(f"Unsupported metrics profile {profile_id!r}")
     expected, kind, preserves, omits = _METRICS_PROFILES[profile_id]
@@ -354,7 +399,26 @@ def metrics_profile_metadata(profile_id: object, profile_version: object) -> dic
     return {"kind": kind, "preserves": list(preserves), "omits": list(omits)}
 
 
+def select_metrics_profile(profile_id: object, profile_version: object) -> str:
+    """Validate an exact Metrics profile and return its artifact kind."""
+    if profile_id == METRICS_FULL_ID:
+        expected_version = METRICS_FULL_VERSION
+        artifact_kind = "metrics"
+    elif profile_id in _METRICS_PROFILES:
+        expected_version = _METRICS_PROFILES[profile_id][0]
+        artifact_kind = "metrics_view"
+    else:
+        raise ValueError(f"Unsupported metrics profile {profile_id!r}")
+    if type(profile_version) is not int or profile_version != expected_version:
+        raise ValueError(
+            f"Unsupported version {profile_version!r} for metrics profile {profile_id!r}"
+        )
+    return artifact_kind
+
+
 __all__ = [
+    "AGGREGATE_PACKAGES_ID", "AGGREGATE_PACKAGES_VERSION",
+    "AGGREGATE_OVERVIEW_ID", "AGGREGATE_OVERVIEW_VERSION",
     "CANONICAL_FULL_ID",
     "CANONICAL_FULL_VERSION",
     "CALLS_TOPOLOGY_ID", "CALLS_TOPOLOGY_VERSION",
@@ -374,8 +438,10 @@ __all__ = [
     "METRICS_OVERVIEW_ID", "METRICS_OVERVIEW_VERSION",
     "METRICS_QUALITY_ID", "METRICS_QUALITY_VERSION",
     "METRICS_OBJECTS_ID", "METRICS_OBJECTS_VERSION",
+    "METRICS_FULL_ID", "METRICS_FULL_VERSION",
     "metrics_profile_metadata",
     "profile_metadata",
     "summary_profile_metadata",
     "select_graph_profile",
+    "select_metrics_profile",
 ]

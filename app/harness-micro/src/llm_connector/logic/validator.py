@@ -1,12 +1,8 @@
-from llm_connector.interfaces.connector import Message, MessageAuthors
+from pathlib import Path
+
 from llm_connector.interfaces.prompts_loader import PromptsLoaderInterface
 from llm_connector.interfaces.validator import ValidatorInterface
-from tools_engine.models.tool_models import ToolName, LLMResponse, ExecuteToolData
-
-COMMAND_CONTEXT_FROM_NAME = {
-    ToolName.Get_Content: ["FILEPATH"],
-    ToolName.Get_Structure: ["FILEPATH", "STRUCTURE-TYPE", "STRUCTURE-PATH"]
-}  # Контекст сохраняем в str виде, тула сама приведет в нужный формат
+from response_models.models import ToolData, Prompt, Role, ToolResponse, ToolCall
 
 
 class Validator(ValidatorInterface):
@@ -14,12 +10,20 @@ class Validator(ValidatorInterface):
     def __init__(self, prompts_loader: PromptsLoaderInterface):
         self.prompts_loader = prompts_loader
 
-    def create_message(self, graph, metrix) -> Message:
-        """Создает и валидирует сообщение"""
+    def create_start_messages(self, graph, metrix) -> list[Prompt]:
+        """Создает системный промт и сообщение с графом и метриками"""
+        prompts: list[Prompt] = []
+
         instructions = ""
 
         instructions += self.prompts_loader.load_prompt()
-        instructions += self.prompts_loader.load_commands()
+        # instructions += self.prompts_loader.load_commands()
+
+        prompt = Prompt(
+            role=Role.system,
+            content=instructions
+        )
+        prompts.append(prompt)
 
         content = ""
 
@@ -31,57 +35,32 @@ class Validator(ValidatorInterface):
         content += metrix
         content += "\n===METRIX===\n"
 
-        message = Message(
-            author=MessageAuthors.user,
-            instructions=instructions,
+        prompt = Prompt(
+            role=Role.system,
             content=content
         )
+        prompts.append(prompt)
 
-        return message
+        return prompts
 
-    def _validate_command(self, command: str) -> ExecuteToolData:
-        """Валидирует команду от нейронки"""
-        split_command = command.split()
-        command_name = ToolName(split_command[0])
-        list_args = COMMAND_CONTEXT_FROM_NAME[command_name]
-        command_context = dict(zip(list_args, split_command[1:]))
+    def load_tools_models(self) -> list[ToolData]:
+        tools_files = {'GET-CONTENT': "get-content.json",
+                      'GET-STRUCTURE': "get-structure.json"}
 
-        return ExecuteToolData(
-            name=command_name,
-            context=command_context
-        )
+        tools = []
 
-    def validate_response(self, data: str) -> LLMResponse:
-        """Валидирует ответ нейронки"""
-        response_type, separator, message = data.partition("\n")
+        for tool_name, filename in tools_files.items():
+            path = Path(__file__).parent.parent.parent / "prompts" / filename
+            tool_json_data = path.read_text(encoding="utf-8")
+            tool_data = ToolData.model_validate_json(tool_json_data)
+            tools.append(tool_data)
 
-        if response_type == "tool":
-            raw_command = message
-            command = self._validate_command(raw_command)
-            return LLMResponse(
-                use_tool=True,
-                tool_name=command.name,
-                tool_data=command.context,
-                message=""
-            )
-        if response_type == "result":
-            return LLMResponse(
-                use_tool=False,
-                tool_name=None,
-                tool_data=None,
-                message=message
-            )
-        else:
-            raise  # Ошибка - непредвиденный тип сообщения
+        return tools
 
-    def create_tool_message(self, tool_name: ToolName, data: str) -> Message:
+    def create_tool_message(self, tool_call: ToolCall, data: str) -> ToolResponse:
         """Создает сообщения с информацией из тулы для нейронки"""
-        instructions = self.prompts_loader.load_tool(tool_name)
-
-        message = Message(
-            author=MessageAuthors.user,
-            instructions=instructions,
+        message = ToolResponse(
+            tool_call_id=tool_call.id,
             content=data
         )
-
         return message

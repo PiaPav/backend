@@ -20,8 +20,9 @@ from views.testdata import build_representative_graph_v2
 
 _FIXTURES = ("medium", "large")
 _PROFILES = (
-    "inventory.minimal", "structure.declarations", "dependency.architecture", "calls.topology",
-    "calls.detailed",
+    "inventory.minimal", "structure.declarations", "dependency.files",
+    "dependency.architecture", "calls.topology", "calls.detailed",
+    "types.topology", "objects.metrics_basis",
 )
 _MANIFEST = Path(__file__).with_name("testdata") / "graph_profiles_golden_v2.json"
 _COMPONENT_COUNTS = {"medium": 4, "large": 10}
@@ -78,6 +79,32 @@ def _artifact_record(artifact: Mapping[str, Any], source: Mapping[str, Any]) -> 
             "omitted": {"declaration_descriptors": sum(node["kind"] not in {"file", "module"} for node in source["nodes"]),
                         "edges": len(source["edges"]),
                         "occurrence_details": len(source["callsites"]) + len(source["import_references"]) + len(source["type_references"])}}
+    elif profile["id"] == "dependency.files":
+        payload = artifact["payload"]
+        resolution_counts = payload["import_resolution_counts"]
+        populations = {
+            "kept": {
+                "root_descriptors": len(payload["nodes"]),
+                "unique_aggregate_import_edges": len(payload["edges"]),
+                "exact_import_occurrences": sum(
+                    edge["exact_occurrence_count"] for edge in payload["edges"]
+                ),
+                "exact_resolution_occurrences": resolution_counts["exact"],
+                "external_resolution_occurrences": resolution_counts["external"],
+                "unresolved_resolution_occurrences": resolution_counts["unresolved"],
+            },
+            "omitted": {
+                "declaration_descriptors": sum(
+                    node["kind"] not in {"file", "module"} for node in source["nodes"]
+                ),
+                "occurrence_level_import_details": len(source["import_references"]),
+                "non_import_edges": sum(edge["kind"] != "imports" for edge in source["edges"]),
+                "callsites": len(source["callsites"]),
+                "type_references": len(source["type_references"]),
+                "diagnostics": len(source["diagnostics"]),
+                "owner_structural_facts": len(source["owner_structural_facts"]),
+            },
+        }
     elif profile["id"] == "dependency.architecture":
         populations = {
             "kept": {"nodes": len(artifact["payload"]["nodes"]),
@@ -160,6 +187,87 @@ def _artifact_record(artifact: Mapping[str, Any], source: Mapping[str, Any]) -> 
                 ),
             },
         }
+    elif profile["id"] == "types.topology":
+        payload = artifact["payload"]
+        selected_node_ids = {node["id"] for node in payload["nodes"]}
+        projected_edge_ids = {edge["id"] for edge in payload["edges"]}
+        node_kinds = Counter(node["kind"] for node in payload["nodes"])
+        edge_kinds = Counter(edge["kind"] for edge in payload["edges"])
+        statuses = Counter(ref["resolution"] for ref in payload["type_references"])
+        populations = {
+            "kept": {
+                "nodes": len(payload["nodes"]),
+                "roots": node_kinds["file"] + node_kinds["module"],
+                "classes": node_kinds["class"],
+                "fields": node_kinds["field"],
+                "edges": len(payload["edges"]),
+                "contains_edges": edge_kinds["contains"],
+                "inherits_edges": edge_kinds["inherits"],
+                "field_type_edges": edge_kinds["field_type"],
+                "type_references": len(payload["type_references"]),
+                "exact_references": statuses["exact"],
+                "ambiguous_references": statuses["ambiguous"],
+                "external_references": statuses["external"],
+                "unresolved_references": statuses["unresolved"],
+                "ambiguous_candidate_ids": sum(
+                    len(ref["candidate_ids"]) for ref in payload["type_references"]
+                    if ref["resolution"] == "ambiguous"
+                ),
+            },
+            "omitted": {
+                "non_selected_nodes": len({node["id"] for node in source["nodes"]} - selected_node_ids),
+                "non_projected_edges": len({edge["id"] for edge in source["edges"]} - projected_edge_ids),
+                "callsites": len(source["callsites"]),
+                "import_references": len(source["import_references"]),
+                "diagnostics": len(source["diagnostics"]),
+                "owner_structural_facts": len(source["owner_structural_facts"]),
+                "complexity_facts": sum("complexity_facts" in node for node in source["nodes"]),
+            },
+        }
+    elif profile["id"] == "objects.metrics_basis":
+        payload = artifact["payload"]
+        selected_node_ids = {node["id"] for node in payload["nodes"]}
+        projected_edge_ids = {edge["id"] for edge in payload["edges"]}
+        node_kinds = Counter(node["kind"] for node in payload["nodes"])
+        edge_kinds = Counter(edge["kind"] for edge in payload["edges"])
+        statuses = Counter(ref["resolution"] for ref in payload["type_references"])
+        populations = {
+            "kept": {
+                "nodes": len(payload["nodes"]),
+                "roots": node_kinds["file"] + node_kinds["module"],
+                "classes": node_kinds["class"],
+                "fields": node_kinds["field"],
+                "real_methods": sum(node["kind"] == "method" and not node.get("synthetic") for node in payload["nodes"]),
+                "synthetic_methods": sum(node["kind"] == "method" and node.get("synthetic") is True for node in payload["nodes"]),
+                "methods": node_kinds["method"],
+                "target_only_functions": node_kinds["function"],
+                "edges": len(payload["edges"]),
+                "contains_edges": edge_kinds["contains"],
+                "inherits_edges": edge_kinds["inherits"],
+                "field_type_edges": edge_kinds["field_type"],
+                "accesses_field_edges": edge_kinds["accesses_field"],
+                "calls_edges": edge_kinds["calls"],
+                "awaits_edges": edge_kinds["awaits"],
+                "calls_weight": sum(edge["weight"] for edge in payload["edges"] if edge["kind"] == "calls"),
+                "awaits_weight": sum(edge["weight"] for edge in payload["edges"] if edge["kind"] == "awaits"),
+                "retained_complexity_facts": sum("complexity_facts" in node for node in payload["nodes"]),
+                "type_references": len(payload["type_references"]),
+                "exact_references": statuses["exact"],
+                "ambiguous_references": statuses["ambiguous"],
+                "external_references": statuses["external"],
+                "unresolved_references": statuses["unresolved"],
+                "ambiguous_candidate_ids": sum(len(ref["candidate_ids"]) for ref in payload["type_references"] if ref["resolution"] == "ambiguous"),
+            },
+            "omitted": {
+                "non_selected_nodes": len({node["id"] for node in source["nodes"]} - selected_node_ids),
+                "non_projected_edges": len({edge["id"] for edge in source["edges"]} - projected_edge_ids),
+                "callsites": len(source["callsites"]),
+                "import_references": len(source["import_references"]),
+                "diagnostics": len(source["diagnostics"]),
+                "owner_structural_facts": len(source["owner_structural_facts"]),
+                "excluded_function_complexity_facts": sum(node["kind"] == "function" and "complexity_facts" in node for node in source["nodes"]),
+            },
+        }
     else:
         raise AssertionError(f"unhandled golden profile: {profile['id']!r}")
     return {
@@ -185,12 +293,16 @@ def build_golden_manifest() -> dict[str, Any]:
             "budgets": {"inventory.minimal": None,
                         "structure.declarations": {"kind": "product_target", "source_basis": 100,
                                                     "maximum_view_basis": 45},
+                        "dependency.files": {"kind": "product_target", "source_basis": 100,
+                                             "maximum_view_basis": 20},
                         "dependency.architecture": {"kind": "product_target", "source_basis": 100,
                                                     "maximum_view_basis": 30},
                          "calls.topology": {"kind": "product_target", "source_basis": 100,
                                             "maximum_view_basis": 35},
                          "calls.detailed": {"kind": "product_target", "source_basis": 100,
-                                            "maximum_view_basis": 60}},
+                                             "maximum_view_basis": 60},
+                         "types.topology": None,
+                         "objects.metrics_basis": None},
         })
     return {
         "manifest_schema_version": 1,
@@ -232,13 +344,19 @@ def test_manifest_identity_versions_hashes_provenance_and_populations():
         assert [(artifact["profile"]["id"], artifact["profile"]["version"])
                 for artifact in fixture["artifacts"]] == [
             ("inventory.minimal", 1), ("structure.declarations", 1),
-            ("dependency.architecture", 1), ("calls.topology", 1),
+            ("dependency.files", 1), ("dependency.architecture", 1),
+            ("calls.topology", 1),
             ("calls.detailed", 1),
+            ("types.topology", 1),
+            ("objects.metrics_basis", 1),
         ]
         assert fixture["budgets"] == {
             "inventory.minimal": None,
             "structure.declarations": {
                 "kind": "product_target", "source_basis": 100, "maximum_view_basis": 45,
+            },
+            "dependency.files": {
+                "kind": "product_target", "source_basis": 100, "maximum_view_basis": 20,
             },
             "dependency.architecture": {
                 "kind": "product_target", "source_basis": 100, "maximum_view_basis": 30,
@@ -249,6 +367,8 @@ def test_manifest_identity_versions_hashes_provenance_and_populations():
             "calls.detailed": {
                 "kind": "product_target", "source_basis": 100, "maximum_view_basis": 60,
             },
+            "types.topology": None,
+            "objects.metrics_basis": None,
         }
         source = fixture["source"]
         assert source["graph_schema_version"] == 1 and source["parser_semantics_version"] == 7
@@ -319,6 +439,56 @@ def test_v2_source_population_contract_is_exact(fixture_name, n):
     assert Counter((item["kind"], item["status"]) for item in graph["diagnostics"]) == {
         ("import_resolution", "warning"): n, ("call_resolution", "info"): n,
     }
+
+
+@pytest.mark.parametrize("fixture_name,n", tuple(_COMPONENT_COUNTS.items()))
+def test_dependency_files_current_v2_populations_are_exact(fixture_name, n):
+    source = build_representative_graph_v2(fixture_name)
+    artifact = materialize_graph_profile(
+        source, profile_id="dependency.files", profile_version=1
+    )
+    payload = artifact["payload"]
+
+    assert _artifact_record(artifact, source)["populations"] == {
+        "kept": {
+            "root_descriptors": n + 1,
+            "unique_aggregate_import_edges": n,
+            "exact_import_occurrences": n,
+            "exact_resolution_occurrences": n,
+            "external_resolution_occurrences": n,
+            "unresolved_resolution_occurrences": n,
+        },
+        "omitted": {
+            "declaration_descriptors": 6 * n,
+            "occurrence_level_import_details": 3 * n,
+            "non_import_edges": 9 * n,
+            "callsites": 5 * n,
+            "type_references": 4 * n,
+            "diagnostics": 2 * n,
+            "owner_structural_facts": 1 + 3 * n,
+        },
+    }
+    assert set(payload) == {"nodes", "edges", "import_resolution_counts"}
+    assert all(node["kind"] in {"file", "module"} for node in payload["nodes"])
+    assert all(set(node) == {"id", "kind", "qualified_name", "path"}
+               for node in payload["nodes"])
+    assert len(payload["edges"]) == n
+    assert sum(edge["exact_occurrence_count"] for edge in payload["edges"]) == n
+    assert payload["import_resolution_counts"] == {
+        "exact": n, "external": n, "unresolved": n,
+    }
+    exact_pairs = Counter(
+        (reference["importer_id"], reference["target_id"])
+        for reference in source["import_references"] if reference["resolution"] == "exact"
+    )
+    aggregate_pairs = Counter({
+        (edge["source_id"], edge["target_id"]): edge["exact_occurrence_count"]
+        for edge in payload["edges"]
+    })
+    assert aggregate_pairs == exact_pairs
+    assert len(aggregate_pairs) == n
+    assert sum(aggregate_pairs.values()) == n
+    assert len(payload["edges"]) < len(source["import_references"])
 
 
 @pytest.mark.parametrize("fixture_name,n", tuple(_COMPONENT_COUNTS.items()))
@@ -413,6 +583,141 @@ def test_calls_detailed_current_v2_populations_are_exact(fixture_name, n):
 
 
 @pytest.mark.parametrize("fixture_name,n", tuple(_COMPONENT_COUNTS.items()))
+def test_types_topology_current_v2_populations_and_closure_are_exact(fixture_name, n):
+    source = build_representative_graph_v2(fixture_name)
+    artifact = materialize_graph_profile(source, profile_id="types.topology", profile_version=1)
+    payload = artifact["payload"]
+    nodes = {node["id"]: node for node in payload["nodes"]}
+
+    assert _artifact_record(artifact, source)["populations"] == {
+        "kept": {
+            "nodes": 3 * n, "roots": n, "classes": n, "fields": n,
+            "edges": 3 * n, "contains_edges": 2 * n, "inherits_edges": 0,
+            "field_type_edges": n, "type_references": 4 * n,
+            "exact_references": n, "ambiguous_references": n,
+            "external_references": n, "unresolved_references": n,
+            "ambiguous_candidate_ids": 2 * n,
+        },
+        "omitted": {
+            "non_selected_nodes": 1 + 4 * n, "non_projected_edges": 7 * n,
+            "callsites": 5 * n, "import_references": 3 * n,
+            "diagnostics": 2 * n, "owner_structural_facts": 1 + 3 * n,
+            "complexity_facts": 2 * n,
+        },
+    }
+    assert set(payload) == {"nodes", "edges", "type_references"}
+    assert Counter(node["kind"] for node in nodes.values()) == {
+        "file": n, "class": n, "field": n,
+    }
+    assert Counter(edge["kind"] for edge in payload["edges"]) == {
+        "contains": 2 * n, "field_type": n,
+    }
+    assert all(set(node) == ({"id", "kind", "qualified_name", "path"}
+                              if node["kind"] == "file" else
+                              {"id", "kind", "qualified_name", "parent_id", "path"})
+               for node in nodes.values())
+    assert all(set(edge) == {"id", "kind", "source_id", "target_id"}
+               for edge in payload["edges"])
+    assert all(set(ref) == {"id", "owner_id", "role", "expression", "location",
+                            "resolution", "target_id", "candidate_ids"}
+               for ref in payload["type_references"])
+    assert all(node.get("parent_id") is None or node["parent_id"] in nodes for node in nodes.values())
+    assert all(edge["source_id"] in nodes and edge["target_id"] in nodes for edge in payload["edges"])
+    assert all(ref["owner_id"] in nodes for ref in payload["type_references"])
+    assert all(ref["target_id"] is None or ref["target_id"] in nodes for ref in payload["type_references"])
+    assert all(set(ref["candidate_ids"]) <= nodes.keys() for ref in payload["type_references"])
+    assert Counter(ref["resolution"] for ref in payload["type_references"]) == {
+        "exact": n, "ambiguous": n, "external": n, "unresolved": n,
+    }
+    exact_support = {(ref["owner_id"], ref["target_id"]) for ref in payload["type_references"]
+                     if ref["resolution"] == "exact"}
+    field_type_support = {(edge["source_id"], edge["target_id"])
+                          for edge in payload["edges"] if edge["kind"] == "field_type"}
+    assert exact_support == field_type_support
+    assert all((ref["owner_id"], ref["target_id"]) not in field_type_support
+               for ref in payload["type_references"] if ref["resolution"] != "exact")
+
+
+@pytest.mark.parametrize("fixture_name,n", tuple(_COMPONENT_COUNTS.items()))
+def test_objects_metrics_basis_current_v2_populations_and_closure_are_exact(fixture_name, n):
+    source = build_representative_graph_v2(fixture_name)
+    artifact = materialize_graph_profile(source, profile_id="objects.metrics_basis", profile_version=1)
+    payload = artifact["payload"]
+    nodes = {node["id"]: node for node in payload["nodes"]}
+
+    assert _artifact_record(artifact, source)["populations"] == {
+        "kept": {
+            "nodes": 5 * n, "roots": n, "classes": n, "fields": n,
+            "real_methods": n, "synthetic_methods": n, "methods": 2 * n,
+            "target_only_functions": 0, "edges": 7 * n,
+            "contains_edges": 4 * n, "inherits_edges": 0, "field_type_edges": n,
+            "accesses_field_edges": n, "calls_edges": n, "awaits_edges": 0,
+            "calls_weight": n, "awaits_weight": 0, "retained_complexity_facts": n,
+            "type_references": 4 * n, "exact_references": n,
+            "ambiguous_references": n, "external_references": n,
+            "unresolved_references": n, "ambiguous_candidate_ids": 2 * n,
+        },
+        "omitted": {
+            "non_selected_nodes": 1 + 2 * n, "non_projected_edges": 3 * n,
+            "callsites": 5 * n, "import_references": 3 * n,
+            "diagnostics": 2 * n, "owner_structural_facts": 1 + 3 * n,
+            "excluded_function_complexity_facts": n,
+        },
+    }
+    assert set(payload) == {"nodes", "edges", "type_references"}
+    assert Counter(node["kind"] for node in nodes.values()) == {
+        "file": n, "class": n, "field": n, "method": 2 * n,
+    }
+    assert Counter(edge["kind"] for edge in payload["edges"]) == {
+        "contains": 4 * n, "field_type": n, "accesses_field": n, "calls": n,
+    }
+    for node in nodes.values():
+        base = ({"id", "kind", "qualified_name", "path"} if node["kind"] == "file"
+                else {"id", "kind", "qualified_name", "parent_id", "path"})
+        if node.get("synthetic") is True:
+            base.add("synthetic")
+        elif node["kind"] == "method":
+            base.add("complexity_facts")
+        assert set(node) == base
+    assert all(set(edge) == ({"id", "kind", "source_id", "target_id", "weight"}
+                             if edge["kind"] in {"calls", "awaits"} else
+                             {"id", "kind", "source_id", "target_id"})
+               for edge in payload["edges"])
+    assert all(set(ref) == {"id", "owner_id", "role", "expression", "location",
+                            "resolution", "target_id", "candidate_ids"}
+               for ref in payload["type_references"])
+    assert all(node.get("parent_id") is None or node["parent_id"] in nodes for node in nodes.values())
+    assert all(edge["source_id"] in nodes and edge["target_id"] in nodes for edge in payload["edges"])
+    assert all(ref["owner_id"] in nodes for ref in payload["type_references"])
+    assert all(ref["target_id"] is None or ref["target_id"] in nodes for ref in payload["type_references"])
+    assert all(set(ref["candidate_ids"]) <= nodes.keys() for ref in payload["type_references"])
+    assert Counter(ref["resolution"] for ref in payload["type_references"]) == {
+        "exact": n, "ambiguous": n, "external": n, "unresolved": n,
+    }
+    real_methods = [node for node in nodes.values()
+                    if node["kind"] == "method" and not node.get("synthetic")]
+    synthetic_methods = [node for node in nodes.values() if node.get("synthetic") is True]
+    assert len(real_methods) == n and all("complexity_facts" in node for node in real_methods)
+    assert len(synthetic_methods) == n and all("complexity_facts" not in node for node in synthetic_methods)
+    assert not any(node["kind"] == "function" for node in nodes.values())
+    assert sum(edge["weight"] for edge in payload["edges"] if edge["kind"] == "calls") == n
+    exact_calls = Counter((item["caller_id"], item["target_id"])
+                          for item in source["callsites"] if item["resolution"] == "exact")
+    projected_calls = Counter({
+        (edge["source_id"], edge["target_id"]): edge["weight"]
+        for edge in payload["edges"] if edge["kind"] == "calls"
+    })
+    assert projected_calls == exact_calls
+    exact_support = {(ref["owner_id"], ref["target_id"]) for ref in payload["type_references"]
+                     if ref["resolution"] == "exact"}
+    field_type_support = {(edge["source_id"], edge["target_id"])
+                          for edge in payload["edges"] if edge["kind"] == "field_type"}
+    assert exact_support == field_type_support
+    assert all((ref["owner_id"], ref["target_id"]) not in field_type_support
+               for ref in payload["type_references"] if ref["resolution"] != "exact")
+
+
+@pytest.mark.parametrize("fixture_name,n", tuple(_COMPONENT_COUNTS.items()))
 def test_v2_component_attribution_and_exact_relations(fixture_name, n):
     graph = build_representative_graph_v2(fixture_name)
     nodes = {node["id"]: node for node in graph["nodes"]}
@@ -481,6 +786,23 @@ def test_structure_declarations_meets_fixture_scoped_product_target(fixture_name
 
 
 @pytest.mark.parametrize("fixture_name", _FIXTURES)
+def test_dependency_files_meets_fixture_scoped_product_target(fixture_name):
+    fixture = next(item for item in _load_manifest()["fixtures"] if item["name"] == fixture_name)
+    manifest_record = next(
+        item for item in fixture["artifacts"] if item["profile"]["id"] == "dependency.files"
+    )
+    assert _within_budget(
+        manifest_record["compact_bytes"], fixture["source"]["compact_bytes"], 20, 100
+    )
+
+    source = build_representative_graph_v2(fixture_name)
+    artifact = materialize_graph_profile(source, profile_id="dependency.files", profile_version=1)
+    assert _within_budget(
+        _measurement(artifact)["compact_bytes"], _measurement(source)["compact_bytes"], 20, 100
+    )
+
+
+@pytest.mark.parametrize("fixture_name", _FIXTURES)
 def test_dependency_architecture_meets_fixture_scoped_product_target(fixture_name):
     fixture = next(item for item in _load_manifest()["fixtures"] if item["name"] == fixture_name)
     architecture = next(item for item in fixture["artifacts"] if item["profile"]["id"] == "dependency.architecture")
@@ -517,11 +839,13 @@ def test_calls_detailed_meets_fixture_scoped_product_target(fixture_name):
     assert len(_compact_bytes(artifact)) * 100 <= len(_compact_bytes(source)) * 60
 
 
-def test_inventory_minimal_is_measurement_only_without_threshold():
+def test_measurement_only_profiles_have_no_threshold_and_valid_measurements():
     for fixture in _load_manifest()["fixtures"]:
-        assert fixture["budgets"]["inventory.minimal"] is None
-        inventory = next(item for item in fixture["artifacts"] if item["profile"]["id"] == "inventory.minimal")
-        _assert_measurement(inventory)
+        for profile_id in ("inventory.minimal", "types.topology", "objects.metrics_basis"):
+            assert fixture["budgets"][profile_id] is None
+            record = next(item for item in fixture["artifacts"]
+                          if item["profile"]["id"] == profile_id)
+            _assert_measurement(record)
 
 
 def test_sources_and_artifacts_validate_and_preserve_provenance():

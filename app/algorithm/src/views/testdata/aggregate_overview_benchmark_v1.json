@@ -1,0 +1,108 @@
+{
+  "composition": {
+    "collection_permutations_supported": true,
+    "declarations_per_package": 6,
+    "family": "representative_overview_v1",
+    "isolated_package": "last numbered package",
+    "measurement_tuning_forbidden": true,
+    "package_counts_including_root": {"large": 24, "medium": 12},
+    "roots_per_package": 2,
+    "special_labels": ["<root>", "пакет"],
+    "top_k_limit": 10
+  },
+  "contract": {
+    "artifact": ["graph_summary", 1, "aggregate.overview", 1],
+    "benchmark_scope": "compact full envelope including summary_fingerprint",
+    "completeness": {
+      "kind": "one_way_projection",
+      "omits": ["canonical_descriptors_and_locations", "individual_references_and_callsites", "diagnostics", "exact_edge_lists", "metrics_formulas_risk_pagerank", "object_metrics_averages_and_rates"],
+      "preserves": ["source_graph_identity", "graph_native_size_and_activity_totals", "file_and_package_topology_counts", "resolution_occurrence_counts", "three_homogeneous_topology_rankings"]
+    },
+    "fingerprint_scope": "compact full envelope without summary_fingerprint",
+    "graph_kind": "overview",
+    "grouping": {
+      "descriptor_version": 1,
+      "path_policy": {"package": "first POSIX path segment", "root_condition": "path contains no '/'", "root_package": "<root>", "separator": "/"},
+      "populations": {"edges": "unique exact non-self root pairs", "files": "all canonical file/module roots", "packages": "labels represented by roots"}
+    },
+    "package_id_hash_input": ["aggregate.overview", 1, "<full grouping descriptor>", "<label>"],
+    "policy_version": 1,
+    "source": ["canonical_graph_dto", 1, 7],
+    "top_k": {"empty_metadata": [0, 0, false], "limit": 10, "order": "score descending then authoritative ID ascending", "ties": "do not expand boundary"},
+    "wire": {
+      "identity_rows": {"file": ["canonical_root_id", "path"], "package": ["overview_package_id", "label"]},
+      "payload_keys": ["graph_kind", "wire_format", "policy_version", "totals", "statuses", "file_identities", "package_identities", "rankings"],
+      "ranking_item": ["identity_index", "score"],
+      "ranking_order": ["files_by_fan_in", "files_by_fan_out", "packages_by_efferent_coupling"],
+      "ranking_row": ["total_matching", "returned_count", "truncated", "items"],
+      "status_columns": ["imports_exact", "imports_external", "imports_unresolved", "types_exact", "types_ambiguous", "types_external", "types_unresolved", "callsites_exact", "callsites_ambiguous", "callsites_external", "callsites_dynamic", "callsites_unresolved"],
+      "totals_columns": ["directories", "files", "classes", "abstract_classes", "dataclasses", "functions", "methods", "synthetic_methods", "fields", "constants", "calls", "local_imports", "external_imports", "file_vertices", "file_edges", "file_cyclic_components", "package_vertices", "package_edges", "package_cyclic_components"]
+    },
+    "wire_format": 1
+  },
+  "fixtures": [
+    {
+      "name": "medium",
+      "source": {
+        "compact_bytes": 111278,
+        "full_compact_sha256": "d567340b772cb17f69faa9d1c31beeb0184be8b38482f9cb025e72d0a009da07",
+        "graph_fingerprint": "25055cfcee4741095e558c9ea68414618ae0d3e8e29640c7cc38ae304fa785aa",
+        "populations": {
+          "cross_package_pairs": 14,
+          "directories": 11,
+          "exact_non_self_file_pairs": 26,
+          "file_sccs": 2,
+          "package_sccs": 1,
+          "packages": 12,
+          "ranking_populations": [14, 14, 11],
+          "resolution_counts": [48, 11, 11, 12, 12, 12, 12, 12, 12, 12, 12, 12],
+          "roots": 24
+        }
+      },
+      "lower_bound": {
+        "compact_bytes": 3244,
+        "full_compact_sha256": "f2f822fb822c14be8547aa7feb88d46ed9160d8cec1ca20548ffa609d131dd70",
+        "passes_integer_gate": true
+      },
+      "runtime": {
+        "compact_bytes": 3244,
+        "full_compact_sha256": "acb9a3a2afc4c75756e61435e19c47338b550e53e9bf81aa36bde55ef78dc562",
+        "summary_fingerprint": "fd6cced37f5b72594ae86d700d920371f3b282e9927045c9cbfefa08b452a1d3",
+        "passes_integer_gate": true
+      }
+    },
+    {
+      "name": "large",
+      "source": {
+        "compact_bytes": 223591,
+        "full_compact_sha256": "f326e9e93de1b899d2f1b3c33998218aa2b052c227909860a542052986283389",
+        "graph_fingerprint": "30b920a9cef0a2879d19b2d22c725c988c7193a2af114f232737c2c403569be7",
+        "populations": {
+          "cross_package_pairs": 26,
+          "directories": 23,
+          "exact_non_self_file_pairs": 50,
+          "file_sccs": 2,
+          "package_sccs": 1,
+          "packages": 24,
+          "ranking_populations": [26, 26, 23],
+          "resolution_counts": [96, 23, 23, 24, 24, 24, 24, 24, 24, 24, 24, 24],
+          "roots": 48
+        }
+      },
+      "lower_bound": {
+        "compact_bytes": 3257,
+        "full_compact_sha256": "c0b9c3ca1d9428552adce3d77f52acd2f346061d95e231b3cc78c68e6fb69a35",
+        "passes_integer_gate": true
+      },
+      "runtime": {
+        "compact_bytes": 3257,
+        "full_compact_sha256": "beb5fe808387611fb08eb4fa2b859296fb5b809066d7ab3d90688a26513bd2c7",
+        "summary_fingerprint": "d0352694a1b82ab495b13988ad34eea7cca32669680ba248cb2dabddf09fa6a2",
+        "passes_integer_gate": true
+      }
+    }
+  ],
+  "manifest_schema_version": 1,
+  "status": "runtime_acceptance_measured",
+  "target": {"maximum_artifact_basis": 8, "source_basis": 100}
+}

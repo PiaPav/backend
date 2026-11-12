@@ -1,0 +1,37 @@
+{
+  "manifest_schema_version": 1,
+  "artifact_schema": {
+    "artifact_kind": "graph_summary",
+    "summary_schema_version": 1,
+    "profile_id": "aggregate.packages",
+    "profile_version": 2,
+    "wire_format": 2,
+    "grouping_version": 1
+  },
+  "target": {"source_basis": 100, "maximum_artifact_basis": 15},
+  "fixture_family": "representative_packages_v1",
+  "fixtures": [
+    {
+      "name": "medium",
+      "source": {"compact_bytes": 31100, "size_cap_bytes": 4665},
+      "artifact": {
+        "compact_bytes": 1322,
+        "compact_ratio_percent": 4.2508,
+        "full_compact_sha256": "daa0f83e3792d0f909500e75d65e002941470f4961c8a5ea65884ab54ec58c75",
+        "summary_fingerprint": "5a48dbdeb17e1b060008f897eb4ad9e085dfe42bcd0846898d7f7ec90d873a14",
+        "contract_lower_bound_bytes": 1320
+      }
+    },
+    {
+      "name": "large",
+      "source": {"compact_bytes": 71256, "size_cap_bytes": 10688},
+      "artifact": {
+        "compact_bytes": 1614,
+        "compact_ratio_percent": 2.2651,
+        "full_compact_sha256": "3b949bc328d567e58eeaaf26bd7f886a695d4e34846eb5d24dac182bbc668a13",
+        "summary_fingerprint": "92ba62b9b02cff487ccc57f3a090f8be3d0057ed25925db04c97d6b141a3f0b8",
+        "contract_lower_bound_bytes": 1612
+      }
+    }
+  ]
+}

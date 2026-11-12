@@ -1,2 +1,0 @@
-class Second:
-    pass

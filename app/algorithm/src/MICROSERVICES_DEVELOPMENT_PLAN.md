@@ -333,6 +333,11 @@ class IdempotencyStore(Protocol):
 
 Эти значения не содержат API конкретного брокера.
 
+`InputSignalSource` владеет settlement доставки: он применяет ровно одно
+возвращённое handler/runtime решение к broker delivery. Handler и runtime не
+вызывают broker ack/nack API и не повторяют delivery самостоятельно. Ошибка
+необязательной observability не изменяет решение.
+
 `DeliveryContext` содержит авторизованный `tenant_id`, полученный будущим
 transport adapter из доверенного контекста доставки. Handler обязан сверить его
 с `envelope.tenant_id`; значение из payload само по себе не считается
@@ -685,12 +690,25 @@ handler. В production code общей orchestration-функции не поя�
 3. Реализовать start/stop/graceful drain.
 4. Проверить независимый запуск каждого runtime.
 
+Текущий transport-neutral baseline этого этапа реализован для обоих сервисов:
+single-use lifecycle, graceful drain, dependency-injected local builders, manual
+source, recording publisher и privacy-safe runtime observations. Это
+prerequisite, а не реализация конкретного production broker adapter.
+
 ### Этап 7. Интеграция
 
 1. Прогнать каждый shell с реальным ядром.
 2. Проверить contract compatibility.
 3. Проверить локальную choreography.
 4. Проверить повторную доставку на обеих стадиях.
+
+Этап выполнен для local-host baseline. Интеграционные сценарии проходят через
+реальные публичные Parser/Metrics API, filesystem artifact stores, раздельные
+SQLite idempotency stores и transport-neutral runtime. Choreography передаёт
+`graph.ready.v1` через JSON wire boundary, а restart-сценарии подтверждают replay
+сохранённого события после publish failure без повторного вызова ядра. Это не
+определяет production broker adapter, remote artifact storage или protocol
+materialization сокращённых profiles.
 
 ## 16. Критерии готовности
 

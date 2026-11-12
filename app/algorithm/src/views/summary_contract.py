@@ -81,6 +81,20 @@ def validate_graph_summary_v1(summary: Mapping[str, Any], *, verify_fingerprint:
     if completeness != expected or any(not isinstance(completeness[k], list) for k in ("preserves", "omits")):
         _error("completeness does not match profile registry metadata")
 
+    if profile["id"] in {"aggregate.packages", "aggregate.overview"}:
+        if profile["id"] == "aggregate.packages":
+            from .aggregate_packages_contract import decode_aggregate_packages_v2
+            decode_aggregate_packages_v2(root["payload"])
+        else:
+            from .aggregate_overview_contract import decode_aggregate_overview_v1
+            decode_aggregate_overview_v1(root["payload"])
+        fingerprint = root["summary_fingerprint"]
+        if not isinstance(fingerprint, str) or not _HEX_64.fullmatch(fingerprint):
+            _error("summary_fingerprint must be lowercase SHA-256 hex")
+        if verify_fingerprint and fingerprint != graph_summary_fingerprint(root):
+            _error("summary_fingerprint does not match canonical content")
+        return
+
     payload = _object(root["payload"], {"roots", "node_counts", "synthetic_method_count", "diagnostics", "reference_resolution_counts"}, "payload")
     roots = payload["roots"]
     if not isinstance(roots, list):
@@ -135,6 +149,9 @@ def validate_graph_summary_v1(summary: Mapping[str, Any], *, verify_fingerprint:
 
 def serialize_graph_summary(summary: Mapping[str, Any]) -> bytes:
     validate_graph_summary_v1(summary)
+    profile = summary.get("profile")
+    if isinstance(profile, Mapping) and profile.get("id") in {"aggregate.packages", "aggregate.overview"}:
+        return json.dumps(summary, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
     return (json.dumps(summary, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
 
 
