@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=77,<81"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parser-service"
+version = "0.1.0"
+description = "Canonical parser core and local service shell"
+requires-python = ">=3.13"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[tool.setuptools]
+packages = ["parser", "parser.logic", "parser_service", "parser_service.adapters", "parser_service.application", "parser_service.contracts", "graph_dto"]
+package-dir = {parser = "src/parser", parser_service = "src/parser_service", graph_dto = "../algorithm/src/graph_dto"}
+include-package-data = false

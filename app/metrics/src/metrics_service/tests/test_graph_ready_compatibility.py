@@ -46,9 +46,10 @@ def test_metrics_contracts_do_not_import_parser_service():
 
 
 def test_production_service_packages_are_independent_of_each_other_and_legacy_layers():
-    src = Path(__file__).parents[2]
+    metrics_src = Path(__file__).parents[2]
+    parser_src = metrics_src.parents[1] / "parser" / "src"
     violations = []
-    for service in ("parser_service", "metrics_service"):
+    for src, service in ((parser_src, "parser_service"), (metrics_src, "metrics_service")):
         for source_path in (src / service).rglob("*.py"):
             if "tests" in source_path.parts:
                 continue

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=77,<81"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metrics-service"
+version = "0.1.0"
+description = "Graph artifact metrics worker"
+requires-python = ">=3.13"
+dependencies = [
+    "aio-pika>=9.5.7,<10",
+    "aioboto3>=15.5.0,<16",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[tool.setuptools]
+packages = ["metrics", "metrics.logic", "metrics_service", "graph_dto"]
+package-dir = {metrics = "src/metrics", metrics_service = "src/metrics_service", graph_dto = "../algorithm/src/graph_dto"}
+include-package-data = false

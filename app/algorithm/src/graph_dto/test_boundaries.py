@@ -3,6 +3,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[2]
+METRICS_ROOT = REPO_ROOT / "app/metrics/src"
 
 
 def _import_call_aliases(tree: ast.AST) -> tuple[set[str], set[str]]:
@@ -119,6 +121,9 @@ def test_import_guard_rejects_qualified_cross_package_import_forms(
         "static.py": "import app.algorithm.src.metrics\n",
         "dynamic.py": "import importlib\nimportlib.import_module('app.algorithm.src.metrics')\n",
         "from_alias.py": "from app.algorithm.src import metrics as measured\n",
+        "new_static.py": "import app.metrics.src.metrics\n",
+        "new_dynamic.py": "import importlib\nimportlib.import_module('app.metrics.src.metrics')\n",
+        "new_from_alias.py": "from app.metrics.src import metrics as measured\n",
     }
     paths = []
     for name, text in sources.items():
@@ -130,7 +135,8 @@ def test_import_guard_rejects_qualified_cross_package_import_forms(
         try:
             _assert_no_imports([path], {"metrics"})
         except AssertionError as error:
-            assert "app.algorithm.src.metrics" in str(error)
+            assert ("app.algorithm.src.metrics" in str(error)
+                    or "app.metrics.src.metrics" in str(error))
         else:
             raise AssertionError(f"qualified import was not rejected: {path.name}")
 
@@ -156,15 +162,14 @@ def _assert_no_imports(paths: list[Path], forbidden: set[str]) -> None:
     for path in paths:
         for imported in _imports(path):
             root = imported.split(".", 1)[0]
-            qualified_root = "app.algorithm.src."
-            qualified = (
-                imported[len(qualified_root):].split(".", 1)[0]
-                if imported.startswith(qualified_root)
-                else None
-            )
-            if root in forbidden or qualified in forbidden:
+            qualified = {
+                imported[len(prefix):].split(".", 1)[0]
+                for prefix in ("app.algorithm.src.", "app.metrics.src.")
+                if imported.startswith(prefix)
+            }
+            if root in forbidden or qualified & forbidden:
                 try:
-                    display = path.relative_to(ROOT)
+                    display = path.relative_to(REPO_ROOT)
                 except ValueError:
                     display = path
                 violations.append(f"{display} -> {imported}")
@@ -172,10 +177,21 @@ def _assert_no_imports(paths: list[Path], forbidden: set[str]) -> None:
 
 
 def _python_files(package: str, *, tests: bool) -> list[Path]:
+    package_root = (METRICS_ROOT if package == "metrics" else ROOT) / package
+    assert package_root.is_dir(), f"missing package under test: {package_root}"
     return [
-        path for path in (ROOT / package).rglob("*.py")
+        path for path in package_root.rglob("*.py")
         if path.name.startswith("test_") is tests
     ]
+
+
+def test_metrics_boundary_checks_inspect_relocated_package() -> None:
+    production = _python_files("metrics", tests=False)
+    tests = _python_files("metrics", tests=True)
+    assert METRICS_ROOT / "metrics/core.py" in production
+    assert METRICS_ROOT / "metrics/test_core.py" in tests
+    assert all(path.is_relative_to(METRICS_ROOT) for path in production + tests)
+    assert not (ROOT / "metrics").exists()
 
 
 def test_production_package_import_boundaries() -> None:
@@ -194,7 +210,7 @@ def test_test_package_import_boundaries() -> None:
 def _function(path: Path, name: str) -> ast.FunctionDef:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     matches = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == name]
-    assert len(matches) == 1, f"expected one {name} in {path.relative_to(ROOT)}"
+    assert len(matches) == 1, f"expected one {name} in {path.relative_to(REPO_ROOT)}"
     return matches[0]
 
 
@@ -287,11 +303,11 @@ def test_canonical_consumers_cannot_read_projection_root_keys_from_raw_graph() -
         "parser_semantics_version",
     }
     consumers = (
-        (ROOT / "metrics/logic/complexity.py", "canonical_callable_metrics"),
-        (ROOT / "metrics/logic/calculator.py", "_canonical_size"),
-        (ROOT / "metrics/logic/calculator.py", "calculate_graph_metrics"),
-        (ROOT / "metrics/logic/object_metrics.py", "_calculate_canonical_object_metrics"),
-        (ROOT / "metrics/logic/call_graph.py", "_calculate_canonical_call_graph_metrics"),
+        (METRICS_ROOT / "metrics/logic/complexity.py", "canonical_callable_metrics"),
+        (METRICS_ROOT / "metrics/logic/calculator.py", "_canonical_size"),
+        (METRICS_ROOT / "metrics/logic/calculator.py", "calculate_graph_metrics"),
+        (METRICS_ROOT / "metrics/logic/object_metrics.py", "_calculate_canonical_object_metrics"),
+        (METRICS_ROOT / "metrics/logic/call_graph.py", "_calculate_canonical_call_graph_metrics"),
     )
     violations = []
     for path, name in consumers:
@@ -299,7 +315,7 @@ def test_canonical_consumers_cannot_read_projection_root_keys_from_raw_graph() -
         keys = _literal_root_mapping_keys(function, {"graph"}) & forbidden
         if keys:
             violations.append(
-                f"{path.relative_to(ROOT)}:{name} -> {', '.join(sorted(keys))}"
+                f"{path.relative_to(REPO_ROOT)}:{name} -> {', '.join(sorted(keys))}"
             )
     assert not violations, "canonical consumers read raw graph roots:\n" + "\n".join(violations)
 
@@ -307,11 +323,11 @@ def test_canonical_consumers_cannot_read_projection_root_keys_from_raw_graph() -
 def test_canonical_call_graph_and_complexity_calculators_are_projection_only() -> None:
     functions = (
         _function(
-            ROOT / "metrics/logic/complexity.py",
+            METRICS_ROOT / "metrics/logic/complexity.py",
             "canonical_callable_metrics",
         ),
         _function(
-            ROOT / "metrics/logic/call_graph.py",
+            METRICS_ROOT / "metrics/logic/call_graph.py",
             "_calculate_canonical_call_graph_metrics",
         ),
     )
@@ -339,7 +355,7 @@ def test_internal_metrics_calculators_are_projection_only() -> None:
         "owner_structural_facts", "parser_semantics_version",
     }
     for filename, name in calculators:
-        function = _function(ROOT / "metrics/logic" / filename, name)
+        function = _function(METRICS_ROOT / "metrics/logic" / filename, name)
         positional = [*function.args.posonlyargs, *function.args.args]
         assert positional and positional[0].arg == "projection"
         assert "graph" not in {argument.arg for argument in positional}
@@ -348,8 +364,8 @@ def test_internal_metrics_calculators_are_projection_only() -> None:
 
 
 def test_aggregate_and_public_gateway_signatures_are_canonical_only() -> None:
-    aggregate = _function(ROOT / "metrics/logic/calculator.py", "calculate_graph_metrics")
-    internal = _function(ROOT / "metrics/logic/calculator.py", "_calculate_graph_metrics")
+    aggregate = _function(METRICS_ROOT / "metrics/logic/calculator.py", "calculate_graph_metrics")
+    internal = _function(METRICS_ROOT / "metrics/logic/calculator.py", "_calculate_graph_metrics")
     assert [argument.arg for argument in aggregate.args.args] == ["graph"]
     assert not aggregate.args.kwonlyargs
     assert [argument.arg for argument in internal.args.args] == ["projection"]
@@ -363,7 +379,7 @@ def test_aggregate_and_public_gateway_signatures_are_canonical_only() -> None:
         ("quality.py", "calculate_quality_metrics"),
     )
     for filename, name in gateways:
-        function = _function(ROOT / "metrics/logic" / filename, name)
+        function = _function(METRICS_ROOT / "metrics/logic" / filename, name)
         assert [argument.arg for argument in function.args.args] == ["graph"]
         assert [argument.arg for argument in function.args.kwonlyargs] == ["projection"]
         assert not function.args.vararg
@@ -372,7 +388,7 @@ def test_aggregate_and_public_gateway_signatures_are_canonical_only() -> None:
 
 def test_canonical_object_metrics_cannot_read_raw_edges() -> None:
     function = _function(
-        ROOT / "metrics/logic/object_metrics.py",
+        METRICS_ROOT / "metrics/logic/object_metrics.py",
         "_calculate_canonical_object_metrics",
     )
     assert "edges" not in _literal_mapping_keys(function)
@@ -380,7 +396,7 @@ def test_canonical_object_metrics_cannot_read_raw_edges() -> None:
 
 def test_canonical_object_metrics_calculator_is_projection_only() -> None:
     function = _function(
-        ROOT / "metrics/logic/object_metrics.py",
+        METRICS_ROOT / "metrics/logic/object_metrics.py",
         "_calculate_canonical_object_metrics",
     )
     positional = [*function.args.posonlyargs, *function.args.args]
@@ -397,7 +413,7 @@ def test_canonical_object_metrics_calculator_is_projection_only() -> None:
 
 
 def test_architecture_metrics_is_projection_only_and_avoids_raw_helpers() -> None:
-    path = ROOT / "metrics/logic/architecture.py"
+    path = METRICS_ROOT / "metrics/logic/architecture.py"
     function = _function(path, "calculate_architecture_metrics")
     assert [argument.arg for argument in function.args.args] == ["projection"]
     assert not function.args.kwonlyargs
@@ -410,8 +426,8 @@ def test_architecture_metrics_is_projection_only_and_avoids_raw_helpers() -> Non
 
 
 def test_production_metrics_contains_no_legacy_resolution_markers() -> None:
-    call_graph = ROOT / "metrics/logic/call_graph.py"
-    object_metrics = ROOT / "metrics/logic/object_metrics.py"
+    call_graph = METRICS_ROOT / "metrics/logic/call_graph.py"
+    object_metrics = METRICS_ROOT / "metrics/logic/object_metrics.py"
     markers = {
         "legacy_files", "effective_module_ids", "iter_legacy_calls",
         "legacy_file_id", "semantic_target", "suffix_index", "local_symbols",
@@ -419,7 +435,7 @@ def test_production_metrics_contains_no_legacy_resolution_markers() -> None:
         "canonical_objects", "canonical_calls", "legacy_resolution",
     }
     violations = []
-    for path in (ROOT / "metrics").rglob("*.py"):
+    for path in (METRICS_ROOT / "metrics").rglob("*.py"):
         if path.name.startswith("test_"):
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -433,7 +449,7 @@ def test_production_metrics_contains_no_legacy_resolution_markers() -> None:
         found = identifiers & markers
         if found:
             violations.append(
-                f"{path.relative_to(ROOT)} -> {', '.join(sorted(found))}"
+                f"{path.relative_to(REPO_ROOT)} -> {', '.join(sorted(found))}"
             )
     assert not violations, "legacy resolution escaped compatibility functions: " + ", ".join(violations)
 
@@ -455,12 +471,12 @@ def test_production_metrics_contains_no_legacy_resolution_markers() -> None:
 
 def test_production_metrics_never_reads_body_or_imports_identity_module() -> None:
     violations = []
-    for path in (ROOT / "metrics").rglob("*.py"):
+    for path in (METRICS_ROOT / "metrics").rglob("*.py"):
         if path.name.startswith("test_"):
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         if "body" in _literal_mapping_keys(tree):
-            violations.append(f"{path.relative_to(ROOT)} reads body")
+            violations.append(f"{path.relative_to(REPO_ROOT)} reads body")
         imports = _imports(path)
         if any(
             imported == "metrics.logic.identity"
@@ -468,5 +484,5 @@ def test_production_metrics_never_reads_body_or_imports_identity_module() -> Non
             or imported == "identity"
             for imported in imports
         ):
-            violations.append(f"{path.relative_to(ROOT)} imports identity")
+            violations.append(f"{path.relative_to(REPO_ROOT)} imports identity")
     assert not violations, "forbidden Metrics dependencies:\n" + "\n".join(violations)
