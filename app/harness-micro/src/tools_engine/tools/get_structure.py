@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 
 from rules.rules_config import RULES_CONFIG
-from tools_engine.interface.tool import AbstractTool
+from tools_engine.interface.engine import InvalidToolArguments
+from tools_engine.interface.tool import AbstractTool, ExceedingExtractionLimit
 from tools_engine.models.source_index_model import SourceIndex, SourceSymbol, SourceSpan
 from response_models.models import StructureType, ToolName
 
@@ -59,11 +60,11 @@ class GetStructure(AbstractTool):
         raise  # Неизвестный тип структуры ?
 
     @staticmethod
-    def check_rules_with_raise(bites_size: int):
+    def check_rules_with_raise(bytes_size: int):
         """Проверка правил"""
-        print(bites_size, RULES_CONFIG.max_extraction_structure_size)
-        if bites_size > RULES_CONFIG.max_extraction_structure_size:
-            raise  # Ошибка большого размера файла
+        # print(bites_size, RULES_CONFIG.max_extraction_structure_size)
+        if bytes_size > RULES_CONFIG.max_extraction_structure_size:
+            raise ExceedingExtractionLimit(f"Размер структуры превышает максимальный допустимый: {bytes_size} > {RULES_CONFIG.max_extraction_structure_size}")
         # if Path(source_file.relative_path).suffix != ".py":
         #     raise  # Ошибка стороннего расширения
 
@@ -97,6 +98,13 @@ class GetStructure(AbstractTool):
         filepath: Path = Path(kwargs.get("FILEPATH"))
         structure_type: StructureType = StructureType(kwargs.get("STRUCTURE-TYPE"))
         structure_path: str = str(kwargs.get("STRUCTURE-PATH"))
+
+        if filepath is None:
+            raise InvalidToolArguments(message=f"Отсутствует обязательный аргумент 'FILEPATH'")
+        if structure_type is None:
+            raise InvalidToolArguments(message=f"Отсутствует обязательный аргумент 'STRUCTURE-TYPE'")
+        if structure_path is None:
+            raise InvalidToolArguments(message=f"Отсутствует обязательный аргумент 'STRUCTURE-PATH'")
 
         index = self._load_source_index(source_index_path)
 

@@ -3,7 +3,8 @@ from pathlib import Path
 
 from response_models.models import ToolName
 from rules.rules_config import RULES_CONFIG
-from tools_engine.interface.tool import AbstractTool
+from tools_engine.interface.engine import InvalidToolArguments
+from tools_engine.interface.tool import AbstractTool, ExceedingExtractionLimit, UnexpectedFileType
 from tools_engine.models.source_index_model import SourceIndex, SourceFile
 
 
@@ -27,9 +28,9 @@ class GetContent(AbstractTool):
     def check_rules_with_raise(source_file: SourceFile):
         """Проверка правил"""
         if source_file.size_bytes > RULES_CONFIG.max_extraction_file_size:
-            raise  # Ошибка большого размера файла
+            raise  ExceedingExtractionLimit(f"Размер файла превышает максимальный допустимый: {source_file.size_bytes} > {RULES_CONFIG.max_extraction_file_size}")
         if Path(source_file.relative_path).suffix != ".py":
-            raise  # Ошибка стороннего расширения
+            raise  UnexpectedFileType(f"Неожиданный тип файла. Ожидался '.py', получен {Path(source_file.relative_path).suffix}")
 
     def get_raw_filedata(self, filepath: Path, index: SourceIndex) -> str:
         """Получение сырого текста файла"""
@@ -46,6 +47,10 @@ class GetContent(AbstractTool):
     def execute(self, source_index_path: Path, **kwargs):
         """Запуск тулы"""
         filepath: Path = Path(kwargs.get("FILEPATH"))
+
+        if filepath is None:
+            raise InvalidToolArguments(message=f"Отсутствует обязательный аргумент 'FILEPATH'")
+
         index = self._load_source_index(source_index_path)
 
         if not self.check_valid_filepath_with_bool(filepath, index):

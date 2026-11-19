@@ -22,4 +22,5 @@ class TaskInfo:
     unique_id: int
     current_iteration: int
     expire_time: float
+    count_tool_calls: int
     status: TaskStatus

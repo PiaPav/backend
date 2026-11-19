@@ -1,8 +1,10 @@
+import json
 from pathlib import Path
+from typing import Literal
 
 from llm_connector.interfaces.prompts_loader import PromptsLoaderInterface
 from llm_connector.interfaces.validator import ValidatorInterface
-from response_models.models import ToolData, Prompt, Role, ToolResponse, ToolCall
+from response_models.models import ToolData, Prompt, Role, ToolResponse, ToolCall, ToolExecuteData
 
 
 class Validator(ValidatorInterface):
@@ -57,10 +59,26 @@ class Validator(ValidatorInterface):
 
         return tools
 
-    def create_tool_message(self, tool_call: ToolCall, data: str) -> ToolResponse:
+    def create_tool_message(self, tool_call: ToolCall, status: Literal["success", "error", "deny"], data: str = None, msg: str = None, retryable: bool = None) -> ToolResponse:
         """Создает сообщения с информацией из тулы для нейронки"""
         message = ToolResponse(
             tool_call_id=tool_call.id,
-            content=data
+            content=json.dumps(
+                ToolExecuteData(
+                    status=status,
+                    msg=msg,
+                   result=data,
+                   retryable=retryable
+                ).model_dump()
+            )
         )
+        return message
+
+    def create_message(self, msg: str) -> Prompt:
+        """Создает сообщение с текстом"""
+        message = Prompt(
+            role=Role.system,
+            content=msg
+        )
+
         return message

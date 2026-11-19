@@ -1,16 +1,13 @@
 from abc import ABC, abstractmethod
 
+from core_server.interfaces.orchestrator import OrchestratorInterface
 from core_server.models.task_models import HarnessInputData
-from llm_connector.interfaces.connector import LLMConnectorInterface
-from llm_connector.interfaces.validator import ValidatorInterface
-from tools_engine.interface.engine import EngineInterface
 
 
 class CoreInterface(ABC):
 
     @abstractmethod
-    def __init__(self, llm_connector: LLMConnectorInterface, tools_engine: EngineInterface,
-                 validator: ValidatorInterface):
+    def __init__(self, orchestrator: OrchestratorInterface):
         pass
 
     @abstractmethod
@@ -19,6 +16,6 @@ class CoreInterface(ABC):
         pass
 
     @abstractmethod
-    def run_task(self, data: HarnessInputData):
+    async def run_task(self, data: HarnessInputData):
         """Передать задачу ллм"""
         pass

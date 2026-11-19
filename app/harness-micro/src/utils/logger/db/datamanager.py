@@ -1,0 +1,75 @@
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Optional
+
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    async_sessionmaker,
+    AsyncSession,
+)
+
+from .base import Base
+from .config import CONFIG
+
+DB_URL = f"postgresql+asyncpg://{CONFIG.db.user}:{CONFIG.db.password}@{CONFIG.db.host}:{CONFIG.db.port}/{CONFIG.db.name}"
+# print(DB_URL)
+
+
+class DatabaseManager:
+    def __init__(self, url: str, echo: bool = False):
+        self.engine = create_async_engine(url,
+                                          echo=echo,
+                                          future=True,
+                                          pool_size=20,
+                                          max_overflow=10)
+        self.session_factory = async_sessionmaker(
+            self.engine,
+            expire_on_commit=False,
+            class_=AsyncSession,
+            autoflush=False
+        )
+
+    async def init_models(self, drop: bool = False, model_name: str = None):
+        async with self.engine.begin() as conn:
+            if drop:
+                if model_name:
+                    target_table = Base.metadata.tables.get(model_name)
+                    if target_table is not None:
+                        await conn.run_sync(target_table.drop)
+                    else:
+                        raise ValueError(f"Model '{model_name}' not found in metadata")
+                else:
+                    await conn.run_sync(Base.metadata.drop_all)
+
+            if model_name:
+                target_table = Base.metadata.tables.get(model_name)
+                if target_table is not None:
+                    await conn.run_sync(target_table.create)
+                else:
+                    raise ValueError(f"Model '{model_name}' not found in metadata")
+            else:
+                await conn.run_sync(Base.metadata.create_all)
+
+    @asynccontextmanager
+    async def session(self, exist_session: Optional[AsyncSession] = None) -> AsyncGenerator[AsyncSession, None]:
+        if exist_session is not None:
+            yield exist_session
+        else:
+            async with self.session_factory() as session:
+                try:
+                    yield session
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                    raise
+                finally:
+                    await session.close()
+
+    async def close(self):
+        await self.engine.dispose()
+
+
+DataManager = DatabaseManager(DB_URL, echo=CONFIG.db.echo)
+
+
+async def init_db():
+    await DataManager.init_models()

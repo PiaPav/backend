@@ -29,8 +29,7 @@ class LLMSession(AbstractLLMSession):
             messages=self.messages,
             tools=self.tools
         )
-
-        response = await self.client.chat.completions.create(**request.model_dump())
+        response = await self.client.chat.completions.create(**request.model_dump(exclude_none=True))
 
         answer = ModelResponse.model_validate(
             response.model_dump()
@@ -50,8 +49,46 @@ class LLMSession(AbstractLLMSession):
             messages=self.messages,
             tools=self.tools
         )
+        response = await self.client.chat.completions.create(**request.model_dump(exclude_none=True))
 
-        response = await self.client.chat.completions.create(**request.model_dump())
+        answer = ModelResponse.model_validate(
+            response.model_dump()
+        )
+
+        self.messages.append(answer.choices[0].message)
+
+        return answer
+
+    async def final_send(self, messages: list[Prompt | ToolResponse]) -> ModelResponse:
+        """Отправить финальны запрос, гарантирующий json-ответ"""
+        for message in messages:
+            self.messages.append(message)
+
+        request = Request(
+            model=CONFIG.llm.model,
+            messages=self.messages,
+            tools=[],
+            tool_choice="none",
+            response_format={"type": "json_object"}
+        )
+
+        response = await self.client.chat.completions.create(**request.model_dump(exclude_none=True))
+
+        answer = ModelResponse.model_validate(
+            response.model_dump()
+        )
+
+        self.messages.append(answer.choices[0].message)
+
+        return answer
+
+    async def retry_send(self) -> ModelResponse:
+        request = Request(
+            model=CONFIG.llm.model,
+            messages=self.messages,
+            tools=self.tools
+        )
+        response = await self.client.chat.completions.create(**request.model_dump(exclude_none=True))
 
         answer = ModelResponse.model_validate(
             response.model_dump()

@@ -19,6 +19,15 @@ class AbstractLLMSession(ABC):
         """Отправить запрос"""
         pass
 
+    @abstractmethod
+    async def retry_send(self) -> ModelResponse:
+        """Повторить отправку"""
+        pass
+
+    @abstractmethod
+    async def final_send(self, messages: list[Prompt | ToolResponse]) -> ModelResponse:
+        pass
+
 
 class LLMConnectorInterface(ABC):
 

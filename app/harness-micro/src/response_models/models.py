@@ -1,7 +1,7 @@
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class StructureType(StrEnum):
@@ -41,11 +41,19 @@ class ToolCall(BaseModel):
     type: Literal["function"] = "function"
 
 
+# ---------- Tool data ----------
+
+class ToolExecuteData(BaseModel):
+    status: Literal["success", "error", "deny"]
+    msg: str | None = None
+    result: str | None = None
+    retryable: bool | None = None
+
 # ---------- Messages ----------
 
 class Prompt(BaseModel):
     role: Role
-    content: str | None
+    content: str | None | None
 
 
 class ToolResponse(BaseModel):
@@ -148,3 +156,32 @@ class Request(BaseModel):
     reasoning_effort: Literal[
                           "none", "low", "high", "max"
                       ] | None = None
+
+    response_format: dict[str, str] | None = Field(default=None)
+
+
+# ---------- Final Answer ----------
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+class Issue(StrictModel):
+    title: str
+    severity: Literal[
+        "critical", "high", "medium", "low"
+    ]
+    description: str
+    location: str | None
+    evidence: str
+    recommendation: str
+
+class Strength(StrictModel):
+    title: str
+    description: str
+    location: str | None
+    evidence: str
+    recommendation: str
+
+class LLMAnalysis(StrictModel):
+    issues: list[Issue] = Field(max_length=5)
+    strengths: list[Strength] = Field(max_length=3)

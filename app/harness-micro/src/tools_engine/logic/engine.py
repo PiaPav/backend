@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from response_models.models import ToolName
-from tools_engine.interface.engine import EngineInterface
+from tools_engine.interface.engine import EngineInterface, InvalidToolArguments
 from tools_engine.interface.tool import AbstractTool
 
 
@@ -19,15 +19,22 @@ class ToolsEngine(EngineInterface):
         for tool in tools:
             self.registered_tools[tool.name] = tool()
 
-    def entry_tool(self, source_index_path: Path, name: str, arguments: str) -> str:
-        """Исполняет любую тулу"""
+    async def entry_tool(self, source_index_path: Path, name: str, arguments: str) -> str:
+        """Применить тулу
+
+        :raises InvalidToolArguments: Если переданы неверные аргументы.
+        """
         if ToolName(name) not in self.registered_tools.keys():
             raise
 
         tool = self.registered_tools[ToolName(name)]
 
-        context = json.loads(arguments)
+        try:
+            context = json.loads(arguments)
 
-        result = tool.execute(source_index_path, **context)
+            result = tool.execute(source_index_path, **context)
+
+        except json.JSONDecodeError as e:
+            raise InvalidToolArguments(message=f"Аргументы: `{arguments}` не соответствуют формату JSON") from e
 
         return result
