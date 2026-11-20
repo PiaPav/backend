@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from core_server.models.task_models import HarnessInputData, TaskStatus
 
 @dataclass(frozen=True, slots=True)
 class HarnessRequest:
+    tenant_id: str
     event_id: str
     graph_path: Path
     metrics_path: Path
@@ -37,15 +39,17 @@ class HarnessRunner:
     ) -> None:
         if concurrency < 1:
             raise ValueError("concurrency must be positive")
+        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be a finite positive number")
 
         self._core = core
         self._semaphore = asyncio.Semaphore(concurrency)
         self._timeout_seconds = timeout_seconds
 
     async def execute(self, request: HarnessRequest) -> HarnessResult:
-        # В текущем Core идентификатор задачи — int.
-        # После изменения Core лучше передавать event_id напрямую как str.
-        task_id = self._make_task_id(request.event_id)
+        # Core is deliberately a thin facade.  Task/session ownership belongs
+        # to the current Orchestrator implementation behind it.
+        task_id = self._make_task_id(request.tenant_id, request.event_id)
 
         input_data = HarnessInputData(
             unique_id=task_id,
@@ -61,25 +65,23 @@ class HarnessRunner:
                     timeout=self._timeout_seconds,
                 )
 
-                task = self._core.tasks.get(task_id)
-                if task is not None:
-                    task.status = TaskStatus.done
-
                 return HarnessResult(content=content)
 
             finally:
-                # Core.run_task() пока не закрывает созданную LLM-сессию.
-                # После переноса cleanup внутрь Core этот блок можно удалить.
-                if task_id in self._core.llm_connector.sessions:
-                    await self._core.llm_connector.close_session(task_id)
+                task = self._core.orchestrator.tasks.get(task_id)
+                if task is not None:
+                    task.status = TaskStatus.done
+                connector = self._core.orchestrator.llm_connector
+                if task_id in connector.sessions:
+                    await connector.close_session(task_id)
 
     @staticmethod
-    def _make_task_id(event_id: str) -> int:
+    def _make_task_id(tenant_id: str, event_id: str) -> int:
         """
         Стабильный положительный 63-bit ID.
 
         Это временный compatibility layer для существующего Core.
         Идемпотентность должна основываться на полном event_id, а не на этом ID.
         """
-        digest = hashlib.sha256(event_id.encode("utf-8")).digest()
-        return int.from_bytes(digest[:8], "big") & ((1 << 63) - 1)
+        digest = hashlib.sha256(f"{tenant_id}\0{event_id}".encode("utf-8")).digest()
+        return (int.from_bytes(digest[:8], "big") & ((1 << 63) - 1)) or 1
