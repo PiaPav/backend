@@ -6,6 +6,7 @@ from rules.rules_config import RULES_CONFIG
 from tools_engine.interface.engine import InvalidToolArguments
 from tools_engine.interface.tool import AbstractTool, ExceedingExtractionLimit, UnexpectedFileType
 from tools_engine.models.source_index_model import SourceIndex, SourceFile
+from tools_engine.models.analysis_context import AnalysisContext
 
 
 class GetContent(AbstractTool):
@@ -44,14 +45,14 @@ class GetContent(AbstractTool):
 
         return resolve_filepath.read_text(encoding=source_file.encoding)
 
-    def execute(self, source_index_path: Path, **kwargs):
+    def execute(self, analysis_context: AnalysisContext, **kwargs):
         """Запуск тулы"""
         filepath: Path = Path(kwargs.get("FILEPATH"))
 
         if filepath is None:
             raise InvalidToolArguments(message=f"Отсутствует обязательный аргумент 'FILEPATH'")
 
-        index = self._load_source_index(source_index_path)
+        index = self._load_source_index(analysis_context.source_index_path)
 
         if not self.check_valid_filepath_with_bool(filepath, index):
             raise  # Ошибка неверного пути

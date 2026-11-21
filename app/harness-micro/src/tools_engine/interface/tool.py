@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from pathlib import Path
-
 from response_models.models import ToolName
+from tools_engine.models.analysis_context import AnalysisContext
 
 
 class AbstractTool(ABC):
@@ -11,7 +10,7 @@ class AbstractTool(ABC):
 
 
     @abstractmethod
-    def execute(self, source_index_path: Path, **kwargs):
+    def execute(self, analysis_context: AnalysisContext, **kwargs):
         """Запуск команды"""
         pass
 

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from pathlib import Path
+from tools_engine.models.analysis_context import AnalysisContext
 
 
 class InvalidToolArguments(Exception):
@@ -26,7 +26,7 @@ class EngineInterface(ABC):
         pass
 
     @abstractmethod
-    async def entry_tool(self, source_index_path: Path, name: str, arguments: str) -> str:
+    async def entry_tool(self, analysis_context: AnalysisContext, name: str, arguments: str) -> str:
         """Применить тулу
 
         :raises InvalidToolArguments: Если переданы неверные аргументы.

@@ -22,6 +22,7 @@ class Core:
         self.orchestrator = SimpleNamespace(tasks={}, llm_connector=Connector())
 
     async def run_task(self, data):
+        self.data = data
         task = SimpleNamespace(status=TaskStatus.accept)
         self.orchestrator.tasks[data.unique_id] = task
         self.orchestrator.llm_connector.sessions[data.unique_id] = object()
@@ -31,7 +32,10 @@ class Core:
 
 
 def request():
-    return HarnessRequest("tenant-1", "event-1", Path("graph"), Path("metrics"), Path("index"))
+    return HarnessRequest(
+        "tenant-1", "event-1", {"canonical.full": Path("graph")},
+        {"metrics.full": Path("metrics")}, Path("index"), "g" * 64, "p" * 64,
+    )
 
 
 def test_runner_uses_orchestrator_state_and_closes_session() -> None:
@@ -45,6 +49,10 @@ def test_runner_uses_orchestrator_state_and_closes_session() -> None:
     assert core.orchestrator.tasks[task_id].status is TaskStatus.done
     assert core.orchestrator.llm_connector.closed == [task_id]
     assert core.orchestrator.llm_connector.sessions == {}
+    assert core.data.graph_profiles == {"canonical.full": Path("graph")}
+    assert core.data.metrics_profiles == {"metrics.full": Path("metrics")}
+    assert core.data.graph_fingerprint == "g" * 64
+    assert core.data.project_fingerprint == "p" * 64
 
 
 def test_runner_closes_session_when_core_fails() -> None:

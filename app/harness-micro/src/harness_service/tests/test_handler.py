@@ -31,21 +31,22 @@ def wire() -> dict[str, object]:
         "producer": {"service": "analysis-coordinator", "version": "1"},
         "payload": {
             "source_uri": "s3://artifacts/tenants/tenant-1/source.tar.zst",
-            "graph": {
-                "uri": "s3://artifacts/tenants/tenant-1/graph.json",
-                "sha256": HASH,
-                "size_bytes": 10,
-                "schema_version": 1,
+            "graph_profiles": {
                 "parser_semantics_version": 7,
                 "graph_fingerprint": HASH,
+                "artifacts": {
+                    "canonical.full": artifact("graph.json", 10),
+                    "aggregate.overview": artifact("graph-overview.json", 5),
+                    "calls.topology": artifact("calls.json", 2),
+                },
             },
-            "metrics": {
-                "uri": "s3://artifacts/tenants/tenant-1/metrics.json",
-                "sha256": HASH,
-                "size_bytes": 20,
-                "schema_version": 1,
+            "metrics_profiles": {
                 "metrics_semantics_version": 4,
                 "graph_fingerprint": HASH,
+                "artifacts": {
+                    "metrics.full": artifact("metrics.json", 20),
+                    "metrics.overview": artifact("metrics-overview.json", 6),
+                },
             },
             "source_index": {
                 "uri": "s3://artifacts/tenants/tenant-1/source-index.json",
@@ -56,6 +57,23 @@ def wire() -> dict[str, object]:
             },
         },
     }
+
+
+def artifact(name: str, size: int) -> dict[str, object]:
+    return {"uri": f"s3://artifacts/{name}", "sha256": HASH,
+            "size_bytes": size, "schema_version": 1}
+
+
+def legacy_wire() -> dict[str, object]:
+    result = wire()
+    payload = result["payload"]
+    payload["graph"] = {**artifact("graph.json", 10),
+                        "parser_semantics_version": 7, "graph_fingerprint": HASH}
+    payload["metrics"] = {**artifact("metrics.json", 20),
+                          "metrics_semantics_version": 4, "graph_fingerprint": HASH}
+    del payload["graph_profiles"]
+    del payload["metrics_profiles"]
+    return result
 
 
 class FixedClock:
@@ -71,16 +89,35 @@ class Runner:
     async def execute(self, request):
         self.calls += 1
         self.order.append("run")
-        assert request.graph_path == Path("graph.json")
+        assert request.graph_profiles == {
+            "canonical.full": Path("graph.json"),
+            "aggregate.overview": Path("graph-overview.json"),
+        }
+        assert request.metrics_profiles == {
+            "metrics.full": Path("metrics.json"),
+            "metrics.overview": Path("metrics-overview.json"),
+        }
+        assert request.graph_fingerprint == HASH
+        assert request.project_fingerprint == "b" * 64
         return HarnessResult('{"status":"ok"}')
 
 
 class Materializer:
     @contextmanager
     def materialize(self, **descriptors):
-        assert set(descriptors) == {"source_uri", "graph", "metrics", "source_index"}
+        assert set(descriptors) == {"source_uri", "graph_profiles", "metrics_profiles", "source_index"}
         assert descriptors["source_uri"].endswith("source.tar.zst")
-        yield MaterializedInputs(Path("graph.json"), Path("metrics.json"), Path("source-index.json"))
+        yield MaterializedInputs(
+            {
+                "canonical.full": Path("graph.json"),
+                "aggregate.overview": Path("graph-overview.json"),
+            },
+            {
+                "metrics.full": Path("metrics.json"),
+                "metrics.overview": Path("metrics-overview.json"),
+            },
+            Path("source-index.json"), HASH, "b" * 64,
+        )
 
 
 class ResultStore:
@@ -208,8 +245,40 @@ def test_metrics_must_refer_to_input_graph() -> None:
     order = []
     application, runner, _, _ = handler(order)
     invalid = wire()
-    invalid["payload"]["metrics"]["graph_fingerprint"] = "c" * 64
+    invalid["payload"]["metrics_profiles"]["graph_fingerprint"] = "c" * 64
 
     assert asyncio.run(application.handle(invalid, DeliveryContext("tenant-1"))) is DeliveryDecision.REJECT
     assert runner.calls == 0
     assert order == []
+
+
+def test_legacy_payload_is_normalized_to_full_profiles() -> None:
+    application, _, _, _ = handler([])
+
+    event = application._parse_event(legacy_wire())
+
+    assert set(event.graph_profiles.artifacts) == {"canonical.full"}
+    assert set(event.metrics_profiles.artifacts) == {"metrics.full"}
+    assert event.source_index.project_fingerprint == "b" * 64
+
+
+def test_profile_payload_requires_mvp_profiles_and_rejects_mixed_contract() -> None:
+    application, _, _, _ = handler([])
+    missing = wire()
+    del missing["payload"]["graph_profiles"]["artifacts"]["aggregate.overview"]
+
+    try:
+        application._parse_event(missing)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("required graph profiles must be checked")
+
+    mixed = wire()
+    mixed["payload"]["graph"] = legacy_wire()["payload"]["graph"]
+    try:
+        application._parse_event(mixed)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("mixed payload contracts must be rejected")

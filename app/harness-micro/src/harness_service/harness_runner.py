@@ -12,9 +12,15 @@ from core_server.models.task_models import HarnessInputData, TaskStatus
 class HarnessRequest:
     tenant_id: str
     event_id: str
-    graph_path: Path
-    metrics_path: Path
+    graph_profiles: dict[str, Path]
+    metrics_profiles: dict[str, Path]
     source_index_path: Path
+    graph_fingerprint: str
+    project_fingerprint: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "graph_profiles", dict(self.graph_profiles))
+        object.__setattr__(self, "metrics_profiles", dict(self.metrics_profiles))
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,9 +59,11 @@ class HarnessRunner:
 
         input_data = HarnessInputData(
             unique_id=task_id,
-            graph_path=request.graph_path,
-            metrics_path=request.metrics_path,
+            graph_profiles=request.graph_profiles,
+            metrics_profiles=request.metrics_profiles,
             source_index_path=request.source_index_path,
+            graph_fingerprint=request.graph_fingerprint,
+            project_fingerprint=request.project_fingerprint,
         )
 
         async with self._semaphore:

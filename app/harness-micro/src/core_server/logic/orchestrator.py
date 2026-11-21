@@ -9,6 +9,7 @@ from llm_connector.interfaces.validator import ValidatorInterface
 from response_models.models import FinishReasonType, ToolCall, LLMAnalysis
 from tools_engine.interface.engine import EngineInterface, InvalidToolArguments
 from tools_engine.interface.tool import ExceedingExtractionLimit, UnexpectedFileType
+from tools_engine.models.analysis_context import AnalysisContext
 from utils.logger import create_logger
 
 TASK_EXPIRED_TIME_MIN = 60 * 60 # 60 минут, в секунды
@@ -87,7 +88,8 @@ class Orchestrator(OrchestratorInterface):
         """Текущее время"""
         return time.perf_counter()
 
-    async def run_loop(self, unique_id: int, graph: str, metrix: str, index: Path) -> str:
+    async def run_loop(self, unique_id: int, graph: str, metrix: str,
+                       analysis_context: AnalysisContext) -> str:
         """Цикл общения с нейронкой"""
         log.info(unique_id=unique_id, event="Принят запрос", description="")
 
@@ -145,7 +147,7 @@ class Orchestrator(OrchestratorInterface):
                         try:
                             function = tool_call.function
                             additional_data = await self.tools_engine.entry_tool(
-                                source_index_path=index,
+                                analysis_context=analysis_context,
                                 name=function.name,
                                 arguments=function.arguments
                             )
@@ -375,10 +377,18 @@ class Orchestrator(OrchestratorInterface):
                 count_tool_calls=0
             )
 
-            graph = self._load_file(data.graph_path)
-            metrix = self._load_file(data.metrics_path)
+            analysis_context = AnalysisContext(
+                task_id=data.unique_id,
+                graph_profiles=data.graph_profiles,
+                metrics_profiles=data.metrics_profiles,
+                source_index_path=data.source_index_path,
+                graph_fingerprint=data.graph_fingerprint,
+                project_fingerprint=data.project_fingerprint,
+            )
+            graph = self._load_file(analysis_context.graph_profiles["canonical.full"])
+            metrix = self._load_file(analysis_context.metrics_profiles["metrics.full"])
 
-            result = await self.run_loop(data.unique_id, graph, metrix, data.source_index_path)
+            result = await self.run_loop(data.unique_id, graph, metrix, analysis_context)
 
             return result
 

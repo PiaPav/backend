@@ -94,6 +94,43 @@ class MetricsDescriptor:
 
 
 @dataclass(frozen=True, slots=True)
+class ProfileArtifactDescriptor:
+    uri: str
+    sha256: str
+    size_bytes: int
+    schema_version: int
+
+    def __post_init__(self) -> None:
+        _artifact_fields(self.uri, self.sha256, self.size_bytes, self.schema_version, "artifact")
+
+
+@dataclass(frozen=True, slots=True)
+class GraphProfilesDescriptor:
+    parser_semantics_version: int
+    graph_fingerprint: str
+    artifacts: Mapping[str, ProfileArtifactDescriptor]
+
+    def __post_init__(self) -> None:
+        if self.parser_semantics_version != 7:
+            raise InvalidEventError("graph_profiles.parser_semantics_version must be 7")
+        _digest(self.graph_fingerprint, "graph_profiles.graph_fingerprint")
+        object.__setattr__(self, "artifacts", dict(self.artifacts))
+
+
+@dataclass(frozen=True, slots=True)
+class MetricsProfilesDescriptor:
+    metrics_semantics_version: int
+    graph_fingerprint: str
+    artifacts: Mapping[str, ProfileArtifactDescriptor]
+
+    def __post_init__(self) -> None:
+        if self.metrics_semantics_version != 4:
+            raise InvalidEventError("metrics_profiles.metrics_semantics_version must be 4")
+        _digest(self.graph_fingerprint, "metrics_profiles.graph_fingerprint")
+        object.__setattr__(self, "artifacts", dict(self.artifacts))
+
+
+@dataclass(frozen=True, slots=True)
 class SourceIndexDescriptor:
     uri: str
     sha256: str
@@ -115,23 +152,29 @@ class HarnessStart:
     tenant_id: str
     producer: Producer
     source_uri: str
-    graph: GraphDescriptor
-    metrics: MetricsDescriptor
+    graph_profiles: GraphProfilesDescriptor
+    metrics_profiles: MetricsProfilesDescriptor
     source_index: SourceIndexDescriptor
 
 
 @dataclass(frozen=True, slots=True)
 class MaterializedInputs:
-    graph_path: Path
-    metrics_path: Path
+    graph_profiles: dict[str, Path]
+    metrics_profiles: dict[str, Path]
     source_index_path: Path
+    graph_fingerprint: str
+    project_fingerprint: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "graph_profiles", dict(self.graph_profiles))
+        object.__setattr__(self, "metrics_profiles", dict(self.metrics_profiles))
 
 
 class InputMaterializer(Protocol):
     """Materialize and validate one immutable analysis snapshot.
 
-    The implementation must materialize ``source_uri`` and all three JSON
-    artifacts, verify their declared sizes/SHA-256 values and DTO versions,
+    The implementation must materialize ``source_uri`` and every catalog
+    artifact, verify their declared sizes/SHA-256 values and DTO versions,
     verify the graph/metrics fingerprints, then rewrite
     ``source_index.project.root`` to the local materialized source root.  The
     returned source-index path must remain valid for GetContent/GetStructure
@@ -139,7 +182,8 @@ class InputMaterializer(Protocol):
     """
 
     def materialize(
-        self, *, source_uri: str, graph: GraphDescriptor, metrics: MetricsDescriptor,
+        self, *, source_uri: str, graph_profiles: GraphProfilesDescriptor,
+        metrics_profiles: MetricsProfilesDescriptor,
         source_index: SourceIndexDescriptor,
     ) -> AbstractContextManager[MaterializedInputs]: ...
 
@@ -248,15 +292,18 @@ class HarnessHandler:
 
         try:
             with self._materializer.materialize(
-                source_uri=event.source_uri, graph=event.graph, metrics=event.metrics,
+                source_uri=event.source_uri, graph_profiles=event.graph_profiles,
+                metrics_profiles=event.metrics_profiles,
                 source_index=event.source_index,
             ) as inputs:
                 result = await self._runner.execute(HarnessRequest(
                     tenant_id=event.tenant_id,
                     event_id=event.event_id,
-                    graph_path=inputs.graph_path,
-                    metrics_path=inputs.metrics_path,
+                    graph_profiles=inputs.graph_profiles,
+                    metrics_profiles=inputs.metrics_profiles,
                     source_index_path=inputs.source_index_path,
+                    graph_fingerprint=inputs.graph_fingerprint,
+                    project_fingerprint=inputs.project_fingerprint,
                 ))
             descriptor = await self._result_store.save(
                 tenant_id=event.tenant_id, event_id=event.event_id,
@@ -301,14 +348,36 @@ class HarnessHandler:
         producer_data = _mapping(wire.get("producer"), "producer")
         _exact_keys(producer_data, {"service", "version"}, "producer")
         payload = _mapping(wire.get("payload"), "payload")
-        _exact_keys(payload, {"source_uri", "graph", "metrics", "source_index"}, "payload")
-
-        graph = self._parse_graph(_mapping(payload["graph"], "graph"))
-        metrics = self._parse_metrics(_mapping(payload["metrics"], "metrics"))
+        legacy_fields = {"source_uri", "graph", "metrics", "source_index"}
+        profile_fields = {"source_uri", "graph_profiles", "metrics_profiles", "source_index"}
+        if set(payload) == legacy_fields:
+            graph = self._parse_graph(_mapping(payload["graph"], "graph"))
+            metrics = self._parse_metrics(_mapping(payload["metrics"], "metrics"))
+            graph_profiles = GraphProfilesDescriptor(
+                graph.parser_semantics_version, graph.graph_fingerprint,
+                {"canonical.full": ProfileArtifactDescriptor(
+                    graph.uri, graph.sha256, graph.size_bytes, graph.schema_version
+                )},
+            )
+            metrics_profiles = MetricsProfilesDescriptor(
+                metrics.metrics_semantics_version, metrics.graph_fingerprint,
+                {"metrics.full": ProfileArtifactDescriptor(
+                    metrics.uri, metrics.sha256, metrics.size_bytes, metrics.schema_version
+                )},
+            )
+        elif set(payload) == profile_fields:
+            graph_profiles = self._parse_graph_profiles(
+                _mapping(payload["graph_profiles"], "graph_profiles")
+            )
+            metrics_profiles = self._parse_metrics_profiles(
+                _mapping(payload["metrics_profiles"], "metrics_profiles")
+            )
+        else:
+            raise InvalidEventError("payload must use exactly one supported contract")
         source_index = self._parse_source_index(
             _mapping(payload["source_index"], "source_index")
         )
-        if metrics.graph_fingerprint != graph.graph_fingerprint:
+        if metrics_profiles.graph_fingerprint != graph_profiles.graph_fingerprint:
             raise InvalidEventError("metrics and graph fingerprints differ")
         occurred_at = _nonempty(wire.get("occurred_at"), "occurred_at")
         _utc_datetime(occurred_at)
@@ -321,7 +390,8 @@ class HarnessHandler:
             producer=Producer(_nonempty(producer_data["service"], "producer.service"),
                               _nonempty(producer_data["version"], "producer.version")),
             source_uri=_nonempty(payload["source_uri"], "source_uri"),
-            graph=graph, metrics=metrics, source_index=source_index,
+            graph_profiles=graph_profiles, metrics_profiles=metrics_profiles,
+            source_index=source_index,
         )
 
     @staticmethod
@@ -347,6 +417,49 @@ class HarnessHandler:
             _integer(data["metrics_semantics_version"], "metrics.metrics_semantics_version"),
             _string(data["graph_fingerprint"], "metrics.graph_fingerprint"),
         )
+
+    @classmethod
+    def _parse_graph_profiles(cls, data: Mapping[str, object]) -> GraphProfilesDescriptor:
+        _exact_keys(data, {"parser_semantics_version", "graph_fingerprint", "artifacts"},
+                    "graph_profiles")
+        artifacts = cls._parse_artifacts(data["artifacts"], "graph_profiles.artifacts")
+        required = {"canonical.full", "aggregate.overview"}
+        if not required.issubset(artifacts):
+            raise InvalidEventError("graph_profiles.artifacts lacks required profiles")
+        return GraphProfilesDescriptor(
+            _integer(data["parser_semantics_version"], "graph_profiles.parser_semantics_version"),
+            _string(data["graph_fingerprint"], "graph_profiles.graph_fingerprint"), artifacts,
+        )
+
+    @classmethod
+    def _parse_metrics_profiles(cls, data: Mapping[str, object]) -> MetricsProfilesDescriptor:
+        _exact_keys(data, {"metrics_semantics_version", "graph_fingerprint", "artifacts"},
+                    "metrics_profiles")
+        artifacts = cls._parse_artifacts(data["artifacts"], "metrics_profiles.artifacts")
+        required = {"metrics.full", "metrics.overview"}
+        if not required.issubset(artifacts):
+            raise InvalidEventError("metrics_profiles.artifacts lacks required profiles")
+        return MetricsProfilesDescriptor(
+            _integer(data["metrics_semantics_version"], "metrics_profiles.metrics_semantics_version"),
+            _string(data["graph_fingerprint"], "metrics_profiles.graph_fingerprint"), artifacts,
+        )
+
+    @staticmethod
+    def _parse_artifacts(value: object, name: str) -> dict[str, ProfileArtifactDescriptor]:
+        data = _mapping(value, name)
+        artifacts: dict[str, ProfileArtifactDescriptor] = {}
+        for profile_id, raw in data.items():
+            _nonempty(profile_id, f"{name} profile ID")
+            descriptor = _mapping(raw, f"{name}.{profile_id}")
+            _exact_keys(descriptor, {"uri", "sha256", "size_bytes", "schema_version"},
+                        f"{name}.{profile_id}")
+            artifacts[profile_id] = ProfileArtifactDescriptor(
+                _nonempty(descriptor["uri"], f"{name}.{profile_id}.uri"),
+                _string(descriptor["sha256"], f"{name}.{profile_id}.sha256"),
+                _integer(descriptor["size_bytes"], f"{name}.{profile_id}.size_bytes"),
+                _integer(descriptor["schema_version"], f"{name}.{profile_id}.schema_version"),
+            )
+        return artifacts
 
     @staticmethod
     def _parse_source_index(data: Mapping[str, object]) -> SourceIndexDescriptor:
@@ -453,8 +566,9 @@ def _utc_datetime(value: str) -> None:
 
 __all__ = [
     "ArtifactDescriptor", "Claim", "ClaimDisposition", "Clock", "DeliveryContext",
-    "DeliveryDecision", "EventPublisher", "GraphDescriptor", "HarnessHandler",
+    "DeliveryDecision", "EventPublisher", "GraphDescriptor", "GraphProfilesDescriptor", "HarnessHandler",
     "HarnessStart", "IdempotencyStore", "InputMaterializer", "InvalidEventError",
-    "MaterializedInputs", "MetricsDescriptor", "PayloadConflictError", "Producer",
+    "MaterializedInputs", "MetricsDescriptor", "MetricsProfilesDescriptor", "PayloadConflictError",
+    "Producer", "ProfileArtifactDescriptor",
     "RejectedInputError", "ResultStore", "SourceIndexDescriptor", "UtcClock",
 ]
