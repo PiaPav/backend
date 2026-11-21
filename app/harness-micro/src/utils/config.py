@@ -28,9 +28,18 @@ class ConfigDB:
 
 
 @dataclass
+class ConfigS3:
+    endpoint_url: str
+    access_key: str
+    secret_key: str
+    bucket: str
+
+
+@dataclass
 class Config:
     llm: LLMConfig
     db: ConfigDB
+    s3: ConfigS3
 
 
 def load_config() -> Config:
@@ -57,6 +66,12 @@ def load_config() -> Config:
                 password=yaml_config.get("db").get("POSTGRES_PASSWORD"),
                 echo=yaml_config.get("db").get("POSTGRES_ECHO", "false").lower() in ["true", "1", "yes", 1]
             ),
+            s3=ConfigS3(
+                endpoint_url=yaml_config.get("s3").get("endpoint_url"),
+                access_key=yaml_config.get("s3").get("access_key"),
+                secret_key=yaml_config.get("s3").get("secret_key"),
+                bucket=yaml_config.get("s3").get("bucket")
+            )
         )
 
     return Config(
@@ -74,6 +89,12 @@ def load_config() -> Config:
             password=os.environ["POSTGRES_PASSWORD"],
             echo=os.environ.get("POSTGRES_ECHO", "false").lower() in ["true", "1", "yes", 1]
         ),
+        s3=ConfigS3(
+            endpoint_url=os.environ.get("s3_endpoint_url"),
+            access_key=os.environ.get("s3_access_key"),
+            secret_key=os.environ.get("s3_secret_key"),
+            bucket=os.environ.get("s3_bucket")
+        )
     )
 
 
