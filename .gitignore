@@ -27,3 +27,5 @@
 /app/harness-micro/src/utils/config-local.yml
 /research/
 /.opencode/memory/
+/app/harness-micro/src/tests/fixtures/
+/app/harness-micro/src/tests/manual_tests/
