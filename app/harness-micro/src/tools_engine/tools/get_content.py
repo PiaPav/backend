@@ -1,62 +1,27 @@
-import json
-from pathlib import Path
-
 from response_models.models import ToolName
 from rules.rules_config import RULES_CONFIG
-from tools_engine.interface.engine import InvalidToolArguments
-from tools_engine.interface.tool import AbstractTool, ExceedingExtractionLimit, UnexpectedFileType
-from tools_engine.models.source_index_model import SourceIndex, SourceFile
+from tools_engine.accessors.source import SourceAccessor
+from tools_engine.interface.tool import AbstractTool, ExtractionLimitExceeded, InvalidArtifact
 from tools_engine.models.analysis_context import AnalysisContext
 
 
 class GetContent(AbstractTool):
     name = ToolName.Get_Content
 
-    @staticmethod
-    def _load_source_index(path: Path) -> SourceIndex:
-        """Загрузка индекса файлов и структур для быстрого поиска"""
-        raw_index = json.loads(path.read_text(encoding="utf-8"))
-        return SourceIndex.from_dict(raw_index)
-
-    def check_valid_filepath_with_bool(self, filepath: Path, index: SourceIndex) -> bool:
-        """Проверка существования пути"""
-        posix_path = filepath.as_posix()
-        if posix_path in index.files.keys():
-            return True
-        return False
-
-    @staticmethod
-    def check_rules_with_raise(source_file: SourceFile):
-        """Проверка правил"""
-        if source_file.size_bytes > RULES_CONFIG.max_extraction_file_size:
-            raise  ExceedingExtractionLimit(f"Размер файла превышает максимальный допустимый: {source_file.size_bytes} > {RULES_CONFIG.max_extraction_file_size}")
-        if Path(source_file.relative_path).suffix != ".py":
-            raise  UnexpectedFileType(f"Неожиданный тип файла. Ожидался '.py', получен {Path(source_file.relative_path).suffix}")
-
-    def get_raw_filedata(self, filepath: Path, index: SourceIndex) -> str:
-        """Получение сырого текста файла"""
-        posix_path = filepath.as_posix()
-        project_path = index.project.root
-        source_file = index.files[posix_path]
-
-        self.check_rules_with_raise(source_file)
-
-        resolve_filepath = Path(project_path) / Path(posix_path)
-
-        return resolve_filepath.read_text(encoding=source_file.encoding)
-
     def execute(self, analysis_context: AnalysisContext, **kwargs):
-        """Запуск тулы"""
-        filepath: Path = Path(kwargs.get("FILEPATH"))
-
-        if filepath is None:
-            raise InvalidToolArguments(message=f"Отсутствует обязательный аргумент 'FILEPATH'")
-
-        index = self._load_source_index(analysis_context.source_index_path)
-
-        if not self.check_valid_filepath_with_bool(filepath, index):
-            raise  # Ошибка неверного пути
-
-        result = self.get_raw_filedata(filepath, index)
-
-        return result
+        filepath = kwargs["FILEPATH"]
+        accessor = SourceAccessor(analysis_context.source_index_path)
+        _, source_file, resolved = accessor.resolve_file(filepath)
+        if source_file.size_bytes > RULES_CONFIG.max_extraction_file_size:
+            raise ExtractionLimitExceeded(details={
+                "scope": "source_file", "limit_bytes": RULES_CONFIG.max_extraction_file_size,
+                "actual_bytes": source_file.size_bytes,
+            })
+        try:
+            actual_size = resolved.stat().st_size
+        except OSError as exc:
+            raise InvalidArtifact(details={"artifact": "source_file", "filepath": filepath}) from exc
+        if actual_size != source_file.size_bytes:
+            raise InvalidArtifact(details={"artifact": "source_file", "filepath": filepath})
+        content = accessor.read_text(source_file, resolved)
+        return {"filepath": filepath, "content": content}

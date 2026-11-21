@@ -16,15 +16,16 @@ def test_composition_builds_core_around_current_orchestrator_api() -> None:
         pass
 
     class Tools:
-        def register_tools(self, tools):
-            created["tools"] = tools
+        def __init__(self, registry):
+            created["tools"] = registry
 
     class Prompts:
         pass
 
     class Validator:
-        def __init__(self, prompts):
+        def __init__(self, prompts, registry):
             created["prompts"] = prompts
+            created["validator_registry"] = registry
 
     class Orchestrator:
         def __init__(self, *, llm_connector, tools_engine, validator):
@@ -58,4 +59,5 @@ def test_composition_builds_core_around_current_orchestrator_api() -> None:
     assert isinstance(result, HarnessHandler)
     assert created["orchestrator"] is created["orchestrator_instance"]
     assert created["start"] == ("https://llm.invalid", "key")
-    assert created["tools"] == [composition.GetContent, composition.GetStructure]
+    assert created["tools"] is composition.TOOL_REGISTRY
+    assert created["validator_registry"] is composition.TOOL_REGISTRY

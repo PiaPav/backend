@@ -32,11 +32,14 @@ def _extract_llm_usage(description: str | None) -> dict[str, Any]:
     usage = payload.get("usage") or {}
     choices = payload.get("choices") or []
     first_choice = choices[0] if choices else {}
+    finish_reason = payload.get("finish_reason")
+    if finish_reason is None and isinstance(first_choice, dict):
+        finish_reason = first_choice.get("finish_reason")
 
     return {
         "llm_model": payload.get("model"),
         "llm_response_id": payload.get("id"),
-        "finish_reason": first_choice.get("finish_reason"),
+        "finish_reason": finish_reason,
         "prompt_tokens": usage.get("prompt_tokens"),
         "completion_tokens": usage.get("completion_tokens"),
         "total_tokens": usage.get("total_tokens"),

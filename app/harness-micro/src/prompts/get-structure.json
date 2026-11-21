@@ -12,7 +12,8 @@
         },
         "STRUCTURE-TYPE": {
           "type": "string",
-          "description": "тип структуры (`CLASS`, `FUNCTION`, `METHOD`, `CONSTANT`)"
+          "description": "тип структуры (`CLASS`, `FUNCTION`, `METHOD`, `CONSTANT`)",
+          "enum": ["CLASS", "FUNCTION", "METHOD", "CONSTANT"]
         },
         "STRUCTURE-PATH": {
           "type": "string",

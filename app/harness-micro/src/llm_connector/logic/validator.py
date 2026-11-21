@@ -1,16 +1,16 @@
-import json
-from pathlib import Path
-from typing import Literal
-
 from llm_connector.interfaces.prompts_loader import PromptsLoaderInterface
 from llm_connector.interfaces.validator import ValidatorInterface
-from response_models.models import ToolData, Prompt, Role, ToolResponse, ToolCall, ToolExecuteData
+from response_models.models import ToolData, Prompt, Role, ToolResponse, ToolCall
+from tools_engine.registry import TOOL_REGISTRY, ToolDefinition, validate_registry
 
 
 class Validator(ValidatorInterface):
 
-    def __init__(self, prompts_loader: PromptsLoaderInterface):
+    def __init__(self, prompts_loader: PromptsLoaderInterface,
+                 registry: tuple[ToolDefinition, ...] = TOOL_REGISTRY):
         self.prompts_loader = prompts_loader
+        validate_registry(registry)
+        self.registry = registry
 
     def create_start_messages(self, graph, metrix) -> list[Prompt]:
         """Создает системный промт и сообщение с графом и метриками"""
@@ -46,31 +46,19 @@ class Validator(ValidatorInterface):
         return prompts
 
     def load_tools_models(self) -> list[ToolData]:
-        tools_files = {'GET-CONTENT': "get-content.json",
-                      'GET-STRUCTURE': "get-structure.json"}
-
         tools = []
-
-        for tool_name, filename in tools_files.items():
-            path = Path(__file__).parent.parent.parent / "prompts" / filename
-            tool_json_data = path.read_text(encoding="utf-8")
+        for definition in self.registry:
+            tool_json_data = definition.schema_path.read_text(encoding="utf-8")
             tool_data = ToolData.model_validate_json(tool_json_data)
             tools.append(tool_data)
 
         return tools
 
-    def create_tool_message(self, tool_call: ToolCall, status: Literal["success", "error", "deny"], data: str = None, msg: str = None, retryable: bool = None) -> ToolResponse:
+    def create_tool_message(self, tool_call: ToolCall, content: str) -> ToolResponse:
         """Создает сообщения с информацией из тулы для нейронки"""
         message = ToolResponse(
             tool_call_id=tool_call.id,
-            content=json.dumps(
-                ToolExecuteData(
-                    status=status,
-                    msg=msg,
-                   result=data,
-                   retryable=retryable
-                ).model_dump()
-            )
+            content=content,
         )
         return message
 

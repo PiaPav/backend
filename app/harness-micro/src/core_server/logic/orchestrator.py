@@ -1,4 +1,5 @@
 import time
+import json
 from pathlib import Path
 import asyncio
 
@@ -7,9 +8,10 @@ from core_server.models.task_models import TaskInfo, TaskStatus, HarnessInputDat
 from llm_connector.interfaces.connector import LLMConnectorInterface
 from llm_connector.interfaces.validator import ValidatorInterface
 from response_models.models import FinishReasonType, ToolCall, LLMAnalysis
-from tools_engine.interface.engine import EngineInterface, InvalidToolArguments
-from tools_engine.interface.tool import ExceedingExtractionLimit, UnexpectedFileType
+from tools_engine.interface.engine import EngineInterface
+from tools_engine.interface.tool import ToolError
 from tools_engine.models.analysis_context import AnalysisContext
+from tools_engine.models.tool_result import ToolResult
 from utils.logger import create_logger
 
 TASK_EXPIRED_TIME_MIN = 60 * 60 # 60 минут, в секунды
@@ -88,6 +90,33 @@ class Orchestrator(OrchestratorInterface):
         """Текущее время"""
         return time.perf_counter()
 
+    @staticmethod
+    def _tool_log_metadata(tool_name: str, result: ToolResult) -> str:
+        metadata = {
+            "tool_name": tool_name,
+            "status": result.status,
+            "profile_id": result.profile_id,
+            "completeness": {
+                "returned": result.completeness.returned,
+                "total": result.completeness.total,
+                "truncated": result.completeness.truncated,
+            },
+            "serialized_utf8_size": result.utf8_size(),
+        }
+        return json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
+
+    @staticmethod
+    def _answer_log_metadata(answer) -> str:
+        choice = answer.choices[0]
+        tool_calls = getattr(choice.message, "tool_calls", None) or []
+        finish_reason = choice.finish_reason
+        metadata = {
+            "finish_reason": getattr(finish_reason, "value", finish_reason),
+            "tool_call_count": len(tool_calls),
+            "tool_names": [tool_call.function.name for tool_call in tool_calls],
+        }
+        return json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
+
     async def run_loop(self, unique_id: int, graph: str, metrix: str,
                        analysis_context: AnalysisContext) -> str:
         """Цикл общения с нейронкой"""
@@ -111,7 +140,7 @@ class Orchestrator(OrchestratorInterface):
             if choice.finish_reason == FinishReasonType.stop:
                 # Преждевременное завершение
                 if self.tasks[unique_id].count_tool_calls == 0:
-                    log.warning(unique_id=unique_id, event=f"Попытка преждевременного завершения {self.tasks[unique_id].current_iteration}", description=answer.model_dump_json())
+                    log.warning(unique_id=unique_id, event=f"Попытка преждевременного завершения {self.tasks[unique_id].current_iteration}", description=self._answer_log_metadata(answer))
                     # print(f"ЛЛМ пытается закончить анализ, не вызвав инструменты")
                     # Нужно отправить промт с указанием использовать тулы перед финальным ответом
                     message = self.message_validator.create_message("Перед формированием финального ответа необходимо подтвердить имеющиеся гипотезы с помощью вызова инструментов. "
@@ -119,13 +148,13 @@ class Orchestrator(OrchestratorInterface):
                     answer = await session.send(messages=[message])
 
                 else:
-                    log.info(unique_id=unique_id, event=f"Модель закончила рассуждения {self.tasks[unique_id].current_iteration}", description=answer.model_dump_json())
+                    log.info(unique_id=unique_id, event=f"Модель закончила рассуждения {self.tasks[unique_id].current_iteration}", description=self._answer_log_metadata(answer))
                     # print(f"Итерации закончились, получен итоговый ответ")
                     return await self._finalize(session=session, unique_id=unique_id)
 
             # Получен вызов тулы
             elif choice.finish_reason == FinishReasonType.tool_calls:
-                log.info(unique_id=unique_id, event=f"Получен ответ с вызовом {self.tasks[unique_id].current_iteration}", description=answer.model_dump_json())
+                log.info(unique_id=unique_id, event=f"Получен ответ с вызовом {self.tasks[unique_id].current_iteration}", description=self._answer_log_metadata(answer))
                 tool_calls: list[ToolCall] = choice.message.tool_calls
 
                 tool_messages = []
@@ -135,54 +164,26 @@ class Orchestrator(OrchestratorInterface):
                     # Перебор по тулам
                     if self.tasks[unique_id].count_tool_calls >= MAX_COUNT_TOOL_CALLS:
                         # Нужно остановить и вернуть нейронке, что она исчерпала лимит
-                        message = self.message_validator.create_tool_message(
-                            tool_call=tool_call,
-                            status="deny",
-                            msg=f"Исчерпан лимит использования инструментов. Использовано {self.tasks[unique_id].count_tool_calls} из {MAX_COUNT_TOOL_CALLS}.",
-                            retryable=False
-                        )
-                        log.warning(unique_id=unique_id, event=f"Превышен лимит вызовов инструментов {self.tasks[unique_id].current_iteration}", description=message.model_dump_json())
+                        result = ToolResult.failure(ToolError(
+                            f"Исчерпан лимит использования инструментов. Использовано {self.tasks[unique_id].count_tool_calls} из {MAX_COUNT_TOOL_CALLS}.",
+                            {"limit": MAX_COUNT_TOOL_CALLS}, False,
+                            code="tool_call_limit_exceeded",
+                        ))
+                        message = self.message_validator.create_tool_message(tool_call, result.to_json())
+                        log.warning(unique_id=unique_id, event=f"Превышен лимит вызовов инструментов {self.tasks[unique_id].current_iteration}", description=self._tool_log_metadata(tool_call.function.name, result))
                     # Все ок - исполняем
                     else:
-                        try:
-                            function = tool_call.function
-                            additional_data = await self.tools_engine.entry_tool(
-                                analysis_context=analysis_context,
-                                name=function.name,
-                                arguments=function.arguments
-                            )
-
-                            message = self.message_validator.create_tool_message(
-                                tool_call=tool_call,
-                                status="success",
-                                data=additional_data
-                            )
-                            self.tasks[unique_id].count_tool_calls += 1
-                            log.info(unique_id=unique_id, event=f"Вызван инструмент {self.tasks[unique_id].current_iteration}", description=message.model_dump_json())
-
-                        except InvalidToolArguments as e:
-                            message = self.message_validator.create_tool_message(
-                                tool_call=tool_call,
-                                status="error",
-                                msg=e.error,
-                                retryable=True
-                            )
-
-                        except ExceedingExtractionLimit as e:
-                            message = self.message_validator.create_tool_message(
-                                tool_call=tool_call,
-                                status="error",
-                                msg=e.error,
-                                retryable=True
-                            )
-
-                        except UnexpectedFileType as e:
-                            message = self.message_validator.create_tool_message(
-                                tool_call=tool_call,
-                                status="error",
-                                msg=e.error,
-                                retryable=True
-                            )
+                        function = tool_call.function
+                        self.tasks[unique_id].count_tool_calls += 1
+                        result = await self.tools_engine.entry_tool(
+                            analysis_context=analysis_context,
+                            name=function.name,
+                            arguments=function.arguments
+                        )
+                        message = self.message_validator.create_tool_message(
+                            tool_call, result.to_json()
+                        )
+                        log.info(unique_id=unique_id, event=f"Вызван инструмент {self.tasks[unique_id].current_iteration}", description=self._tool_log_metadata(function.name, result))
 
                     tool_messages.append(message)
 
@@ -204,7 +205,7 @@ class Orchestrator(OrchestratorInterface):
                     if choice.finish_reason != FinishReasonType.stop:
                         log.critical(unique_id=unique_id,
                                      event=f"Не удалось получить финальный JSON {self.tasks[unique_id].current_iteration}",
-                                     description=answer.model_dump_json())
+                                     description=self._answer_log_metadata(answer))
                         raise FinalAnswerAbsent("Не удалось получить финальный JSON", answer.model_dump())
 
                     content = choice.message.content
@@ -212,12 +213,12 @@ class Orchestrator(OrchestratorInterface):
                     if not content or not content.strip():
                         log.critical(unique_id=unique_id,
                                      event=f"LLM вернула пустой JSON-ответ {self.tasks[unique_id].current_iteration}",
-                                     description=answer.model_dump_json())
+                                     description=self._answer_log_metadata(answer))
                         raise FinalAnswerAbsent("LLM вернула пустой JSON-ответ", answer.model_dump())
 
                     log.info(unique_id=unique_id,
                              event=f"Получен финальный ответ {self.tasks[unique_id].current_iteration}",
-                             description=answer.model_dump_json())
+                             description=self._answer_log_metadata(answer))
                     return LLMAnalysis.model_validate_json(content).model_dump_json()
 
                 answer = await session.send(messages=tool_messages)
@@ -226,18 +227,18 @@ class Orchestrator(OrchestratorInterface):
 
             elif choice.finish_reason == FinishReasonType.length:
                 # Модель выдала обрезанный ответ, скорее всего из-за лимита токенов / контекстного окна
-                log.error(unique_id=unique_id, event=f"Превышен лимит токенов / контекстного окна {self.tasks[unique_id].current_iteration}", description=answer.model_dump_json())
+                log.error(unique_id=unique_id, event=f"Превышен лимит токенов / контекстного окна {self.tasks[unique_id].current_iteration}", description=self._answer_log_metadata(answer))
                 # Выкатываем ошибку, надо передать ее до пользователя
                 raise GenerationLengthExceeded("Генерация ответа остановлена из-за лимита токенов / контекстного окна", answer.model_dump())
 
             elif choice.finish_reason == FinishReasonType.content_filter:
                 # Сработал фильтр. Партия Китай не знать ничего о происшествиях на площади Тяньаньмэнь!
-                log.error(unique_id=unique_id, event=f"Сработал фильтр {self.tasks[unique_id].current_iteration}", description=answer.model_dump_json())
+                log.error(unique_id=unique_id, event=f"Сработал фильтр {self.tasks[unique_id].current_iteration}", description=self._answer_log_metadata(answer))
                 raise ContentFilterTriggered("Сработал фильтр, продолжать обработку запроса невозможно", answer.model_dump())
 
             elif choice.finish_reason == FinishReasonType.insufficient_system_resource:
                 # Перегрузка провайдера
-                log.warning(unique_id=unique_id, event=f"Провайдер перегружен {self.tasks[unique_id].current_iteration}", description=answer.model_dump_json())
+                log.warning(unique_id=unique_id, event=f"Провайдер перегружен {self.tasks[unique_id].current_iteration}", description=self._answer_log_metadata(answer))
                 delay = 2
 
                 while delay <= 2**5:
@@ -252,7 +253,7 @@ class Orchestrator(OrchestratorInterface):
 
             elif choice.finish_reason == FinishReasonType.aborted:
                 # Генерация прервана
-                log.warning(unique_id=unique_id, event=f"Генерация прервана {self.tasks[unique_id].current_iteration}", description=answer.model_dump_json())
+                log.warning(unique_id=unique_id, event=f"Генерация прервана {self.tasks[unique_id].current_iteration}", description=self._answer_log_metadata(answer))
                 raise GenerationAborted("Генерация прервана, попробуй перезапустить позже", answer.model_dump())
 
             self.tasks[unique_id].current_iteration += 1
@@ -260,17 +261,16 @@ class Orchestrator(OrchestratorInterface):
         # Делаем видоизмененную обработку крайних случаев
         final_answer = None
 
-        log.warning(unique_id=unique_id, event=f"Попытка продолжения сессии со стороны ЛЛМ, превышающая лимиты {self.tasks[unique_id].current_iteration}", description=answer.model_dump_json())
-
         choice = answer.choices[0]
+        log.warning(unique_id=unique_id, event=f"Попытка продолжения сессии со стороны ЛЛМ, превышающая лимиты {self.tasks[unique_id].current_iteration}", description=self._answer_log_metadata(answer))
         # Получен ответ
         if choice.finish_reason == FinishReasonType.stop:
-            log.info(unique_id=unique_id, event=f"Модель закончила рассуждения {self.tasks[unique_id].current_iteration}", description=answer.model_dump_json())
+            log.info(unique_id=unique_id, event=f"Модель закончила рассуждения {self.tasks[unique_id].current_iteration}", description=self._answer_log_metadata(answer))
             return await self._finalize(session, unique_id)
 
         # Получен вызов тулы
         elif choice.finish_reason == FinishReasonType.tool_calls:
-            log.warning(unique_id=unique_id, event=f"Получен ответ с вызовом {self.tasks[unique_id].current_iteration}", description=answer.model_dump_json())
+            log.warning(unique_id=unique_id, event=f"Получен ответ с вызовом {self.tasks[unique_id].current_iteration}", description=self._answer_log_metadata(answer))
 
             tool_calls: list[ToolCall] = choice.message.tool_calls
 
@@ -280,17 +280,15 @@ class Orchestrator(OrchestratorInterface):
             for tool_call in tool_calls:
                 # Перебор по тулам
                 # Нужно остановить и вернуть нейронке, что она исчерпала лимит
-                message = self.message_validator.create_tool_message(
-                    tool_call=tool_call,
-                    status="deny",
-                    msg=f"Лимит для анализа исчерпан. "
-                        f"Использовано сообщений: {self.tasks[unique_id].current_iteration} из {COUNT_MESSAGES}. "
-                        f"Использовано инструментов: {self.tasks[unique_id].count_tool_calls} из {MAX_COUNT_TOOL_CALLS}",
-                    retryable=False
-                )
+                result = ToolResult.failure(ToolError(
+                    f"Лимит для анализа исчерпан. Использовано сообщений: {self.tasks[unique_id].current_iteration} из {COUNT_MESSAGES}. Использовано инструментов: {self.tasks[unique_id].count_tool_calls} из {MAX_COUNT_TOOL_CALLS}",
+                    {"message_limit": COUNT_MESSAGES, "tool_limit": MAX_COUNT_TOOL_CALLS},
+                    False, code="tool_call_limit_exceeded",
+                ))
+                message = self.message_validator.create_tool_message(tool_call, result.to_json())
                 log.warning(unique_id=unique_id,
                             event=f"Превышен лимит сообщений/инструментов {self.tasks[unique_id].current_iteration}",
-                            description=message.model_dump_json())
+                            description=self._tool_log_metadata(tool_call.function.name, result))
 
                 messages.append(message)
 
@@ -308,7 +306,7 @@ class Orchestrator(OrchestratorInterface):
             # Модель выдала обрезанный ответ, скорее всего из-за лимита токенов / контекстного окна
             log.error(unique_id=unique_id,
                       event=f"Превышен лимит токенов / контекстного окна {self.tasks[unique_id].current_iteration}",
-                      description=answer.model_dump_json())
+                      description=self._answer_log_metadata(answer))
             # Выкатываем ошибку, надо передать ее до пользователя
             raise GenerationLengthExceeded("Генерация ответа остановлена из-за лимита токенов / контекстного окна",
                                            answer.model_dump())
@@ -316,14 +314,14 @@ class Orchestrator(OrchestratorInterface):
         elif choice.finish_reason == FinishReasonType.content_filter:
             # Сработал фильтр. Партия Китай не знать ничего о происшествиях на площади Тяньаньмэнь!
             log.error(unique_id=unique_id, event=f"Сработал фильтр {self.tasks[unique_id].current_iteration}",
-                      description=answer.model_dump_json())
+                      description=self._answer_log_metadata(answer))
             raise ContentFilterTriggered("Сработал фильтр, продолжать обработку запроса невозможно",
                                          answer.model_dump())
 
         elif choice.finish_reason == FinishReasonType.insufficient_system_resource:
             # Перегрузка провайдера
             log.warning(unique_id=unique_id, event=f"Провайдер перегружен {self.tasks[unique_id].current_iteration}",
-                        description=answer.model_dump_json())
+                        description=self._answer_log_metadata(answer))
             delay = 2
 
             while delay <= 2 ** 5:
@@ -339,7 +337,7 @@ class Orchestrator(OrchestratorInterface):
         elif choice.finish_reason == FinishReasonType.aborted:
             # Генерация прервана
             log.warning(unique_id=unique_id, event=f"Генерация прервана {self.tasks[unique_id].current_iteration}",
-                        description=answer.model_dump_json())
+                        description=self._answer_log_metadata(answer))
             raise GenerationAborted("Генерация прервана, попробуй перезапустить позже", answer.model_dump())
 
         # После обработки ждем ответ или после ошибочного tool_call или insufficient_system_resource
@@ -355,15 +353,15 @@ class Orchestrator(OrchestratorInterface):
             if not content or not content.strip():
                 log.critical(unique_id=unique_id,
                              event=f"LLM вернула пустой JSON-ответ {self.tasks[unique_id].current_iteration}",
-                             description=final_answer.model_dump_json())
+                             description=self._answer_log_metadata(final_answer))
                 raise FinalAnswerAbsent("LLM вернула пустой JSON-ответ", final_answer.model_dump())
             log.info(unique_id=unique_id, event=f"Получен финальный ответ {self.tasks[unique_id].current_iteration}",
-                     description=final_answer.model_dump_json())
+                     description=self._answer_log_metadata(final_answer))
 
             return LLMAnalysis.model_validate_json(content).model_dump_json()
 
         # Ответа так и не последовало
-        log.critical(unique_id=unique_id, event=f"Отсутствует финальный ответ {self.tasks[unique_id].current_iteration}", description=final_answer.model_dump_json())
+        log.critical(unique_id=unique_id, event=f"Отсутствует финальный ответ {self.tasks[unique_id].current_iteration}", description=self._answer_log_metadata(final_answer))
         raise FinalAnswerAbsent("Отсутствует финальный ответ от ЛЛМ", final_answer.model_dump())
 
     async def run_task(self, data: HarnessInputData) -> str:
@@ -412,17 +410,17 @@ class Orchestrator(OrchestratorInterface):
 
         if choice.finish_reason != FinishReasonType.stop:
             log.critical(unique_id=unique_id, event=f"Не удалось получить финальный JSON {self.tasks[unique_id].current_iteration}",
-                     description=str(answer))
+                     description=self._answer_log_metadata(answer))
             raise FinalAnswerAbsent("Не удалось получить финальный JSON", answer.model_dump())
 
         content = choice.message.content
 
         if not content or not content.strip():
             log.critical(unique_id=unique_id, event=f"LLM вернула пустой JSON-ответ {self.tasks[unique_id].current_iteration}",
-                     description=str(answer))
+                     description=self._answer_log_metadata(answer))
             raise FinalAnswerAbsent("LLM вернула пустой JSON-ответ", answer.model_dump())
 
-        log.info(unique_id=unique_id, event=f"Получен финальный ответ {self.tasks[unique_id].current_iteration}", description=str(answer))
+        log.info(unique_id=unique_id, event=f"Получен финальный ответ {self.tasks[unique_id].current_iteration}", description=self._answer_log_metadata(answer))
 
         return LLMAnalysis.model_validate_json(content).model_dump_json()
 

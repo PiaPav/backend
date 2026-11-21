@@ -5,6 +5,7 @@ from response_models.models import ToolName
 from tools_engine.interface.tool import AbstractTool
 from tools_engine.logic.engine import ToolsEngine
 from tools_engine.models.analysis_context import AnalysisContext
+from tools_engine.registry import TOOL_REGISTRY, ToolDefinition
 
 
 class ContextTool(AbstractTool):
@@ -13,7 +14,7 @@ class ContextTool(AbstractTool):
 
     def execute(self, analysis_context, **kwargs):
         type(self).received = analysis_context
-        return kwargs["value"]
+        return kwargs["FILEPATH"]
 
 
 def test_tools_engine_passes_analysis_context_to_tool() -> None:
@@ -21,10 +22,13 @@ def test_tools_engine_passes_analysis_context_to_tool() -> None:
         1, {"canonical.full": Path("graph")}, {"metrics.full": Path("metrics")},
         Path("index"), "a" * 64, "b" * 64,
     )
-    engine = ToolsEngine()
-    engine.register_tools([ContextTool])
+    definition = ToolDefinition(
+        ToolName.Get_Content, ContextTool, TOOL_REGISTRY[0].schema_path
+    )
+    engine = ToolsEngine((definition,))
 
-    result = asyncio.run(engine.entry_tool(context, ToolName.Get_Content, '{"value":"ok"}'))
+    result = asyncio.run(engine.entry_tool(context, ToolName.Get_Content, '{"FILEPATH":"ok"}'))
 
-    assert result == "ok"
+    assert result.status == "success"
+    assert result.result == "ok"
     assert ContextTool.received is context

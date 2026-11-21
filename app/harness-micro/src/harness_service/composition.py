@@ -6,8 +6,7 @@ from llm_connector.logic.connector import LLMConnector
 from llm_connector.logic.prompts_loader import PromptsLoader
 from llm_connector.logic.validator import Validator
 from tools_engine.logic.engine import ToolsEngine
-from tools_engine.tools.get_content import GetContent
-from tools_engine.tools.get_structure import GetStructure
+from tools_engine.registry import TOOL_REGISTRY
 
 from harness_service.harness_handler import (
     Clock,
@@ -40,12 +39,11 @@ async def build_handler(
     root so a broker adapter can be attached without changing application code.
     """
     connector = LLMConnector()
-    tools = ToolsEngine()
-    tools.register_tools([GetContent, GetStructure])
+    tools = ToolsEngine(TOOL_REGISTRY)
     orchestrator = Orchestrator(
         llm_connector=connector,
         tools_engine=tools,
-        validator=Validator(PromptsLoader()),
+        validator=Validator(PromptsLoader(), TOOL_REGISTRY),
     )
     core = Core(orchestrator=orchestrator)
     await core.start(url=llm_url, apikey=llm_api_key)

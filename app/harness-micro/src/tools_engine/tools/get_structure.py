@@ -1,11 +1,10 @@
-import json
-from pathlib import Path
-
-from rules.rules_config import RULES_CONFIG
-from tools_engine.interface.engine import InvalidToolArguments
-from tools_engine.interface.tool import AbstractTool, ExceedingExtractionLimit
-from tools_engine.models.source_index_model import SourceIndex, SourceSymbol, SourceSpan
 from response_models.models import StructureType, ToolName
+from rules.rules_config import RULES_CONFIG
+from tools_engine.accessors.source import SourceAccessor
+from tools_engine.interface.tool import (
+    AbstractTool, ExtractionLimitExceeded, InvalidArtifact,
+    InvalidToolArguments, SourceObjectNotFound,
+)
 from tools_engine.models.analysis_context import AnalysisContext
 
 
@@ -13,109 +12,112 @@ class GetStructure(AbstractTool):
     name = ToolName.Get_Structure
 
     @staticmethod
-    def _load_source_index(path: Path) -> SourceIndex:
-        """Загрузка индекса файлов и структур для быстрого поиска"""
-        raw_index = json.loads(path.read_text(encoding="utf-8"))
-        return SourceIndex.from_dict(raw_index)
-
-    def check_valid_filepath_with_bool(self, filepath: Path, index: SourceIndex) -> bool:
-        """Проверка существования пути"""
-        posix_path = filepath.as_posix()
-        if posix_path in index.files.keys():
-            return True
-        return False
-
-    def get_structure_id(self, filepath: Path, structure_type: StructureType, structure_path: str,
-                         index: SourceIndex) -> list[str]:
-        """Ищет id структуры"""
-        posix_path = filepath.as_posix()
-        source_file = index.files[posix_path]
-
-        if structure_type == StructureType.CLASS:
-            if structure_path in source_file.classes.keys():
-                return source_file.classes[structure_path]
-            raise  # Структура отсутствует
-
-        elif structure_type == StructureType.FUNCTION:
-            if structure_path in source_file.functions.keys():
-                return source_file.functions[structure_path]
-            raise  # Структура отсутствует
-
-        elif structure_type == StructureType.METHOD:
-            structure_class = structure_path.split(".")[0]
-            structure_method = structure_path.split(".")[1]
-
-            if structure_class in source_file.classes.keys():
-                class_id = source_file.classes[structure_class][0]
-
-                if structure_method in index.symbols[class_id].methods:
-                    return index.symbols[class_id].methods[structure_method]
-                raise  # Структура отсутствует
-            raise  # Структура отсутствует
-
-        elif structure_type == StructureType.CONSTANT:
-            if structure_path in source_file.constants.keys():
-                return source_file.constants[structure_path]
-            raise  # Структура отсутствует
-
-        raise  # Неизвестный тип структуры ?
+    def _ids(index, source_file, filepath: str, structure_type: StructureType,
+             structure_path: str) -> list[str]:
+        if structure_type is StructureType.CLASS:
+            return source_file.classes.get(structure_path, [])
+        if structure_type is StructureType.FUNCTION:
+            return source_file.functions.get(structure_path, [])
+        if structure_type is StructureType.CONSTANT:
+            return source_file.constants.get(structure_path, [])
+        parts = structure_path.split(".")
+        if len(parts) != 2 or not all(parts):
+            raise InvalidToolArguments(
+                "STRUCTURE-PATH для METHOD должен иметь формат Class.method",
+                {"argument": "STRUCTURE-PATH"},
+            )
+        class_ids = source_file.classes.get(parts[0], [])
+        if not class_ids:
+            return []
+        class_symbol = index.symbols.get(class_ids[0])
+        class_id = class_ids[0]
+        if (class_symbol is None or class_symbol.source_id != class_id
+                or class_symbol.kind != "class" or class_symbol.name != parts[0]
+                or class_symbol.file != filepath):
+            raise InvalidArtifact(details={"artifact": "source_index"})
+        return class_symbol.methods.get(parts[1], [])
 
     @staticmethod
-    def check_rules_with_raise(bytes_size: int):
-        """Проверка правил"""
-        # print(bites_size, RULES_CONFIG.max_extraction_structure_size)
-        if bytes_size > RULES_CONFIG.max_extraction_structure_size:
-            raise ExceedingExtractionLimit(f"Размер структуры превышает максимальный допустимый: {bytes_size} > {RULES_CONFIG.max_extraction_structure_size}")
-        # if Path(source_file.relative_path).suffix != ".py":
-        #     raise  # Ошибка стороннего расширения
+    def _validate_symbol(index, source_id: str, symbol, filepath: str,
+                         structure_type: StructureType, structure_path: str) -> None:
+        expected_kind = structure_type.value.lower()
+        expected_name = structure_path
+        if structure_type is StructureType.METHOD:
+            class_name, expected_name = structure_path.split(".")
+            class_id = index.files[filepath].classes[class_name][0]
+            class_symbol = index.symbols.get(class_id)
+            if (class_symbol is None or class_symbol.source_id != class_id
+                    or class_symbol.kind != "class" or class_symbol.name != class_name
+                    or class_symbol.file != filepath
+                    or source_id not in class_symbol.methods.get(expected_name, [])):
+                raise InvalidArtifact(details={"artifact": "source_index"})
+            if symbol.parent_id != class_id:
+                raise InvalidArtifact(details={"artifact": "source_index", "source_id": source_id})
+        if (symbol.source_id != source_id or symbol.file != filepath
+                or symbol.kind != expected_kind or symbol.name != expected_name):
+            raise InvalidArtifact(details={"artifact": "source_index", "source_id": source_id})
 
-    def get_raw_structure_data(self, structure_id: str, resolve_filepath: Path, index: SourceIndex,
-                               encoding: str = "utf-8") -> str:
-        """Получение сырого текста структуры"""
-        source_symbol: SourceSymbol = index.symbols[structure_id]
-
-        span: SourceSpan = source_symbol.span
-
-        start_byte = span.start_byte - span.start_column
-        expected_size = span.end_byte - start_byte
-        self.check_rules_with_raise(expected_size)
-
-        with resolve_filepath.open("rb") as source_file:
-            source_file.seek(start_byte)
-            raw_data = source_file.read(expected_size)
-
-        return raw_data.decode(encoding)
-
-    def get_resolve_filepath(self, filepath: Path, index: SourceIndex) -> Path:
-        """Собирает абсолютный путь"""
-        posix_path = filepath.as_posix()
-        project_path = index.project.root
-        resolve_filepath = Path(project_path) / Path(posix_path)
-
-        return resolve_filepath
+    @staticmethod
+    def _validated_range(symbol, actual_file_size: int) -> tuple[int, int]:
+        span = symbol.span
+        values = (
+            span.start_line, span.start_column, span.end_line,
+            span.end_column, span.start_byte, span.end_byte,
+        )
+        if (any(not isinstance(value, int) or isinstance(value, bool) for value in values)
+                or span.start_line < 1
+                or span.end_line < 1
+                or any(value < 0 for value in (
+                    span.start_column, span.end_column, span.start_byte, span.end_byte))
+                or span.start_line > span.end_line
+                or span.start_byte > span.end_byte
+                or (span.start_line == span.end_line
+                    and span.start_column > span.end_column)):
+            raise InvalidArtifact(details={"artifact": "source_index", "source_id": symbol.source_id})
+        start = span.start_byte - span.start_column
+        if start < 0 or span.end_byte > actual_file_size:
+            raise InvalidArtifact(details={"artifact": "source_index", "source_id": symbol.source_id})
+        return start, span.end_byte - start
 
     def execute(self, analysis_context: AnalysisContext, **kwargs):
-        """Запуск тулы"""
-        filepath: Path = Path(kwargs.get("FILEPATH"))
-        structure_type: StructureType = StructureType(kwargs.get("STRUCTURE-TYPE"))
-        structure_path: str = str(kwargs.get("STRUCTURE-PATH"))
-
-        if filepath is None:
-            raise InvalidToolArguments(message=f"Отсутствует обязательный аргумент 'FILEPATH'")
-        if structure_type is None:
-            raise InvalidToolArguments(message=f"Отсутствует обязательный аргумент 'STRUCTURE-TYPE'")
-        if structure_path is None:
-            raise InvalidToolArguments(message=f"Отсутствует обязательный аргумент 'STRUCTURE-PATH'")
-
-        index = self._load_source_index(analysis_context.source_index_path)
-
-        resolve_filepath = self.get_resolve_filepath(filepath, index)
-
-        if not self.check_valid_filepath_with_bool(filepath, index):
-            raise  # Ошибка неверного пути
-
-        structure_id = self.get_structure_id(filepath, structure_type, structure_path, index)[0]
-
-        result = self.get_raw_structure_data(structure_id, resolve_filepath, index)
-
-        return result
+        filepath = kwargs["FILEPATH"]
+        try:
+            structure_type = StructureType(kwargs["STRUCTURE-TYPE"])
+        except ValueError as exc:
+            raise InvalidToolArguments(details={"argument": "STRUCTURE-TYPE"}) from exc
+        structure_path = kwargs["STRUCTURE-PATH"]
+        accessor = SourceAccessor(analysis_context.source_index_path)
+        index, source_file, resolved = accessor.resolve_file(filepath)
+        try:
+            actual_file_size = resolved.stat().st_size
+        except OSError as exc:
+            raise InvalidArtifact(details={"artifact": "source_file", "filepath": filepath}) from exc
+        if actual_file_size != source_file.size_bytes:
+            raise InvalidArtifact(details={"artifact": "source_file", "filepath": filepath})
+        ids = self._ids(index, source_file, filepath, structure_type, structure_path)
+        if not ids:
+            raise SourceObjectNotFound(details={
+                "filepath": filepath, "structure_type": structure_type.value,
+                "structure_path": structure_path,
+            })
+        source_id = ids[0]
+        symbol = index.symbols.get(source_id)
+        if symbol is None:
+            raise InvalidArtifact(details={"artifact": "source_index", "source_id": source_id})
+        self._validate_symbol(index, source_id, symbol, filepath, structure_type, structure_path)
+        start, size = self._validated_range(symbol, actual_file_size)
+        if size > RULES_CONFIG.max_extraction_structure_size:
+            raise ExtractionLimitExceeded(details={
+                "scope": "source_structure",
+                "limit_bytes": RULES_CONFIG.max_extraction_structure_size,
+                "actual_bytes": size,
+            })
+        raw = accessor.read_bytes(resolved, start, size, filepath)
+        try:
+            content = raw.decode(source_file.encoding)
+        except (LookupError, UnicodeError) as exc:
+            raise InvalidArtifact(details={"artifact": "source_file", "filepath": filepath}) from exc
+        return {
+            "filepath": filepath, "structure_type": structure_type.value,
+            "structure_path": structure_path, "source_id": source_id, "content": content,
+        }

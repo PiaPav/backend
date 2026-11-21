@@ -41,14 +41,6 @@ class ToolCall(BaseModel):
     type: Literal["function"] = "function"
 
 
-# ---------- Tool data ----------
-
-class ToolExecuteData(BaseModel):
-    status: Literal["success", "error", "deny"]
-    msg: str | None = None
-    result: str | None = None
-    retryable: bool | None = None
-
 # ---------- Messages ----------
 
 class Prompt(BaseModel):
