@@ -1,7 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Mapping
+from threading import Lock
+from typing import Any, Callable, Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -12,6 +13,8 @@ class AnalysisContext:
     source_index_path: Path
     graph_fingerprint: str
     project_fingerprint: str
+    _cache: dict[str, Any] = field(default_factory=dict, init=False, repr=False, compare=False)
+    _cache_lock: Lock = field(default_factory=Lock, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -20,3 +23,9 @@ class AnalysisContext:
         object.__setattr__(
             self, "metrics_profiles", MappingProxyType(dict(self.metrics_profiles))
         )
+
+    def get_or_create_cached(self, key: str, factory: Callable[[], Any]) -> Any:
+        with self._cache_lock:
+            if key not in self._cache:
+                self._cache[key] = factory()
+            return self._cache[key]

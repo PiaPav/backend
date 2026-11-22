@@ -1,0 +1,16 @@
+{
+  "type": "function",
+  "function": {
+    "name": "GET-GRAPH-NODE",
+    "description": "Получить полный узел профиля canonical.full по точному ID",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "NODE-ID": {"type": "string", "description": "Непустой регистрозависимый ID узла"}
+      },
+      "required": ["NODE-ID"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+}

@@ -15,6 +15,8 @@ class ToolName(StrEnum):
     Get_Content = "GET-CONTENT"
     Get_Code_Range = "GET-CODE-RANGE"
     Get_Structure = "GET-STRUCTURE"
+    Find_Graph_Nodes = "FIND-GRAPH-NODES"
+    Get_Graph_Node = "GET-GRAPH-NODE"
 
 
 class DeepseekModels(StrEnum):

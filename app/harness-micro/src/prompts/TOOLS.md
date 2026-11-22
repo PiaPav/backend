@@ -47,3 +47,25 @@ GET-STRUCTURE <FILEPATH> <STRUCTURE-TYPE> <STRUCTURE-PATH>
   `FUNCTION` - название функции (пример: `load_config`),
   `METHOD` - название класса и метода (пример: `ProjectService.delete_project`),
   `CONSTANT` - название константы (пример: `ERROR_SCHEMA`)
+
+### Найти узлы графа
+
+```
+FIND-GRAPH-NODES <QUERY> [KIND] [PATH] [LIMIT]
+```
+
+Поиск выполняется в `canonical.full`: `QUERY` — непустая casefold-подстрока
+`qualified_name` без trim и Unicode-нормализации. `KIND` и `PATH` — точные
+AND-фильтры (`PATH` — регистрозависимый относительный POSIX-путь). Совпадения не
+дедуплицируются, сортируются по имени и ID, затем ограничиваются `LIMIT` (по
+умолчанию 20, максимум 100); `completeness.total` содержит число до ограничения.
+
+### Получить узел графа
+
+```
+GET-GRAPH-NODE <NODE-ID>
+```
+
+`NODE-ID` непустой и сравнивается точно, без trim, casefold или нормализации.
+Возвращается полный объект узла `canonical.full`; частичная выдача запрещена.
+Превышение общего размера ответа даёт `extraction_limit_exceeded`.

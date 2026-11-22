@@ -6,6 +6,8 @@ from tools_engine.interface.tool import AbstractTool
 from tools_engine.tools.get_content import GetContent
 from tools_engine.tools.get_code_range import GetCodeRange
 from tools_engine.tools.get_structure import GetStructure
+from tools_engine.tools.find_graph_nodes import FindGraphNodes
+from tools_engine.tools.get_graph_node import GetGraphNode
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +22,8 @@ TOOL_REGISTRY = (
     ToolDefinition(ToolName.Get_Content, GetContent, _PROMPTS / "get-content.json"),
     ToolDefinition(ToolName.Get_Code_Range, GetCodeRange, _PROMPTS / "get-code-range.json"),
     ToolDefinition(ToolName.Get_Structure, GetStructure, _PROMPTS / "get-structure.json"),
+    ToolDefinition(ToolName.Find_Graph_Nodes, FindGraphNodes, _PROMPTS / "find-graph-nodes.json"),
+    ToolDefinition(ToolName.Get_Graph_Node, GetGraphNode, _PROMPTS / "get-graph-node.json"),
 )
 
 

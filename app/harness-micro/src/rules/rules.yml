@@ -3,3 +3,5 @@ tools_rules:
   max_extraction_structure_size: 1_000 # В байтах
   max_tool_result_size: 65_536 # Полная UTF-8 сериализация ToolResult
   max_code_range_lines: 200 # Максимум строк в ответе GET-CODE-RANGE
+  default_graph_search_limit: 20
+  max_graph_search_limit: 100

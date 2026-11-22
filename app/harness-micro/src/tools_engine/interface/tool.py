@@ -66,3 +66,15 @@ class InvalidArtifact(ToolError):
     default_code = "invalid_artifact"
     default_message = "Артефакт повреждён или имеет неверный формат"
     default_retryable = False
+
+
+class ProfileNotFound(ToolError):
+    default_code = "profile_not_found"
+    default_message = "Профиль не найден"
+    default_retryable = True
+
+
+class NodeNotFound(ToolError):
+    default_code = "node_not_found"
+    default_message = "Узел графа не найден"
+    default_retryable = True

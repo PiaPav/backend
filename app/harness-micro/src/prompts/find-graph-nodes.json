@@ -1,0 +1,19 @@
+{
+  "type": "function",
+  "function": {
+    "name": "FIND-GRAPH-NODES",
+    "description": "Найти узлы профиля canonical.full по qualified_name",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "QUERY": {"type": "string", "description": "Непустая подстрока qualified_name; регистр сравнивается через casefold"},
+        "KIND": {"type": "string", "description": "Точный вид узла", "enum": ["file", "class", "field", "method", "function", "constant"]},
+        "PATH": {"type": "string", "description": "Точный относительный POSIX-путь"},
+        "LIMIT": {"type": "integer", "description": "Максимум возвращаемых узлов", "minimum": 1, "maximum": 100}
+      },
+      "required": ["QUERY"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+}
