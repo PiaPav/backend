@@ -78,3 +78,9 @@ class NodeNotFound(ToolError):
     default_code = "node_not_found"
     default_message = "Узел графа не найден"
     default_retryable = True
+
+
+class MetricPathNotFound(ToolError):
+    default_code = "metric_path_not_found"
+    default_message = "Путь показателя не найден"
+    default_retryable = True

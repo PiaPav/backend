@@ -8,6 +8,7 @@ from tools_engine.tools.get_code_range import GetCodeRange
 from tools_engine.tools.get_structure import GetStructure
 from tools_engine.tools.find_graph_nodes import FindGraphNodes
 from tools_engine.tools.get_graph_node import GetGraphNode
+from tools_engine.tools.get_metrics_item import GetMetricsItem
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +25,7 @@ TOOL_REGISTRY = (
     ToolDefinition(ToolName.Get_Structure, GetStructure, _PROMPTS / "get-structure.json"),
     ToolDefinition(ToolName.Find_Graph_Nodes, FindGraphNodes, _PROMPTS / "find-graph-nodes.json"),
     ToolDefinition(ToolName.Get_Graph_Node, GetGraphNode, _PROMPTS / "get-graph-node.json"),
+    ToolDefinition(ToolName.Get_Metrics_Item, GetMetricsItem, _PROMPTS / "get-metrics-item.json"),
 )
 
 

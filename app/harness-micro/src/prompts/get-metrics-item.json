@@ -1,0 +1,17 @@
+{
+  "type": "function",
+  "function": {
+    "name": "GET-METRICS-ITEM",
+    "description": "Получить значение из выбранного профиля метрик по RFC 6901 JSON Pointer",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "PROFILE-ID": {"type": "string", "minLength": 1, "description": "Точный непустой идентификатор профиля"},
+        "METRIC-PATH": {"type": "string", "description": "JSON Pointer; пустая строка обозначает корень"}
+      },
+      "required": ["PROFILE-ID", "METRIC-PATH"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+}
