@@ -20,6 +20,8 @@ class ToolName(StrEnum):
     Get_Metrics_Item = "GET-METRICS-ITEM"
     Get_Graph_Subgraph = "GET-GRAPH-SUBGRAPH"
     Get_Graph_References = "GET-GRAPH-REFERENCES"
+    Get_Graph = "GET-GRAPH"
+    Get_Metrics = "GET-METRICS"
 
 
 class DeepseekModels(StrEnum):

@@ -18,6 +18,9 @@ class MetricsAccessor:
         key = f"metrics:{self.profile_id}:v1"
         return self.context.get_or_create_cached(key, self._load)
 
+    def raw(self) -> dict[str, Any]:
+        return copy.deepcopy(self.prepared())
+
     def _load(self) -> dict[str, Any]:
         path = self.context.metrics_profiles.get(self.profile_id)
         if path is None:

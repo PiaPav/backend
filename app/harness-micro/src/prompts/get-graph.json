@@ -1,0 +1,16 @@
+{
+  "type": "function",
+  "function": {
+    "name": "GET-GRAPH",
+    "description": "Получить целиком выбранный каталогизированный JSON-профиль графа",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "PROFILE-ID": {"type": "string", "minLength": 1, "description": "Точный непустой идентификатор профиля"}
+      },
+      "required": ["PROFILE-ID"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+}

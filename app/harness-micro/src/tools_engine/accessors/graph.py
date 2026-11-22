@@ -54,13 +54,16 @@ class GraphAccessor:
         return self.context.get_or_create_cached(self.CACHE_KEY, self._load)
 
     def raw(self, profile_id: str) -> dict[str, Any]:
-        if profile_id not in PROFILE_RELATIONS or profile_id not in self.context.graph_profiles:
+        if profile_id not in self.context.graph_profiles:
             raise ProfileNotFound(details={"profile_id": profile_id})
-        return self.context.get_or_create_cached(
+        value = self.context.get_or_create_cached(
             f"graph:raw:{profile_id}:v1", lambda: self._read(profile_id)
         )
+        return copy.deepcopy(value)
 
     def topology(self, profile_id: str) -> GraphTopology:
+        if profile_id not in PROFILE_RELATIONS:
+            raise ProfileNotFound(details={"profile_id": profile_id})
         return self.context.get_or_create_cached(
             f"graph:topology:{profile_id}:v1", lambda: self._topology(profile_id)
         )

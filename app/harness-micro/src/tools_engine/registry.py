@@ -11,6 +11,8 @@ from tools_engine.tools.get_graph_node import GetGraphNode
 from tools_engine.tools.get_metrics_item import GetMetricsItem
 from tools_engine.tools.get_graph_subgraph import GetGraphSubgraph
 from tools_engine.tools.get_graph_references import GetGraphReferences
+from tools_engine.tools.get_graph import GetGraph
+from tools_engine.tools.get_metrics import GetMetrics
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +32,8 @@ TOOL_REGISTRY = (
     ToolDefinition(ToolName.Get_Metrics_Item, GetMetricsItem, _PROMPTS / "get-metrics-item.json"),
     ToolDefinition(ToolName.Get_Graph_Subgraph, GetGraphSubgraph, _PROMPTS / "get-graph-subgraph.json"),
     ToolDefinition(ToolName.Get_Graph_References, GetGraphReferences, _PROMPTS / "get-graph-references.json"),
+    ToolDefinition(ToolName.Get_Graph, GetGraph, _PROMPTS / "get-graph.json"),
+    ToolDefinition(ToolName.Get_Metrics, GetMetrics, _PROMPTS / "get-metrics.json"),
 )
 
 
