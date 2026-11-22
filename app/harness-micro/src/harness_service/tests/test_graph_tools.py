@@ -78,6 +78,16 @@ class GraphToolsTests(unittest.TestCase):
         self.assertEqual(self.call(context, "GET-GRAPH-NODE", {"NODE-ID": "X"}).diagnostics[0].code,
                          "node_not_found")
 
+    def test_get_graph_node_rejects_invalid_arguments_as_retryable(self):
+        context = self.context([self.node("x")])
+        cases = ({}, {"NODE-ID": ""}, {"NODE-ID": 1},
+                 {"NODE-ID": "x", "EXTRA": True})
+        for arguments in cases:
+            with self.subTest(arguments=arguments):
+                result = self.call(context, "GET-GRAPH-NODE", arguments)
+                self.assertEqual(result.diagnostics[0].code, "invalid_tool_arguments")
+                self.assertTrue(result.diagnostics[0].retryable)
+
     def test_empty_query_exact_limit_boundary_and_filters_precede_total(self):
         nodes = [self.node(str(i), kind="method" if i < 3 else "class",
                            name=f"pkg.Match{i}", path="pkg/a.py" if i != 2 else "pkg/b.py")

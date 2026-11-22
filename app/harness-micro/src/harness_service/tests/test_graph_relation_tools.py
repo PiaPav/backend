@@ -75,6 +75,22 @@ class GraphRelationToolsTests(unittest.TestCase):
         arguments.update(changes)
         return self.call(context, "GET-GRAPH-REFERENCES", arguments)
 
+    def test_get_graph_references_rejects_invalid_arguments_as_retryable(self):
+        context = self.context()
+        cases = (
+            {},
+            {"OWNER-NODE-ID": ""},
+            {"OWNER-NODE-ID": 1},
+            {"OWNER-NODE-ID": "function", "REFERENCE-TYPE": "edge"},
+            {"OWNER-NODE-ID": "function", "STATUS": "missing"},
+            {"OWNER-NODE-ID": "function", "EXTRA": True},
+        )
+        for arguments in cases:
+            with self.subTest(arguments=arguments):
+                result = self.call(context, "GET-GRAPH-REFERENCES", arguments)
+                self.assertEqual(result.diagnostics[0].code, "invalid_tool_arguments")
+                self.assertTrue(result.diagnostics[0].retryable)
+
     def test_canonical_root_depth_zero_self_loop_and_induced_parallel_edges(self):
         graph = self.canonical()
         graph["edges"] = [self.edge("z", "file", "file"),

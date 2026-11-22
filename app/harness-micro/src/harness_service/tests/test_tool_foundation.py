@@ -143,6 +143,15 @@ class ToolFoundationTests(unittest.TestCase):
             self.assertEqual(result.diagnostics[0].code, "source_object_not_found")
             self.assertNotIn(str(self.tmp_path), result.to_json())
 
+    def test_valid_missing_source_index_path_is_retryable_and_does_not_leak_path(self) -> None:
+        index, _ = write_source(self.tmp_path)
+
+        result = run(ToolsEngine(), context(index), "GET-CONTENT", {"FILEPATH": "missing.py"})
+
+        self.assertEqual(result.diagnostics[0].code, "source_object_not_found")
+        self.assertTrue(result.diagnostics[0].retryable)
+        self.assertEqual(result.diagnostics[0].details, {"filepath": "missing.py"})
+
     def test_missing_structure_and_bad_method_format(self) -> None:
         index, _ = write_source(self.tmp_path)
         engine = ToolsEngine()
