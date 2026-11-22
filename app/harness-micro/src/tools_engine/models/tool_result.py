@@ -19,6 +19,13 @@ class Diagnostic:
 
 
 @dataclass(frozen=True, slots=True)
+class ToolOutput:
+    result: Any
+    profile_id: str | None = None
+    completeness: Completeness | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ToolResult:
     status: Literal["success", "error"]
     profile_id: str | None

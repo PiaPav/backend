@@ -4,6 +4,7 @@ from pathlib import Path
 from response_models.models import ToolData, ToolName
 from tools_engine.interface.tool import AbstractTool
 from tools_engine.tools.get_content import GetContent
+from tools_engine.tools.get_code_range import GetCodeRange
 from tools_engine.tools.get_structure import GetStructure
 
 
@@ -17,6 +18,7 @@ class ToolDefinition:
 _PROMPTS = Path(__file__).resolve().parent.parent / "prompts"
 TOOL_REGISTRY = (
     ToolDefinition(ToolName.Get_Content, GetContent, _PROMPTS / "get-content.json"),
+    ToolDefinition(ToolName.Get_Code_Range, GetCodeRange, _PROMPTS / "get-code-range.json"),
     ToolDefinition(ToolName.Get_Structure, GetStructure, _PROMPTS / "get-structure.json"),
 )
 

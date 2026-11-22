@@ -1,0 +1,29 @@
+{
+  "type": "function",
+  "function": {
+    "name": "GET-CODE-RANGE",
+    "description": "Получить физический диапазон строк индексированного Python-файла",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "FILEPATH": {
+          "type": "string",
+          "description": "Путь к индексированному Python-файлу, части пути разделены /"
+        },
+        "START-LINE": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Первая строка диапазона (1-based, включительно)"
+        },
+        "END-LINE": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Последняя строка диапазона (1-based, включительно)"
+        }
+      },
+      "required": ["FILEPATH", "START-LINE", "END-LINE"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+}

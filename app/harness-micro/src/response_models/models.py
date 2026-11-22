@@ -13,6 +13,7 @@ class StructureType(StrEnum):
 
 class ToolName(StrEnum):
     Get_Content = "GET-CONTENT"
+    Get_Code_Range = "GET-CODE-RANGE"
     Get_Structure = "GET-STRUCTURE"
 
 
@@ -70,6 +71,8 @@ class ToolParameter(BaseModel):
     description: str
     enum: list[Any] | None = None
     items: dict[str, Any] | None = None
+    minimum: int | float | None = None
+    maximum: int | float | None = None
 
 
 class ToolParameters(BaseModel):

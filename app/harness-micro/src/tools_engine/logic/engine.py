@@ -9,7 +9,7 @@ from tools_engine.interface.tool import (
     ExtractionLimitExceeded, InvalidArtifact, InvalidToolArguments, ToolError, UnknownTool,
 )
 from tools_engine.models.analysis_context import AnalysisContext
-from tools_engine.models.tool_result import ToolResult
+from tools_engine.models.tool_result import ToolOutput, ToolResult
 from tools_engine.registry import TOOL_REGISTRY, ToolDefinition, validate_registry
 
 
@@ -58,6 +58,12 @@ class ToolsEngine(EngineInterface):
                 raise InvalidToolArguments("Неверный тип аргумента", {"argument": name, "expected": parameter.type.value})
             if parameter.enum is not None and value not in parameter.enum:
                 raise InvalidToolArguments("Недопустимое значение аргумента", {"argument": name, "allowed": parameter.enum})
+            if parameter.minimum is not None and value < parameter.minimum:
+                raise InvalidToolArguments("Значение аргумента меньше допустимого", {
+                    "argument": name, "minimum": parameter.minimum})
+            if parameter.maximum is not None and value > parameter.maximum:
+                raise InvalidToolArguments("Значение аргумента больше допустимого", {
+                    "argument": name, "maximum": parameter.maximum})
         return arguments
 
     async def entry_tool(self, analysis_context: AnalysisContext, name: str, arguments: str) -> ToolResult:
@@ -75,7 +81,13 @@ class ToolsEngine(EngineInterface):
                 raise InvalidToolArguments("Аргументы не соответствуют формату JSON") from exc
             context = self._validate(raw_arguments, self._schemas[tool_name])
             result = await asyncio.to_thread(tool.execute, analysis_context, **context)
-            tool_result = ToolResult.success(result)
+            if isinstance(result, ToolOutput):
+                tool_result = ToolResult.success(
+                    result.result, profile_id=result.profile_id,
+                    completeness=result.completeness,
+                )
+            else:
+                tool_result = ToolResult.success(result)
         except ToolError as exc:
             tool_result = ToolResult.failure(exc)
         except Exception:
