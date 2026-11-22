@@ -5,6 +5,8 @@ import yaml
 
 
 MAX_GRAPH_SEARCH_LIMIT = 100
+MAX_GRAPH_DEPTH = 10
+MAX_GRAPH_ITEM_LIMIT = 1000
 
 
 @dataclass
@@ -15,6 +17,9 @@ class RulesConfig:
     max_code_range_lines: int
     default_graph_search_limit: int
     max_graph_search_limit: int
+    max_graph_subgraph_depth: int
+    max_graph_subgraph_nodes: int
+    max_graph_references_limit: int
 
 
 config_path = Path(__file__).resolve().with_name("rules.yml")
@@ -56,4 +61,22 @@ RULES_CONFIG = RulesConfig(
     ),
     default_graph_search_limit=_default_graph_search_limit,
     max_graph_search_limit=_max_graph_search_limit,
+    max_graph_subgraph_depth=_positive_int(
+        yaml_config.get("tools_rules", {}).get("max_graph_subgraph_depth", 5),
+        "max_graph_subgraph_depth",
+    ),
+    max_graph_subgraph_nodes=_positive_int(
+        yaml_config.get("tools_rules", {}).get("max_graph_subgraph_nodes", 100),
+        "max_graph_subgraph_nodes",
+    ),
+    max_graph_references_limit=_positive_int(
+        yaml_config.get("tools_rules", {}).get("max_graph_references_limit", 100),
+        "max_graph_references_limit",
+    ),
 )
+
+if RULES_CONFIG.max_graph_subgraph_depth > MAX_GRAPH_DEPTH:
+    raise ValueError("tools_rules.max_graph_subgraph_depth exceeds hard ceiling")
+if (RULES_CONFIG.max_graph_subgraph_nodes > MAX_GRAPH_ITEM_LIMIT
+        or RULES_CONFIG.max_graph_references_limit > MAX_GRAPH_ITEM_LIMIT):
+    raise ValueError("graph item limit exceeds hard ceiling")

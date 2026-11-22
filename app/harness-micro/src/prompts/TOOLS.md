@@ -81,3 +81,26 @@ Pointer относительно фактического корня артеф�
 корень; fragment-форма `#` не поддерживается). Данные, включая структуры
 `$columns`/`$rows`, возвращаются без преобразования: их DTO-контракт пока
 неоднозначен.
+
+### Получить ограниченный подграф
+
+```
+GET-GRAPH-SUBGRAPH <PROFILE-ID> <NODE-ID> <DEPTH> [RELATION-TYPE] [DIRECTION]
+```
+
+Профиль выбирается точно. `DIRECTION` принимает `incoming`, `outgoing` или
+`both` и по умолчанию равен `both`. Инструмент выполняет ограниченный BFS после
+фильтрации вида связи и возвращает узлы с расстояниями и induced набор рёбер.
+При `DEPTH=0` возвращаются seed и его self-loops. Ограничение и неполнота явно
+отражаются в `counts` и `completeness`.
+
+### Получить принадлежащие узлу ссылки
+
+```
+GET-GRAPH-REFERENCES <OWNER-NODE-ID> [REFERENCE-TYPE] [STATUS]
+```
+
+Инструмент читает `canonical.full`. `REFERENCE-TYPE`: `call`, `import`, `type`.
+`STATUS`: `exact`, `ambiguous`, `external`, `dynamic`, `unresolved`. Фильтры
+соединяются через AND; возвращаются только непосредственные occurrences
+владельца, без превращения кандидатов неоднозначной ссылки в точные связи.

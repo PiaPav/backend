@@ -40,14 +40,14 @@ class GraphToolsTests(unittest.TestCase):
         return asyncio.run(ToolsEngine().entry_tool(context, name, json.dumps(arguments)))
 
     def test_all_kinds_projection_get_extras_and_completeness(self):
-        kinds = ("file", "class", "field", "method", "function", "constant")
+        kinds = ("file", "module", "class", "field", "method", "function", "constant")
         nodes = [self.node(str(i), kind, f"pkg.Item{i}", extra={"i": i})
                  for i, kind in enumerate(kinds)]
         context = self.context(nodes)
         found = self.call(context, "FIND-GRAPH-NODES", {"QUERY": "item", "LIMIT": 1})
         self.assertEqual(set(found.result["nodes"][0]),
                          {"id", "kind", "qualified_name", "path", "location"})
-        self.assertEqual((found.completeness.total, found.completeness.returned), (6, 1))
+        self.assertEqual((found.completeness.total, found.completeness.returned), (7, 1))
         self.assertTrue(found.completeness.truncated)
         got = self.call(context, "GET-GRAPH-NODE", {"NODE-ID": "0"})
         self.assertEqual(got.result["extra"], {"i": 0})

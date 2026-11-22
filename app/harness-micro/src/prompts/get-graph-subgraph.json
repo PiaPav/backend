@@ -1,0 +1,20 @@
+{
+  "type": "function",
+  "function": {
+    "name": "GET-GRAPH-SUBGRAPH",
+    "description": "Получить ограниченный подграф выбранного графового профиля",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "PROFILE-ID": {"type": "string", "description": "Точный идентификатор профиля", "enum": ["canonical.full", "structure.declarations", "dependency.files", "dependency.architecture", "calls.topology", "calls.detailed", "types.topology", "objects.metrics_basis"]},
+        "NODE-ID": {"type": "string", "description": "Точный идентификатор начального узла"},
+        "DEPTH": {"type": "integer", "description": "Глубина обхода", "minimum": 0, "maximum": 10},
+        "RELATION-TYPE": {"type": "string", "description": "Необязательный точный вид связи", "enum": ["contains", "imports", "inherits", "field_type", "accesses_field", "calls", "awaits"]},
+        "DIRECTION": {"type": "string", "description": "Направление достижимости; по умолчанию both", "enum": ["incoming", "outgoing", "both"]}
+      },
+      "required": ["PROFILE-ID", "NODE-ID", "DEPTH"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+}

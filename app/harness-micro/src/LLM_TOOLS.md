@@ -18,6 +18,18 @@
 | `GET-GRAPH-SUBGRAPH <PROFILE-ID> <NODE-ID> <DEPTH> [RELATION-TYPE] [DIRECTION]` | Получить ограниченный подграф вокруг объекта. `DIRECTION` принимает `incoming`, `outgoing` или `both`. |
 | `GET-GRAPH-REFERENCES <OWNER-NODE-ID> [REFERENCE-TYPE] [STATUS]` | Получить ссылки, принадлежащие объекту, включая однозначные, неоднозначные и неразрешённые случаи. |
 
+`GET-GRAPH-SUBGRAPH` поддерживает `canonical.full` и node/edge graph views,
+перечисленные в `GRAPH_RELATION_TOOLS_CONTRACT.md`. `DEPTH=0` возвращает seed и
+его self-loops. Обход выполняется BFS после фильтрации `RELATION-TYPE`;
+`DIRECTION` влияет на достижимость, а результат содержит полный induced набор
+рёбер между выданными узлами. Узлы ограничиваются настроенным лимитом, counts и
+`completeness` сообщают полные и возвращённые количества узлов и рёбер.
+
+`GET-GRAPH-REFERENCES` читает `canonical.full`. `REFERENCE-TYPE` принимает
+`call`, `import` или `type`, `STATUS` — `exact`, `ambiguous`, `external`,
+`dynamic` или `unresolved`. Возвращаются только непосредственно принадлежащие
+узлу occurrences; кандидаты неоднозначной ссылки не считаются точными целями.
+
 ## Показатели
 
 | Инструмент | Описание |

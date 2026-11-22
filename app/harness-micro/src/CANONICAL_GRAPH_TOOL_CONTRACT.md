@@ -1,7 +1,8 @@
 # Контракт графовых инструментов `canonical.full` v1
 
 Документ фиксирует минимальный consumer contract харнесса для инструментов
-`FIND-GRAPH-NODES` и `GET-GRAPH-NODE`. Основанием служат
+`FIND-GRAPH-NODES` и `GET-GRAPH-NODE`. Контракт обхода рёбер и references
+описан отдельно в `GRAPH_RELATION_TOOLS_CONTRACT.md`. Основанием служат
 `HARNESS_REWORK_PLAN.md`, `LLM_TOOLS.md` и реальная форма
 `tests/fixtures/profiles/graph__canonical_full__v1.json`. Это не полная схема
 Graph DTO: остальные разделы и дополнительные поля узлов сохраняются, но этими
@@ -12,8 +13,10 @@ Graph DTO: остальные разделы и дополнительные п�
 Корень является JSON-объектом с `schema_version: 1` и массивом `nodes`. Каждый
 узел обязан содержать:
 
-- непустые строки `id`, `qualified_name` и `path`;
-- `kind`: `file`, `class`, `field`, `method`, `function` или `constant`;
+- непустые строки `id` и `path`; `qualified_name` обязан быть строкой, но по
+  producer contract может быть пустым;
+- `kind`: `file`, `module`, `class`, `field`, `method`, `function` или
+  `constant`;
 - объект `location` с `path`, равным `node.path`, положительным целым `line` и
   неотрицательным целым `column`;
 - уникальный среди узлов `id`.

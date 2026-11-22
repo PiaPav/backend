@@ -1,0 +1,18 @@
+{
+  "type": "function",
+  "function": {
+    "name": "GET-GRAPH-REFERENCES",
+    "description": "Получить непосредственно принадлежащие узлу ссылки canonical.full",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "OWNER-NODE-ID": {"type": "string", "description": "Точный идентификатор узла-владельца"},
+        "REFERENCE-TYPE": {"type": "string", "description": "Тип ссылки", "enum": ["call", "import", "type"]},
+        "STATUS": {"type": "string", "description": "Статус разрешения", "enum": ["exact", "ambiguous", "external", "dynamic", "unresolved"]}
+      },
+      "required": ["OWNER-NODE-ID"],
+      "additionalProperties": false
+    },
+    "strict": true
+  }
+}

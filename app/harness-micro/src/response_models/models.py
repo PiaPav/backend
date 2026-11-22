@@ -18,6 +18,8 @@ class ToolName(StrEnum):
     Find_Graph_Nodes = "FIND-GRAPH-NODES"
     Get_Graph_Node = "GET-GRAPH-NODE"
     Get_Metrics_Item = "GET-METRICS-ITEM"
+    Get_Graph_Subgraph = "GET-GRAPH-SUBGRAPH"
+    Get_Graph_References = "GET-GRAPH-REFERENCES"
 
 
 class DeepseekModels(StrEnum):

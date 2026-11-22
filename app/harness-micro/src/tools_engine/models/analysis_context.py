@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from threading import Lock
+from threading import RLock
 from typing import Any, Callable, Mapping
 
 
@@ -14,7 +14,7 @@ class AnalysisContext:
     graph_fingerprint: str
     project_fingerprint: str
     _cache: dict[str, Any] = field(default_factory=dict, init=False, repr=False, compare=False)
-    _cache_lock: Lock = field(default_factory=Lock, init=False, repr=False, compare=False)
+    _cache_lock: RLock = field(default_factory=RLock, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(
