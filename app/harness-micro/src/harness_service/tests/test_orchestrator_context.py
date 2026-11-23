@@ -10,18 +10,18 @@ class ContextCapturingOrchestrator(Orchestrator):
         self.tasks = {}
         self.received = None
 
-    async def run_loop(self, unique_id, graph, metrix, analysis_context):
-        self.received = (unique_id, graph, metrix, analysis_context)
+    async def run_loop(self, unique_id, graph_overview, metrics_overview, analysis_context):
+        self.received = (unique_id, graph_overview, metrics_overview, analysis_context)
         return "result"
 
 
-def test_orchestrator_builds_context_and_uses_full_profiles(tmp_path: Path) -> None:
+def test_orchestrator_builds_context_and_uses_overview_profiles(tmp_path: Path) -> None:
     graph = tmp_path / "graph.json"
     metrics = tmp_path / "metrics.json"
     graph.write_text("graph content", encoding="utf-8")
     metrics.write_text("metrics content", encoding="utf-8")
     data = HarnessInputData(
-        7, {"canonical.full": graph}, {"metrics.full": metrics},
+        7, {"aggregate.overview": graph}, {"metrics.overview": metrics},
         tmp_path / "index.json", "a" * 64, "b" * 64,
     )
     orchestrator = ContextCapturingOrchestrator()

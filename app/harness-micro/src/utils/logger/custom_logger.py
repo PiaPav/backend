@@ -1,4 +1,5 @@
 import asyncio
+from collections import deque
 import json
 import logging
 import sys
@@ -12,8 +13,11 @@ class DBHandler(logging.Handler):
 
     def __init__(self):
         super().__init__()
-        self.queue = asyncio.Queue()
+        # Pending records must not belong to an event loop: the application can
+        # be invoked by sequential asyncio.run() calls using the same logger.
+        self.queue = deque()
         self.worker_task = None
+        self._worker_loop = None
 
     def emit(self, record):
         try:
@@ -26,22 +30,28 @@ class DBHandler(logging.Handler):
                 description=message["description"],
             )
 
-            # Запускаем worker при первом логе.
-            if self.worker_task is None or self.worker_task.done():
+            self.queue.append(data)
+            try:
                 loop = asyncio.get_running_loop()
-                self.worker_task = loop.create_task(self._worker())
-
-            self.queue.put_nowait(data)
+            except RuntimeError:
+                # Keep synchronous log records pending until an async flush.
+                return
+            self._ensure_worker(loop)
 
         except Exception:
             self.handleError(record)
 
     async def _worker(self):
-        while True:
-            data = await self.queue.get()
+        while self.queue:
+            data = self.queue[0]
 
             try:
                 await HarnessLogs.write_log(data)
+
+            except asyncio.CancelledError:
+                # Keep the record pending so a worker in a subsequent event
+                # loop can retry it.
+                raise
 
             except Exception as exc:
                 print(
@@ -50,10 +60,25 @@ class DBHandler(logging.Handler):
                 )
 
             finally:
-                self.queue.task_done()
+                if not asyncio.current_task().cancelling():
+                    self.queue.popleft()
+
+    def _ensure_worker(self, loop=None):
+        if loop is None:
+            loop = asyncio.get_running_loop()
+        if self.worker_task is not None and self._worker_loop is loop:
+            if not self.worker_task.done():
+                return
+
+        # A task from an earlier asyncio.run() must never be awaited here.
+        # Its pending record remains at the head of the loop-neutral deque.
+        self._worker_loop = loop
+        self.worker_task = loop.create_task(self._worker())
 
     async def flush_async(self):
-        await self.queue.join()
+        while self.queue:
+            self._ensure_worker()
+            await self.worker_task
 
 
 

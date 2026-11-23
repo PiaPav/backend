@@ -12,8 +12,12 @@ class Validator(ValidatorInterface):
         validate_registry(registry)
         self.registry = registry
 
-    def create_start_messages(self, graph, metrix) -> list[Prompt]:
-        """Создает системный промт и сообщение с графом и метриками"""
+    def create_start_messages(
+        self, graph_overview: str, metrics_overview: str,
+        graph_profile_ids: list[str], metrics_profile_ids: list[str],
+        max_tool_calls: int,
+    ) -> list[Prompt]:
+        """Создаёт prompt только из обзорных профилей и каталогов."""
         prompts: list[Prompt] = []
 
         instructions = ""
@@ -29,13 +33,14 @@ class Validator(ValidatorInterface):
 
         content = ""
 
-        content += "\n===GRAPH===\n"
-        content += graph
-        content += "\n===GRAPH===\n"
-
-        content += "\n===METRIX===\n"
-        content += metrix
-        content += "\n===METRIX===\n"
+        content += f"\n===TOOL-BUDGET===\n{max_tool_calls}\n===TOOL-BUDGET===\n"
+        content += "\n===GRAPH-PROFILES===\n" + "\n".join(graph_profile_ids) + "\n===GRAPH-PROFILES===\n"
+        content += "\n===METRICS-PROFILES===\n" + "\n".join(metrics_profile_ids) + "\n===METRICS-PROFILES===\n"
+        content += "\n===AGGREGATE-OVERVIEW===\n" + graph_overview + "\n===AGGREGATE-OVERVIEW===\n"
+        content += "\n===METRICS-OVERVIEW===\n" + metrics_overview + "\n===METRICS-OVERVIEW===\n"
+        content += ("\nОбзорные профили могут быть неполными или усечёнными: учитывай их признаки "
+                    "completeness и не считай отсутствие элемента доказательством отсутствия в полном профиле. "
+                    "Полные профили доступны только через инструменты.\n")
 
         prompt = Prompt(
             role=Role.system,

@@ -12,6 +12,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Mapping, Protocol
 
+from core_server.interfaces.errors import InvalidHarnessInput
 from harness_service.harness_runner import HarnessRequest, HarnessRunner
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -314,7 +315,7 @@ class HarnessHandler:
                 key=key, claim_token=claim.claim_token,
                 output_event=output_event,
             )
-        except RejectedInputError:
+        except (RejectedInputError, InvalidHarnessInput):
             return DeliveryDecision.REJECT
         except Exception:
             return DeliveryDecision.RETRY

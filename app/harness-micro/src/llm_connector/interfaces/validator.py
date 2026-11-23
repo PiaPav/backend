@@ -10,7 +10,11 @@ class ValidatorInterface(ABC):
         pass
 
     @abstractmethod
-    def create_start_messages(self, graph, metrix) -> list[Prompt]:
+    def create_start_messages(
+        self, graph_overview: str, metrics_overview: str,
+        graph_profile_ids: list[str], metrics_profile_ids: list[str],
+        max_tool_calls: int,
+    ) -> list[Prompt]:
         """Создает и валидирует сообщение"""
         pass
 

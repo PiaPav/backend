@@ -17,7 +17,7 @@ from harness_service.tests import (
 class ExistingRegressionTests(unittest.TestCase):
     def test_orchestrator_context(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            test_orchestrator_context.test_orchestrator_builds_context_and_uses_full_profiles(Path(directory))
+            test_orchestrator_context.test_orchestrator_builds_context_and_uses_overview_profiles(Path(directory))
 
     def test_tools_context(self) -> None:
         test_tools_context.test_tools_engine_passes_analysis_context_to_tool()
@@ -53,16 +53,16 @@ class ExistingRegressionTests(unittest.TestCase):
         test_handler.test_profile_payload_requires_mvp_profiles_and_rejects_mixed_contract()
 
     def test_runner_state(self) -> None:
-        test_runner.test_runner_uses_orchestrator_state_and_closes_session()
+        test_runner.test_runner_only_maps_request_and_returns_result()
 
     def test_runner_core_failure(self) -> None:
-        test_runner.test_runner_closes_session_when_core_fails()
+        test_runner.test_runner_propagates_core_failure_without_lifecycle_access()
 
     def test_runner_tenant_scope(self) -> None:
         test_runner.test_task_id_is_tenant_scoped()
 
     def test_runner_timeout(self) -> None:
-        test_runner.test_runner_times_out_and_closes_cancelled_session()
+        test_runner.test_runner_enforces_timeout()
 
 
 if __name__ == "__main__":

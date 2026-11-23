@@ -15,6 +15,19 @@ class LLMSession(AbstractLLMSession):
         if client is None:
             raise
         self.client = client
+        self.last_request: Request | None = None
+
+    async def _execute(self, request: Request) -> ModelResponse:
+        # Keep an immutable snapshot: retries must repeat the same provider
+        # operation, not turn a transient response into conversation history.
+        self.last_request = request.model_copy(deep=True)
+        response = await self.client.chat.completions.create(
+            **request.model_dump(exclude_none=True)
+        )
+        answer = ModelResponse.model_validate(response.model_dump())
+        if answer.choices[0].finish_reason != "insufficient_system_resource":
+            self.messages.append(answer.choices[0].message)
+        return answer
 
 
     async def send_start(self, messages: list[Prompt], tools: list[ToolData]) -> ModelResponse:
@@ -29,15 +42,7 @@ class LLMSession(AbstractLLMSession):
             messages=self.messages,
             tools=self.tools
         )
-        response = await self.client.chat.completions.create(**request.model_dump(exclude_none=True))
-
-        answer = ModelResponse.model_validate(
-            response.model_dump()
-        )
-
-        self.messages.append(answer.choices[0].message)
-
-        return answer
+        return await self._execute(request)
 
     async def send(self, messages: list[Prompt | ToolResponse]) -> ModelResponse:
         """Отправить запрос"""
@@ -49,15 +54,7 @@ class LLMSession(AbstractLLMSession):
             messages=self.messages,
             tools=self.tools
         )
-        response = await self.client.chat.completions.create(**request.model_dump(exclude_none=True))
-
-        answer = ModelResponse.model_validate(
-            response.model_dump()
-        )
-
-        self.messages.append(answer.choices[0].message)
-
-        return answer
+        return await self._execute(request)
 
     async def final_send(self, messages: list[Prompt | ToolResponse]) -> ModelResponse:
         """Отправить финальны запрос, гарантирующий json-ответ"""
@@ -72,31 +69,12 @@ class LLMSession(AbstractLLMSession):
             response_format={"type": "json_object"}
         )
 
-        response = await self.client.chat.completions.create(**request.model_dump(exclude_none=True))
-
-        answer = ModelResponse.model_validate(
-            response.model_dump()
-        )
-
-        self.messages.append(answer.choices[0].message)
-
-        return answer
+        return await self._execute(request)
 
     async def retry_send(self) -> ModelResponse:
-        request = Request(
-            model=CONFIG.llm.model,
-            messages=self.messages,
-            tools=self.tools
-        )
-        response = await self.client.chat.completions.create(**request.model_dump(exclude_none=True))
-
-        answer = ModelResponse.model_validate(
-            response.model_dump()
-        )
-
-        self.messages.append(answer.choices[0].message)
-
-        return answer
+        if self.last_request is None:
+            raise RuntimeError("Cannot retry before an initial request")
+        return await self._execute(self.last_request.model_copy(deep=True))
 
 
     def close(self) -> bool:

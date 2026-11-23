@@ -7,6 +7,7 @@ from llm_connector.logic.prompts_loader import PromptsLoader
 from llm_connector.logic.validator import Validator
 from tools_engine.logic.engine import ToolsEngine
 from tools_engine.registry import TOOL_REGISTRY
+from rules.rules_config import RULES_CONFIG
 
 from harness_service.harness_handler import (
     Clock,
@@ -44,6 +45,10 @@ async def build_handler(
         llm_connector=connector,
         tools_engine=tools,
         validator=Validator(PromptsLoader(), TOOL_REGISTRY),
+        max_tool_calls=RULES_CONFIG.max_tool_calls,
+        max_iterations=RULES_CONFIG.max_iterations,
+        max_start_context_size=RULES_CONFIG.max_start_context_size,
+        max_provider_retries=RULES_CONFIG.max_provider_retries,
     )
     core = Core(orchestrator=orchestrator)
     await core.start(url=llm_url, apikey=llm_api_key)

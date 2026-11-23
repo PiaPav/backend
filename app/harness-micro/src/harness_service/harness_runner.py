@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from core_server.logic.core import Core
-from core_server.models.task_models import HarnessInputData, TaskStatus
+from core_server.models.task_models import HarnessInputData
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,8 +32,7 @@ class HarnessRunner:
     """
     Адаптер над существующим Core.
 
-    Ограничивает параллелизм, устанавливает timeout и гарантированно
-    закрывает LLM-сессию.
+    Ограничивает параллелизм и устанавливает общий timeout.
     """
 
     def __init__(
@@ -67,21 +66,11 @@ class HarnessRunner:
         )
 
         async with self._semaphore:
-            try:
-                content = await asyncio.wait_for(
-                    self._core.run_task(input_data),
-                    timeout=self._timeout_seconds,
-                )
-
-                return HarnessResult(content=content)
-
-            finally:
-                task = self._core.orchestrator.tasks.get(task_id)
-                if task is not None:
-                    task.status = TaskStatus.done
-                connector = self._core.orchestrator.llm_connector
-                if task_id in connector.sessions:
-                    await connector.close_session(task_id)
+            content = await asyncio.wait_for(
+                self._core.run_task(input_data),
+                timeout=self._timeout_seconds,
+            )
+            return HarnessResult(content=content)
 
     @staticmethod
     def _make_task_id(tenant_id: str, event_id: str) -> int:

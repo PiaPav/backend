@@ -10,7 +10,8 @@ class OrchestratorInterface(ABC):
 
     @abstractmethod
     def __init__(self, llm_connector: LLMConnectorInterface, tools_engine: EngineInterface,
-                 validator: ValidatorInterface):
+                 validator: ValidatorInterface, *, max_tool_calls: int,
+                 max_iterations: int, max_start_context_size: int):
         pass
 
     @abstractmethod
@@ -19,7 +20,7 @@ class OrchestratorInterface(ABC):
         pass
 
     @abstractmethod
-    async def run_loop(self, unique_id: int, graph: str, metrix: str,
+    async def run_loop(self, unique_id: int, graph_overview: str, metrics_overview: str,
                        analysis_context: AnalysisContext) -> str:
         """Запустить цикл общения с ллм"""
         pass

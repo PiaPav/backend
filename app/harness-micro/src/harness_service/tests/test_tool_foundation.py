@@ -5,7 +5,9 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
+
+from sqlalchemy.pool import NullPool
 
 from llm_connector.logic.validator import Validator
 from core_server.logic.orchestrator import Orchestrator
@@ -16,6 +18,7 @@ from tools_engine.models.analysis_context import AnalysisContext
 from tools_engine.models.tool_result import ToolResult
 from tools_engine.registry import TOOL_REGISTRY, ToolDefinition, validate_registry
 from utils.logger.custom_logger import DBHandler
+from utils.logger.db.datamanager import DataManager
 from utils.logger.db.logs_orm import LogData, _extract_llm_usage
 
 
@@ -308,10 +311,36 @@ class ToolFoundationTests(unittest.TestCase):
 
         handler.emit(record)
 
-        parsed = handler.queue.get_nowait()
+        parsed = handler.queue.popleft()
         self.assertIsInstance(parsed, LogData)
         self.assertEqual(parsed, expected)
         self.assertIsInstance(parsed.description, str)
+
+    def test_db_handler_flush_is_safe_across_sequential_event_loops(self) -> None:
+        handler = DBHandler()
+        logger = logging.Logger("loop-safe-db-handler")
+        logger.addHandler(handler)
+        record = json.dumps({
+            "unique_id": 7,
+            "event": "answer",
+            "description": "safe",
+        })
+
+        async def log_and_flush() -> None:
+            logger.info(record)
+            await handler.flush_async()
+
+        with patch(
+            "utils.logger.custom_logger.HarnessLogs.write_log",
+            new_callable=AsyncMock,
+        ) as write_log:
+            asyncio.run(log_and_flush())
+            asyncio.run(log_and_flush())
+
+        self.assertEqual(write_log.await_count, 2)
+
+    def test_log_database_engine_does_not_pool_connections_between_event_loops(self) -> None:
+        self.assertIsInstance(DataManager.engine.pool, NullPool)
 
     def test_extract_llm_usage_reads_safe_metadata_finish_reason(self) -> None:
         description = json.dumps({

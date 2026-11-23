@@ -7,6 +7,8 @@ import yaml
 MAX_GRAPH_SEARCH_LIMIT = 100
 MAX_GRAPH_DEPTH = 10
 MAX_GRAPH_ITEM_LIMIT = 1000
+MAX_TOOL_CALLS_CEILING = 6
+MAX_PROVIDER_RETRIES_CEILING = 10
 
 
 @dataclass
@@ -20,6 +22,24 @@ class RulesConfig:
     max_graph_subgraph_depth: int
     max_graph_subgraph_nodes: int
     max_graph_references_limit: int
+    max_tool_calls: int
+    max_iterations: int
+    max_start_context_size: int
+    max_provider_retries: int
+
+    def __post_init__(self) -> None:
+        _positive_int(self.max_tool_calls, "max_tool_calls")
+        _positive_int(self.max_iterations, "max_iterations")
+        _positive_int(self.max_start_context_size, "max_start_context_size")
+        _nonnegative_int(self.max_provider_retries, "max_provider_retries")
+        if self.max_tool_calls > MAX_TOOL_CALLS_CEILING:
+            raise ValueError(
+                f"harness_rules.max_tool_calls must not exceed {MAX_TOOL_CALLS_CEILING}"
+            )
+        if self.max_provider_retries > MAX_PROVIDER_RETRIES_CEILING:
+            raise ValueError(
+                f"harness_rules.max_provider_retries must not exceed {MAX_PROVIDER_RETRIES_CEILING}"
+            )
 
 
 config_path = Path(__file__).resolve().with_name("rules.yml")
@@ -28,6 +48,12 @@ config_path = Path(__file__).resolve().with_name("rules.yml")
 def _positive_int(value: object, name: str) -> int:
     if type(value) is not int or value <= 0:
         raise ValueError(f"tools_rules.{name} must be a positive integer")
+    return value
+
+
+def _nonnegative_int(value: object, name: str) -> int:
+    if type(value) is not int or value < 0:
+        raise ValueError(f"harness_rules.{name} must be a nonnegative integer")
     return value
 
 
@@ -73,6 +99,22 @@ RULES_CONFIG = RulesConfig(
         yaml_config.get("tools_rules", {}).get("max_graph_references_limit", 100),
         "max_graph_references_limit",
     ),
+    max_tool_calls=_positive_int(
+        yaml_config.get("harness_rules", {}).get("max_tool_calls", 6),
+        "max_tool_calls",
+    ),
+    max_iterations=_positive_int(
+        yaml_config.get("harness_rules", {}).get("max_iterations", 8),
+        "max_iterations",
+    ),
+    max_start_context_size=_positive_int(
+        yaml_config.get("harness_rules", {}).get("max_start_context_size", 262_144),
+        "max_start_context_size",
+    ),
+    max_provider_retries=_nonnegative_int(
+        yaml_config.get("harness_rules", {}).get("max_provider_retries", 4),
+        "max_provider_retries",
+    ),
 )
 
 if RULES_CONFIG.max_graph_subgraph_depth > MAX_GRAPH_DEPTH:
@@ -80,3 +122,7 @@ if RULES_CONFIG.max_graph_subgraph_depth > MAX_GRAPH_DEPTH:
 if (RULES_CONFIG.max_graph_subgraph_nodes > MAX_GRAPH_ITEM_LIMIT
         or RULES_CONFIG.max_graph_references_limit > MAX_GRAPH_ITEM_LIMIT):
     raise ValueError("graph item limit exceeds hard ceiling")
+if RULES_CONFIG.max_tool_calls > MAX_TOOL_CALLS_CEILING:
+    raise ValueError(
+        f"harness_rules.max_tool_calls must not exceed {MAX_TOOL_CALLS_CEILING}"
+    )

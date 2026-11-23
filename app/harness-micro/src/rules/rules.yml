@@ -8,3 +8,8 @@ tools_rules:
   max_graph_subgraph_depth: 5
   max_graph_subgraph_nodes: 100
   max_graph_references_limit: 100
+harness_rules:
+  max_tool_calls: 6 # Жёсткий максимум — 6
+  max_iterations: 8 # Независимый лимит обменов с LLM
+  max_start_context_size: 262_144 # UTF-8 байты всех стартовых сообщений
+  max_provider_retries: 4 # Повторы transient-ответа провайдера, жёсткий максимум — 10

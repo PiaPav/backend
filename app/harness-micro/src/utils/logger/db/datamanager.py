@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     AsyncSession,
 )
+from sqlalchemy.pool import NullPool
 
 from .base import Base
 from .config import CONFIG
@@ -19,8 +20,7 @@ class DatabaseManager:
         self.engine = create_async_engine(url,
                                           echo=echo,
                                           future=True,
-                                          pool_size=20,
-                                          max_overflow=10)
+                                          poolclass=NullPool)
         self.session_factory = async_sessionmaker(
             self.engine,
             expire_on_commit=False,
