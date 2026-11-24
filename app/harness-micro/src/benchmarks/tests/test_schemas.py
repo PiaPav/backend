@@ -31,9 +31,32 @@ def _judge_result() -> dict:
     return {"matched_issue_id": "ISSUE-001", "verdict": "confirmed", "category_score": 2, "location_score": 2, "evidence_score": 3, "severity_score": 2, "recommendation_score": 2, "unsupported_claims": [], "confidence": 0.9}
 
 
-@pytest.mark.parametrize("name", ["benchmark.schema.json", "run_result.schema.json", "judge_result.schema.json"])
+@pytest.mark.parametrize("name", [
+    "artifact_manifest.schema.json", "benchmark.schema.json",
+    "run_result.schema.json", "judge_result.schema.json",
+])
 def test_schema_is_valid_draft_2020_12(name: str) -> None:
     jsonschema.Draft202012Validator.check_schema(_schema(name))
+
+
+@pytest.mark.parametrize("producer,profile", [
+    ({"service": "producer\nforged", "version": "1.0"}, "canonical.full"),
+    ({"service": "producer", "version": "1.0\u0000forged"}, "canonical.full"),
+    ({"service": "producer", "version": "1.0"}, "extra\nprofile"),
+])
+def test_artifact_manifest_rejects_unsafe_public_strings(producer: dict, profile: str) -> None:
+    descriptor = {"path": "artifact", "sha256": "c" * 64, "size_bytes": 0, "schema_version": 1}
+    manifest = {
+        "schema_version": 1, "producer": producer,
+        "source": {"path": "source", "project_fingerprint": "a" * 64},
+        "graph_profiles": {"parser_semantics_version": 7, "graph_fingerprint": "b" * 64,
+                           "artifacts": {profile: descriptor}},
+        "metrics_profiles": {"metrics_semantics_version": 4, "graph_fingerprint": "b" * 64,
+                             "artifacts": {"metrics.full": descriptor}},
+        "source_index": {**descriptor, "project_fingerprint": "a" * 64},
+    }
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.Draft202012Validator(_schema("artifact_manifest.schema.json")).validate(manifest)
 
 
 def test_benchmark_fixture_and_semver_compatibility() -> None:

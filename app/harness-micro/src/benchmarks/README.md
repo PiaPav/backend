@@ -24,10 +24,21 @@ evaluator используют публичные контракты харне�
   location и лексическому meaning, не выставляя семантический verdict;
 - `evaluators/deterministic.py` офлайн проверяет locations, порядок severity,
   буквальные запрещённые утверждения и точные дубликаты findings.
+- `artifact_manifest.schema.json` и `artifacts.py` строго проверяют локальный
+  export штатного producer, его fingerprints, размеры, SHA-256 и безопасные
+  пути, после чего копируют его в отдельный staging-каталог;
+- `event.py` и `runners/prepare_input.py` формируют детерминированное профильное
+  событие `harness.start.v1`, совместимое с публичным `HarnessHandler`, но не
+  запускают LLM или `Core`.
 
 Штатные graph/metrics-артефакты пилота ещё не зафиксированы и не подменяются
 написанными вручную fixtures. Поэтому весь Этап 2 и полный runner Этапа 3 пока
 не считаются завершёнными.
+
+Manifest описывает уже готовый producer export и не доказывает его
+происхождение. Staging не изменяет source index и не интерпретирует содержимое
+graph/metrics DTO: полную materialization и проверку DTO выполняет штатный
+`InputMaterializer` при реальном запуске.
 
 ## Версионирование
 

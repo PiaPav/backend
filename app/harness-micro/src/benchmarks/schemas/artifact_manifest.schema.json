@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://piapav.local/schemas/benchmark-artifact-manifest-v1.json",
+  "title": "Benchmark producer artifact manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "producer", "source", "graph_profiles", "metrics_profiles", "source_index"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "producer": {"$ref": "#/$defs/producer"},
+    "source": {"$ref": "#/$defs/source"},
+    "graph_profiles": {"$ref": "#/$defs/graphProfiles"},
+    "metrics_profiles": {"$ref": "#/$defs/metricsProfiles"},
+    "source_index": {"$ref": "#/$defs/sourceIndex"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "producer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["service", "version"],
+      "properties": {"service": {"type": "string", "pattern": "^[^\\u0000-\\u001F]+$"}, "version": {"type": "string", "pattern": "^[^\\u0000-\\u001F]+$"}}
+    },
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "project_fingerprint"],
+      "properties": {"path": {"type": "string", "minLength": 1}, "project_fingerprint": {"$ref": "#/$defs/sha256"}}
+    },
+    "artifact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "size_bytes", "schema_version"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1}, "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 0}, "schema_version": {"const": 1}
+      }
+    },
+    "artifacts": {"type": "object", "minProperties": 1, "propertyNames": {"pattern": "^[^\\u0000-\\u001F]+$"}, "additionalProperties": {"$ref": "#/$defs/artifact"}},
+    "graphProfiles": {
+      "type": "object", "additionalProperties": false,
+      "required": ["parser_semantics_version", "graph_fingerprint", "artifacts"],
+      "properties": {"parser_semantics_version": {"const": 7}, "graph_fingerprint": {"$ref": "#/$defs/sha256"}, "artifacts": {"$ref": "#/$defs/artifacts"}}
+    },
+    "metricsProfiles": {
+      "type": "object", "additionalProperties": false,
+      "required": ["metrics_semantics_version", "graph_fingerprint", "artifacts"],
+      "properties": {"metrics_semantics_version": {"const": 4}, "graph_fingerprint": {"$ref": "#/$defs/sha256"}, "artifacts": {"$ref": "#/$defs/artifacts"}}
+    },
+    "sourceIndex": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "size_bytes", "schema_version", "project_fingerprint"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1}, "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 0}, "schema_version": {"const": 1},
+        "project_fingerprint": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}
