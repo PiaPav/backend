@@ -1,0 +1,22 @@
+schema_version: 1
+configuration_version: 1.0.0
+configuration_id: baseline
+repeats: 5
+model: production-primary
+prompt:
+  path: prompts/PROMPT.md
+  version: 0.1.0
+  sha256: 981e090e8eb6d55aca9b0f1032b9e5668eda966294a4ff3b7c0ea556942cdd75
+context: overview
+toolset: full
+required_profiles:
+  graph: [canonical.full, aggregate.overview]
+  metrics: [metrics.full, metrics.overview]
+limits:
+  max_tool_calls: 6
+  max_iterations: 8
+  max_start_context_size: 262144
+  max_provider_retries: 4
+  timeout_seconds: 600
+temperature: null
+temperature_status: not_exposed_by_current_request

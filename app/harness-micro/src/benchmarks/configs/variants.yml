@@ -1,0 +1,19 @@
+schema_version: 1
+variants_version: 1.0.0
+contexts:
+  overview: {graph_profile: aggregate.overview, metrics_profile: metrics.overview}
+  compact: {graph_profile: inventory.minimal, metrics_profile: metrics.aggregate}
+  architecture: {graph_profile: aggregate.packages, metrics_profile: metrics.architecture}
+toolsets:
+  full: [GET-CONTENT, GET-CODE-RANGE, GET-STRUCTURE, FIND-GRAPH-NODES, GET-GRAPH-NODE, GET-METRICS-ITEM, GET-GRAPH-SUBGRAPH, GET-GRAPH-REFERENCES, GET-GRAPH, GET-METRICS]
+  targeted: [GET-CONTENT, GET-CODE-RANGE, GET-STRUCTURE, FIND-GRAPH-NODES, GET-GRAPH-NODE, GET-METRICS-ITEM, GET-GRAPH-SUBGRAPH, GET-GRAPH-REFERENCES]
+  without_source: [FIND-GRAPH-NODES, GET-GRAPH-NODE, GET-METRICS-ITEM, GET-GRAPH-SUBGRAPH, GET-GRAPH-REFERENCES, GET-GRAPH, GET-METRICS]
+  without_relations: [GET-CONTENT, GET-CODE-RANGE, GET-STRUCTURE, FIND-GRAPH-NODES, GET-GRAPH-NODE, GET-METRICS-ITEM, GET-GRAPH, GET-METRICS]
+variants:
+  - {id: budget-2, repeats: 3, tool_budget: 2, toolset: null, context: null}
+  - {id: budget-4, repeats: 3, tool_budget: 4, toolset: null, context: null}
+  - {id: tools-targeted, repeats: 3, tool_budget: null, toolset: targeted, context: null}
+  - {id: tools-without-source, repeats: 3, tool_budget: null, toolset: without_source, context: null}
+  - {id: tools-without-relations, repeats: 3, tool_budget: null, toolset: without_relations, context: null}
+  - {id: context-compact, repeats: 3, tool_budget: null, toolset: null, context: compact}
+  - {id: context-architecture, repeats: 3, tool_budget: null, toolset: null, context: architecture}

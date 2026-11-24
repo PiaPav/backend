@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://piapav.local/schemas/benchmark.schema.json",
+  "title": "Benchmark project oracle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project_id", "project_version", "description", "expected_findings", "additional_findings_policy"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "project_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "project_version": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"},
+    "description": {"type": "string", "minLength": 1},
+    "expected_findings": {
+      "$comment": "Finding IDs must be unique and severity_min must not exceed severity_max; the Stage 2 semantic loader enforces these cross-item/domain-order rules.",
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "additional_findings_policy": {"const": "require_evidence"}
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "severity_min", "severity_max", "locations", "evidence", "acceptable_meanings", "required_data", "forbidden_claims"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^ISSUE-[0-9]{3,}$"},
+        "category": {"type": "string", "minLength": 1},
+        "severity_min": {"enum": ["low", "medium", "high", "critical"]},
+        "severity_max": {"enum": ["low", "medium", "high", "critical"]},
+        "locations": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "evidence": {
+          "type": "object", "additionalProperties": false,
+          "required": ["nodes", "relations"],
+          "properties": {
+            "nodes": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+            "relations": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+            "metrics": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+            "source": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+          }
+        },
+        "acceptable_meanings": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "required_data": {
+          "type": "object", "additionalProperties": false, "required": ["graph", "metrics", "source"],
+          "properties": {"graph": {"type": "boolean"}, "metrics": {"type": "boolean"}, "source": {"enum": [true, false, "optional"]}}
+        },
+        "forbidden_claims": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    }
+  }
+}

@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://piapav.local/schemas/run_result.schema.json",
+  "title": "Benchmark run result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "run_id", "project_id", "project_version", "project_sha256",
+    "configuration_id", "configuration_sha256", "model", "prompt_version", "prompt_sha256",
+    "context_variant", "toolset_variant", "tool_budget", "repeat", "judge_config",
+    "technical_result", "llm_analysis", "deterministic_evaluation", "judge_evaluations",
+    "aggregated_evaluation", "analyzer_provider", "tool_summary", "usage", "timings"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "project_version": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"},
+    "project_sha256": {"$ref": "#/$defs/sha256"},
+    "configuration_id": {"type": "string", "minLength": 1},
+    "configuration_sha256": {"$ref": "#/$defs/sha256"},
+    "model": {"type": "string", "minLength": 1},
+    "prompt_version": {"$ref": "#/$defs/semver"},
+    "prompt_sha256": {"$ref": "#/$defs/sha256"},
+    "context_variant": {"type": "string", "minLength": 1},
+    "toolset_variant": {"type": "string", "minLength": 1},
+    "tool_budget": {"type": "integer", "minimum": 1},
+    "repeat": {"type": "integer", "minimum": 1},
+    "judge_config": {"$ref": "#/$defs/judgeConfig"},
+    "technical_result": {"$ref": "#/$defs/technical"},
+    "llm_analysis": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/analysis"}]},
+    "deterministic_evaluation": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/deterministic"}]},
+    "judge_evaluations": {"type": "array", "items": {"$ref": "#/$defs/judgeEnvelope"}},
+    "aggregated_evaluation": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/aggregated"}]},
+    "analyzer_provider": {"$ref": "#/$defs/provider"},
+    "tool_summary": {"$ref": "#/$defs/toolSummary"},
+    "usage": {"$ref": "#/$defs/usage"},
+    "timings": {"$ref": "#/$defs/timings"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"technical_result": {"properties": {"status": {"const": "passed"}}, "required": ["status"]}}, "required": ["technical_result"]},
+      "then": {
+        "properties": {
+          "technical_result": {"properties": {"error": {"type": "null"}}},
+          "llm_analysis": {"$ref": "#/$defs/analysis"},
+          "deterministic_evaluation": {"$ref": "#/$defs/deterministic"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"technical_result": {"properties": {"status": {"enum": ["failed", "infrastructure_error"]}}, "required": ["status"]}}, "required": ["technical_result"]},
+      "then": {
+        "properties": {
+          "technical_result": {"properties": {"error": {"$ref": "#/$defs/error"}}},
+          "llm_analysis": {"type": "null"},
+          "deterministic_evaluation": {"type": "null"},
+          "judge_evaluations": {"maxItems": 0},
+          "aggregated_evaluation": {"type": "null"}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "semver": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"},
+    "error": {
+      "type": "object", "additionalProperties": false, "required": ["type", "message"],
+      "properties": {"type": {"type": "string", "minLength": 1}, "message": {"type": "string", "minLength": 1}}
+    },
+    "check": {
+      "type": "object", "additionalProperties": false, "required": ["name", "passed", "details"],
+      "properties": {"name": {"type": "string", "minLength": 1}, "passed": {"type": "boolean"}, "details": {"type": ["string", "null"]}}
+    },
+    "technical": {
+      "type": "object", "additionalProperties": false, "required": ["status", "checks", "error"],
+      "properties": {
+        "status": {"enum": ["passed", "failed", "infrastructure_error"]},
+        "checks": {"type": "array", "items": {"$ref": "#/$defs/check"}},
+        "error": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/error"}]}
+      }
+    },
+    "judgeConfig": {
+      "type": "object", "additionalProperties": false,
+      "required": ["enabled", "url", "model", "temperature", "timeout_seconds", "max_transport_retries", "evaluations_per_finding", "confidence_threshold", "prompt_version", "prompt_sha256", "calibration_status"],
+      "properties": {
+        "enabled": {"type": "boolean"}, "url": {"type": ["string", "null"], "format": "uri"}, "model": {"type": ["string", "null"]},
+        "temperature": {"type": "number", "minimum": 0, "maximum": 2}, "timeout_seconds": {"type": "integer", "minimum": 1},
+        "max_transport_retries": {"type": "integer", "minimum": 0}, "evaluations_per_finding": {"type": "integer", "minimum": 1},
+        "confidence_threshold": {"type": "number", "minimum": 0, "maximum": 1}, "prompt_version": {"$ref": "#/$defs/semver"},
+        "prompt_sha256": {"$ref": "#/$defs/sha256"}, "calibration_status": {"type": "string", "minLength": 1}
+      },
+      "allOf": [{"if": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]}, "then": {"properties": {"url": {"type": "string", "minLength": 1}, "model": {"type": "string", "minLength": 1}}}}]
+    },
+    "issue": {
+      "type": "object", "additionalProperties": false, "required": ["title", "severity", "description", "location", "evidence", "recommendation"],
+      "properties": {"title": {"type": "string", "minLength": 1}, "severity": {"enum": ["critical", "high", "medium", "low"]}, "description": {"type": "string", "minLength": 1}, "location": {"type": ["string", "null"]}, "evidence": {"type": "string", "minLength": 1}, "recommendation": {"type": "string", "minLength": 1}}
+    },
+    "strength": {
+      "type": "object", "additionalProperties": false, "required": ["title", "description", "location", "evidence", "recommendation"],
+      "properties": {"title": {"type": "string", "minLength": 1}, "description": {"type": "string", "minLength": 1}, "location": {"type": ["string", "null"]}, "evidence": {"type": "string", "minLength": 1}, "recommendation": {"type": "string", "minLength": 1}}
+    },
+    "analysis": {
+      "type": "object", "additionalProperties": false, "required": ["issues", "strengths"],
+      "properties": {"issues": {"type": "array", "maxItems": 5, "items": {"$ref": "#/$defs/issue"}}, "strengths": {"type": "array", "maxItems": 3, "items": {"$ref": "#/$defs/strength"}}}
+    },
+    "violation": {
+      "type": "object", "additionalProperties": false, "required": ["code", "message", "finding_index"],
+      "properties": {"code": {"type": "string", "minLength": 1}, "message": {"type": "string", "minLength": 1}, "finding_index": {"type": ["integer", "null"], "minimum": 0}}
+    },
+    "deterministic": {
+      "type": "object", "additionalProperties": false, "required": ["checks", "candidate_matches", "violations"],
+      "properties": {
+        "checks": {"type": "array", "items": {"$ref": "#/$defs/check"}},
+        "candidate_matches": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["finding_index", "expected_issue_ids"], "properties": {"finding_index": {"type": "integer", "minimum": 0}, "expected_issue_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^ISSUE-[0-9]{3,}$"}}}}},
+        "violations": {"type": "array", "items": {"$ref": "#/$defs/violation"}}
+      }
+    },
+    "aggregated": {
+      "type": "object", "additionalProperties": false,
+      "required": ["quality_score", "weighted_recall", "precision", "false_positive_rate", "hallucination_rate", "location_accuracy", "normalized_evidence_score", "normalized_recommendation_score", "requires_human_review"],
+      "properties": {
+        "quality_score": {"$ref": "#/$defs/rate"}, "weighted_recall": {"$ref": "#/$defs/rate"}, "precision": {"$ref": "#/$defs/rate"},
+        "false_positive_rate": {"$ref": "#/$defs/rate"}, "hallucination_rate": {"$ref": "#/$defs/rate"}, "location_accuracy": {"$ref": "#/$defs/rate"},
+        "normalized_evidence_score": {"$ref": "#/$defs/rate"}, "normalized_recommendation_score": {"$ref": "#/$defs/rate"}, "requires_human_review": {"type": "boolean"}
+      }
+    },
+    "rate": {"type": "number", "minimum": 0, "maximum": 1},
+    "judgeEnvelope": {
+      "type": "object", "additionalProperties": false,
+      "required": ["finding_index", "evaluation_repeat", "status", "result", "error", "model", "response_id", "usage", "duration_seconds", "transport_retries"],
+      "properties": {
+        "finding_index": {"type": "integer", "minimum": 0}, "evaluation_repeat": {"type": "integer", "minimum": 1},
+        "status": {"enum": ["completed", "judge_error", "infrastructure_error"]}, "result": {"oneOf": [{"type": "null"}, {"$ref": "judge_result.schema.json"}]},
+        "error": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/error"}]}, "model": {"type": ["string", "null"]}, "response_id": {"type": ["string", "null"]},
+        "usage": {"$ref": "#/$defs/usage"}, "duration_seconds": {"type": "number", "minimum": 0}, "transport_retries": {"type": "integer", "minimum": 0}
+      },
+      "allOf": [
+        {"if": {"properties": {"status": {"const": "completed"}}, "required": ["status"]}, "then": {"properties": {"result": {"$ref": "judge_result.schema.json"}, "error": {"type": "null"}, "model": {"type": "string", "minLength": 1}, "response_id": {"type": "string", "minLength": 1}}}},
+        {"if": {"properties": {"status": {"enum": ["judge_error", "infrastructure_error"]}}, "required": ["status"]}, "then": {"properties": {"result": {"type": "null"}, "error": {"$ref": "#/$defs/error"}}}}
+      ]
+    },
+    "provider": {
+      "type": "object", "additionalProperties": false, "required": ["response_id", "finish_reason", "finalization_reason", "provider_retries"],
+      "properties": {"response_id": {"type": ["string", "null"]}, "finish_reason": {"type": ["string", "null"]}, "finalization_reason": {"type": ["string", "null"]}, "provider_retries": {"type": "integer", "minimum": 0}}
+    },
+    "toolSummary": {
+      "type": "object", "additionalProperties": false, "required": ["calls_count", "errors_count", "trace_reference"],
+      "properties": {"calls_count": {"type": "integer", "minimum": 0}, "errors_count": {"type": "integer", "minimum": 0}, "trace_reference": {"type": ["string", "null"], "minLength": 1}}
+    },
+    "usage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["prompt_tokens", "completion_tokens", "total_tokens", "prompt_cache_hit_tokens", "prompt_cache_miss_tokens", "cost", "currency"],
+      "properties": {"prompt_tokens": {"type": ["integer", "null"], "minimum": 0}, "completion_tokens": {"type": ["integer", "null"], "minimum": 0}, "total_tokens": {"type": ["integer", "null"], "minimum": 0}, "prompt_cache_hit_tokens": {"type": ["integer", "null"], "minimum": 0}, "prompt_cache_miss_tokens": {"type": ["integer", "null"], "minimum": 0}, "cost": {"type": ["number", "null"], "minimum": 0}, "currency": {"type": ["string", "null"], "minLength": 1}}
+    },
+    "timings": {
+      "type": "object", "additionalProperties": false, "required": ["total_seconds", "provider_seconds", "tool_seconds", "deterministic_seconds", "judge_seconds"],
+      "properties": {"total_seconds": {"type": "number", "minimum": 0}, "provider_seconds": {"type": "number", "minimum": 0}, "tool_seconds": {"type": "number", "minimum": 0}, "deterministic_seconds": {"type": "number", "minimum": 0}, "judge_seconds": {"type": "number", "minimum": 0}}
+    }
+  }
+}

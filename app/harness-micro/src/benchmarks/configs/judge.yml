@@ -1,0 +1,17 @@
+schema_version: 1
+judge_config_version: 1.0.0
+judge:
+  enabled: false
+  url: null
+  model: null
+  api_key_env: BENCHMARK_JUDGE_API_KEY
+  temperature: 0.1
+  timeout_seconds: 120
+  max_transport_retries: 2
+  evaluations_per_finding: 3
+  confidence_threshold: 0.7
+  prompt:
+    path: benchmarks/prompts/judge.md
+    version: 0.1.0
+    calibration_status: uncalibrated
+    sha256: f7cc9edf8e096a97cfde9b8c55d42b67882a3f7664445842c93d2f35c33ad861

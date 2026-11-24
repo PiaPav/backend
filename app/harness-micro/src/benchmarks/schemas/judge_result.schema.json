@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://piapav.local/schemas/judge_result.schema.json",
+  "title": "Single judge decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["matched_issue_id", "verdict", "category_score", "location_score", "evidence_score", "severity_score", "recommendation_score", "unsupported_claims", "confidence"],
+  "properties": {
+    "matched_issue_id": {"type": ["string", "null"], "pattern": "^ISSUE-[0-9]{3,}$"},
+    "verdict": {"enum": ["confirmed", "partial", "unsupported", "novel", "abstain"]},
+    "category_score": {"type": "integer", "minimum": 0, "maximum": 2},
+    "location_score": {"type": "integer", "minimum": 0, "maximum": 2},
+    "evidence_score": {"type": "integer", "minimum": 0, "maximum": 3},
+    "severity_score": {"type": "integer", "minimum": 0, "maximum": 2},
+    "recommendation_score": {"type": "integer", "minimum": 0, "maximum": 2},
+    "unsupported_claims": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  },
+  "allOf": [
+    {"if": {"properties": {"verdict": {"enum": ["confirmed", "partial"]}}, "required": ["verdict"]}, "then": {"properties": {"matched_issue_id": {"type": "string"}}}},
+    {"if": {"properties": {"verdict": {"enum": ["novel", "unsupported", "abstain"]}}, "required": ["verdict"]}, "then": {"properties": {"matched_issue_id": {"type": "null"}}}}
+  ]
+}
