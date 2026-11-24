@@ -6,6 +6,11 @@ import jsonschema
 import pytest
 from referencing import Registry, Resource
 
+from response_models.models import Issue, LLMAnalysis
+
+from benchmarks.evaluators.deterministic import evaluate_deterministic
+from benchmarks.project import load_project
+
 
 SCHEMAS = Path(__file__).resolve().parents[1] / "schemas"
 
@@ -48,8 +53,34 @@ def test_benchmark_fixture_and_semver_compatibility() -> None:
     _run_validator().validate(run)
 
 
+def test_real_import_cycle_card_matches_benchmark_schema() -> None:
+    card = SCHEMAS.parent / "projects" / "import_cycle" / "benchmark.yml"
+    import yaml
+    jsonschema.Draft202012Validator(_schema("benchmark.schema.json")).validate(
+        yaml.safe_load(card.read_text(encoding="utf-8"))
+    )
+
+
 def test_passed_run_with_completed_judge_and_aggregates() -> None:
     _run_validator().validate(_run_fixture("passed"))
+
+
+def test_real_deterministic_result_validates_against_run_schema_definition() -> None:
+    project = SCHEMAS.parent / "projects" / "import_cycle"
+    analysis = LLMAnalysis(issues=[Issue(
+        title="Circular import",
+        severity="high",
+        description="The modules form a dependency cycle.",
+        location="package_a/service.py",
+        evidence="package_a.service and package_b.repository import each other.",
+        recommendation="Extract the shared contract.",
+    )], strengths=[])
+    result = evaluate_deterministic(analysis, load_project(project))
+    fixture = _run_fixture("passed")
+    fixture["llm_analysis"] = analysis.model_dump()
+    fixture["deterministic_evaluation"] = result
+
+    _run_validator().validate(fixture)
 
 
 @pytest.mark.parametrize("status", ["failed", "infrastructure_error"])

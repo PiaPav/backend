@@ -1,0 +1,31 @@
+schema_version: 1
+project_id: import_cycle
+project_version: 1.0.0
+description: A small project containing a static dependency cycle between service and repository modules.
+expected_findings:
+  - id: ISSUE-001
+    category: dependency_cycle
+    severity_min: medium
+    severity_max: high
+    locations:
+      - package_a/service.py
+      - package_b/repository.py
+    evidence:
+      nodes:
+        - package_a.service
+        - package_b.repository
+      relations:
+        - imports
+    acceptable_meanings:
+      - cyclic dependency
+      - circular import
+      - dependency cycle
+    required_data:
+      graph: true
+      metrics: false
+      source: optional
+    forbidden_claims:
+      - guaranteed runtime failure
+      - always raises ImportError
+      - deadlock is inevitable
+additional_findings_policy: require_evidence
