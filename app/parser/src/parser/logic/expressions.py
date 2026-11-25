@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 from typing import Any
+import math
 
 
 def dotted_name(node: ast.AST | None) -> str:
@@ -32,16 +33,26 @@ def annotation_value(node: ast.expr | None) -> Any:
 
 
 def simple_value(node: ast.expr | None) -> Any:
-    """Convert simple values while retaining unsupported expressions as source."""
+    """Convert JSON-compatible literals and retain other expressions as source."""
     if node is None:
         return None
+
     if isinstance(node, ast.Constant):
-        return node.value
-    if isinstance(node, ast.UnaryOp) and isinstance(node.operand, ast.Constant):
+        value = node.value
+    elif isinstance(node, ast.UnaryOp) and isinstance(node.operand, ast.Constant):
         try:
-            return ast.literal_eval(node)
+            value = ast.literal_eval(node)
         except (ValueError, TypeError):
-            pass
+            return ast.unparse(node)
+    else:
+        return ast.unparse(node)
+
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+
+    if isinstance(value, float) and math.isfinite(value):
+        return value
+
     return ast.unparse(node)
 
 

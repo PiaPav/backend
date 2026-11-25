@@ -69,7 +69,7 @@ class ParserHandler:
             if claimed.record.payload_digest != digest:
                 return DeliveryDecision.REJECT
             if claimed.disposition is ClaimDisposition.BUSY:
-                logger.exception("Parser processing failed if claimed.disposition is ClaimDisposition.BUSY")
+                logger.debug("Event %s is already claimed", event.event_id)
                 return DeliveryDecision.RETRY
             if claimed.disposition is ClaimDisposition.EXISTING:
                 if claimed.record.state in {ProcessingState.PUBLISHED, ProcessingState.FAILED_PUBLISHED}:

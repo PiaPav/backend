@@ -105,7 +105,7 @@ def load_config() -> Config:
             host=os.environ.get("CORE_HOST", "0.0.0.0"),
             port=int(os.environ.get("CORE_PORT", 8000)),
             cryptothread=int(os.environ.get("THREAD_CRYPT", 4)),
-            uvicorn_workers=int(os.environ.get("UVICORN_WORKER",9)),
+            uvicorn_workers=int(os.environ.get("UVICORN_WORKER",1)),
         ),
         db=ConfigDB(
             host=os.environ.get("POSTGRES_HOST", "postgres"),
@@ -145,9 +145,9 @@ def load_config() -> Config:
             db=int(os.environ.get("REDIS_DB", 0))
         ),
         postbox=ConfigPostbox(
-            key_id = os.environ["ID_KEY"],
-            secret_key = os.environ["ACCESS_KEY"],
-            sender_email = os.environ["SENDER_EMAIL"]
+            key_id=os.environ.get("ID_KEY", ""),
+            secret_key=os.environ.get("ACCESS_KEY", ""),
+            sender_email=os.environ.get("SENDER_EMAIL", "")
         )
     )
 

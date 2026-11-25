@@ -6,7 +6,7 @@ import ast
 from collections.abc import Iterable
 from typing import Any
 
-from .expressions import dotted_name
+from .expressions import dotted_name, simple_value
 from .imports import resolve_import_statement
 from .models import (
     CanonicalCallsiteInfo,
@@ -1007,8 +1007,6 @@ class CallResolver:
                     "object": nested.semantic_target[1],
                 }
             return value
-        if isinstance(node, ast.Constant):
-            return node.value
         if isinstance(node, ast.Attribute):
             syntax = dotted_name(node)
             root = syntax.split(".", 1)[0]
@@ -1025,12 +1023,7 @@ class CallResolver:
                 suffix = syntax[len(root) :]
                 return {"type": "value", "object": f"{original}{suffix}"}
             return syntax
-        if isinstance(node, ast.UnaryOp) and isinstance(node.operand, ast.Constant):
-            try:
-                return ast.literal_eval(node)
-            except (ValueError, TypeError):
-                pass
-        return ast.unparse(node)
+        return simple_value(node)
 
     def call_info(
         self, node: ast.Call, module: ModuleInfo, scope: Scope, owner: ClassInfo | None

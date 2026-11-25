@@ -89,6 +89,26 @@ services:
       timeout: 5s
       retries: 20
 
+  gateway:
+    build:
+      context: ./app
+      dockerfile: gateway/Dockerfile
+
+    env_file:
+      - ./app/gateway/.env
+
+    ports:
+      - "127.0.0.1:8000:8000"
+
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+    volumes:
+      - ./data:/data
+
 volumes:
   rabbitmq_data:
   parser_state:

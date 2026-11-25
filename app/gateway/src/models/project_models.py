@@ -1,43 +1,34 @@
-from typing import Optional
+from enum import StrEnum
 
-from pydantic import BaseModel
-
-
-class ArchitectureModel(BaseModel):
-    requirements: Optional[list[str]] = None
-    endpoints: Optional[list[dict]] = None
-    data: Optional[dict] = None
+from pydantic import BaseModel, Field, ConfigDict
 
 
-class ProjectDataLite(BaseModel):
-    id: int
-    name: str
-    description: str
-    picture_url: str
-
-
-class ProjectData(BaseModel):
-    id: int
-    name: str
-    description: str
-    picture_url: str
-    architecture: ArchitectureModel
+class ProjectStatus(StrEnum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class ProjectCreateData(BaseModel):
+    name: str = Field(min_length=1, max_length=250)
+    repository_url: str = Field(min_length=1, max_length=2048)
+    branch: str = Field(min_length=1, max_length=250)
+
+
+class ProjectDataLite(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
     name: str
-    description: str
+    repository_url: str
+    branch: str
+    status: ProjectStatus
 
 
-class ProjectPatchData(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    architecture: Optional[ArchitectureModel] = None
-
-
-class ProjectListData(BaseModel):
-    total: int
-    data: list[ProjectData]
+class ProjectData(ProjectDataLite):
+    commit_sha: str | None = None
+    result: dict | None = None
+    error: str | None = None
 
 
 class ProjectListDataLite(BaseModel):

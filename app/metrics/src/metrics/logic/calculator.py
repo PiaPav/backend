@@ -5,8 +5,10 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+# ЛОКАЛЬНО:
+# from backend.app.algorithm.src.graph_dto import validate_graph_v1
+# В КОНТЕЙНЕРЕ:
 from graph_dto import validate_graph_v1
-
 from .architecture import calculate_architecture_metrics
 from .call_graph import _calculate_call_graph_metrics
 from .graph_algorithms import strong_components as _strong_components

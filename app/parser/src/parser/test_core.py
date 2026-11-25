@@ -1472,3 +1472,52 @@ def test_semantics6_structural_facts_exactly_mirror_legacy_activity_owners(tmp_p
         or (node["kind"] in {"function", "method"} and not node.get("synthetic"))
     }
     assert not any(nodes[owner].get("synthetic") for owner in facts)
+
+
+def test_non_json_literals(tmp_path):
+    import ast
+    import json
+
+    from parser.logic.analyzer import ProjectAnalyzer
+    from parser.logic.expressions import simple_value
+
+    expressions = {
+        'b"abc"': "b'abc'",
+        "2j": "2j",
+        "-2j": "-2j",
+        "...": "...",
+        "42": 42,
+        "-42": -42,
+        "3.14": 3.14,
+        "True": True,
+        "None": None,
+    }
+
+    for expression, expected in expressions.items():
+        node = ast.parse(expression, mode="eval").body
+        assert simple_value(node) == expected
+
+    source = """
+DATA = b"abc"
+PLACEHOLDER = ...
+COMPLEX = 2j
+
+class Example:
+    value: bytes = b"abc"
+
+    def __init__(self):
+        self.data = b"xyz"
+
+def example(data=b"abc"):
+    print(data)
+    print(b"abc")
+    print(-2j)
+    print(...)
+    print(len(b"xyz"))
+"""
+
+    (tmp_path / "sample.py").write_text(source, encoding="utf-8")
+
+    graph = ProjectAnalyzer(tmp_path).analyze()
+
+    json.dumps(graph, ensure_ascii=False, allow_nan=False)

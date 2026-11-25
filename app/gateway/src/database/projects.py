@@ -1,76 +1,91 @@
-from typing import Optional
+from uuid import uuid4
 
-from sqlalchemy import String, JSON, Text, ForeignKey, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import String, Text, ForeignKey, select
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.accounts import Account
 from database.base import SQLBase, DataBaseEntityNotExists
 from database.datamanager import DataManager
-from models.project_models import ProjectCreateData, ProjectPatchData
-from utils.logger import create_logger
-
-log = create_logger("ProjectDB")
+from models.project_models import ProjectCreateData, ProjectStatus
 
 
 class Project(SQLBase):
-    """Проекты пользователей"""
     __tablename__ = "projects"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     author_id: Mapped[int] = mapped_column(ForeignKey(Account.id, ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String(250))
-    description: Mapped[str] = mapped_column(Text)
-    picture_url: Mapped[str] = mapped_column(String(250), default="")
-    architecture: Mapped[dict] = mapped_column(JSON, nullable=True)
-    files_url: Mapped[str] = mapped_column(String(300), nullable=True)
+    repository_url: Mapped[str] = mapped_column(Text)
+    branch: Mapped[str] = mapped_column(String(250))
+    commit_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default=ProjectStatus.PENDING.value)
+    correlation_id: Mapped[str] = mapped_column(String(36), unique=True)
+    result_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     @staticmethod
-    async def create_project(create_data: ProjectCreateData, author_id: int,
-                             files_url: Optional[str] = None) -> "Project":
+    async def create_project(create_data: ProjectCreateData, author_id: int) -> "Project":
         async with DataManager.session() as session:
-            project = Project(author_id=author_id,
-                              name=create_data.name,
-                              description=create_data.description,
-                              files_url=files_url)
+            project = Project(
+                author_id=author_id, name=create_data.name,
+                repository_url=create_data.repository_url, branch=create_data.branch,
+                status=ProjectStatus.PENDING.value, correlation_id=str(uuid4()),
+            )
             session.add(project)
+            await session.flush()
             return project
 
     @staticmethod
-    async def get_project_by_id(project_id: int, account_id: int, session: Optional[AsyncSession] = None) -> "Project":
-        async with  DataManager.session(session) as session:
-            result = await session.get(Project, project_id)
-
-            if result is None or result.author_id != account_id:
-                log.error(f"Проект с id {project_id} не найден или не существует")
-                raise DataBaseEntityNotExists(f"Проект с id {project_id} не найден или не существует")
-
-            return result
-
-    @staticmethod
-    async def patch_project_by_id(project_id: int, patch_data: ProjectPatchData, account_id: int) -> "Project":
+    async def get_project_by_id(project_id: int, account_id: int) -> "Project":
         async with DataManager.session() as session:
-            project = await Project.get_project_by_id(project_id, account_id, session)
-
-            for field, value in patch_data.model_dump().items():
-                if value is not None:
-                    setattr(project, field, value)
-
-            await session.flush()
+            project = await session.get(Project, project_id)
+            if project is None or project.author_id != account_id:
+                raise DataBaseEntityNotExists("Проект не найден")
             return project
 
     @staticmethod
     async def get_project_list_by_account_id(account_id: int) -> tuple[int, list["Project"]]:
         async with DataManager.session() as session:
-            stmt = select(Project).where(Project.author_id == account_id)
-            result = await session.execute(stmt)
-            projects = result.scalars().all()
-            total = len(projects)
-            return total, projects
+            result = await session.execute(
+                select(Project).where(Project.author_id == account_id)
+            )
+            projects = list(result.scalars().all())
+            return len(projects), projects
 
     @staticmethod
-    async def delete_project(project_id: int, account_id: int) -> None:
+    async def set_commit(project_id: int, commit_sha: str) -> None:
         async with DataManager.session() as session:
-            project = await Project.get_project_by_id(project_id, account_id, session)
-            await session.delete(project)
-            return
+            project = await session.get(Project, project_id)
+            if project is None:
+                raise DataBaseEntityNotExists("Проект не найден")
+            project.commit_sha = commit_sha
+
+    @staticmethod
+    async def set_result(correlation_id: str, result_uri: str) -> bool:
+        async with DataManager.session() as session:
+            result = await session.execute(
+                select(Project).where(Project.correlation_id == correlation_id)
+            )
+            project = result.scalar_one_or_none()
+            if project is None:
+                return False
+
+            project.result_uri = result_uri
+            project.status = ProjectStatus.COMPLETED.value
+            project.error = None
+            return True
+
+    @staticmethod
+    async def set_failed(correlation_id: str, error: str) -> bool:
+        async with DataManager.session() as session:
+            result = await session.execute(
+                select(Project).where(Project.correlation_id == correlation_id)
+            )
+            project = result.scalar_one_or_none()
+            if project is None:
+                return False
+
+            if project.status != ProjectStatus.COMPLETED.value:
+                project.status = ProjectStatus.FAILED.value
+                project.error = error
+            return True

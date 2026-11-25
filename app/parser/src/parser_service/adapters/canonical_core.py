@@ -7,7 +7,10 @@ import graph_dto
 import parser
 
 from parser_service.application.errors import InvalidGraphDtoError, InvalidSourceIndexError
-
+from parser.logic.errors import GraphValidationError, ParserError
+from parser_service.application.errors import (
+    InvalidGraphDtoError, InvalidSourceIndexError, ParserProcessingError
+)
 
 _INVALID_GRAPH_MESSAGE = "Canonical graph validation failed"
 _INVALID_SOURCE_INDEX_MESSAGE = "Canonical source index validation failed"
@@ -17,9 +20,14 @@ class CanonicalParserGateway:
     def parse(
         self, source_path: Path, graph_output_path: Path, source_index_output_path: Path
     ) -> tuple[Path, Path]:
-        return parser.parse_project_with_source_index(
-            source_path, graph_output_path, source_index_output_path
-        )
+        try:
+            return parser.parse_project_with_source_index(
+                source_path, graph_output_path, source_index_output_path
+            )
+        except GraphValidationError as error:
+            raise InvalidGraphDtoError("Canonical graph validation failed") from error
+        except ParserError as error:
+            raise ParserProcessingError("Canonical parser processing failed") from error
 
 
 class CanonicalGraphValidator:
