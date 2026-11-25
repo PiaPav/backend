@@ -47,6 +47,16 @@ graph/metrics DTO: полную materialization и проверку DTO выпо
 fallback на overview. Этот слой пока не запускает harness и не заменяет штатную
 materialization или runtime-применение выбранных context и toolset.
 
+`runners/technical_run.py` выполняет один наблюдаемый offline-вызов через
+публичный `HarnessHandler` с инъецируемыми runner и materializer. Отдельный
+technical envelope фиксирует решение доставки, проверки save/publish lifecycle,
+валидность `LLMAnalysis` и статус `passed`, `failed` либо
+`infrastructure_error`, не выдавая этот результат за оценку качества анализа.
+`run_store.py` валидирует envelope по отдельной JSON Schema и сохраняет его
+write-once в `runs/<run_id>/technical_run.json`. Этот контур не использует live
+LLM, не заменяет штатную materialization и пока не собирает недоступные через
+публичный runner provider usage и tool trace.
+
 ## Автономное ядро Этапа 4a
 
 - `evaluators/judge_client.py` реализует явный async lifecycle, ограниченные

@@ -33,10 +33,65 @@ def _judge_result() -> dict:
 
 @pytest.mark.parametrize("name", [
     "artifact_manifest.schema.json", "benchmark.schema.json",
-    "run_result.schema.json", "judge_result.schema.json",
+    "run_result.schema.json", "judge_result.schema.json", "technical_run.schema.json",
 ])
 def test_schema_is_valid_draft_2020_12(name: str) -> None:
     jsonschema.Draft202012Validator.check_schema(_schema(name))
+
+
+def test_technical_schema_status_invariants() -> None:
+    fixture = {"schema_version": 1, "run_id": "run-1", "project_id": "project",
+               "project_version": "1.0.0", "project_sha256": "a" * 64,
+               "configuration_id": "baseline", "configuration_sha256": "b" * 64,
+               "model": "offline", "prompt_version": "1.0.0", "prompt_sha256": "c" * 64,
+               "context_variant": "overview", "toolset_variant": "full", "tool_budget": 2,
+               "repeat": 1, "status": "passed", "delivery_decision": "ack",
+               "checks": [{"name": "lifecycle", "passed": True, "details": None}], "error": None,
+               "llm_analysis": {"issues": [], "strengths": []}, "result_sha256": "d" * 64,
+               "completed_event": {"event_type": "harness.completed.v1"}, "total_seconds": 0}
+    validator = jsonschema.Draft202012Validator(_schema("technical_run.schema.json"))
+    validator.validate(fixture)
+    with pytest.raises(jsonschema.ValidationError):
+        validator.validate({**fixture, "schema_version": True})
+    for field, value in (("delivery_decision", "retry"), ("error", {"type": "x", "message": "x"}),
+                         ("llm_analysis", None), ("checks", [{"name": "x", "passed": False, "details": None}])):
+        invalid = {**fixture, field: value}
+        with pytest.raises(jsonschema.ValidationError):
+            validator.validate(invalid)
+
+
+@pytest.mark.parametrize(("status", "decision"), [
+    ("failed", "retry"),
+    ("infrastructure_error", "ack"),
+    ("infrastructure_error", "reject"),
+])
+def test_technical_schema_rejects_status_delivery_contradictions(
+        status: str, decision: str) -> None:
+    fixture = {"schema_version": 1, "run_id": "run-1", "project_id": "project",
+               "project_version": "1.0.0", "project_sha256": "a" * 64,
+               "configuration_id": "baseline", "configuration_sha256": "b" * 64,
+               "model": "offline", "prompt_version": "1.0.0", "prompt_sha256": "c" * 64,
+               "context_variant": "overview", "toolset_variant": "full", "tool_budget": 2,
+               "repeat": 1, "status": status, "delivery_decision": decision, "checks": [],
+               "error": {"type": "failure", "message": "Safe failure."},
+               "llm_analysis": None, "result_sha256": None, "completed_event": None,
+               "total_seconds": 0}
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.Draft202012Validator(_schema("technical_run.schema.json")).validate(fixture)
+
+
+def test_technical_schema_passed_requires_nonempty_checks() -> None:
+    fixture = {"schema_version": 1, "run_id": "run-1", "project_id": "project",
+               "project_version": "1.0.0", "project_sha256": "a" * 64,
+               "configuration_id": "baseline", "configuration_sha256": "b" * 64,
+               "model": "offline", "prompt_version": "1.0.0", "prompt_sha256": "c" * 64,
+               "context_variant": "overview", "toolset_variant": "full", "tool_budget": 2,
+               "repeat": 1, "status": "passed", "delivery_decision": "ack", "checks": [],
+               "error": None, "llm_analysis": {"issues": [], "strengths": []},
+               "result_sha256": "d" * 64,
+               "completed_event": {"event_type": "harness.completed.v1"}, "total_seconds": 0}
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.Draft202012Validator(_schema("technical_run.schema.json")).validate(fixture)
 
 
 @pytest.mark.parametrize("producer,profile", [

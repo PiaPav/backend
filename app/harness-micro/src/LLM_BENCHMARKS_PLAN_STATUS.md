@@ -39,6 +39,11 @@
     usage и timings по единому `run_id`.
   - [ ] Проверять технический lifecycle, лимиты, tool-контракты, `LLMAnalysis`
     и обязательные события логирования.
+    - [x] Реализовать offline observable lifecycle через публичный
+      `HarnessHandler`: save/publish, completed event, `LLMAnalysis`, безопасная
+      классификация статуса и write-once technical envelope.
+    - [ ] Подключить реальные runtime telemetry лимитов, tool calls, provider
+      metadata и обязательных событий логирования.
   - [ ] Реализовать детерминированное сопоставление findings с эталоном.
     - [x] Для пилота реализовать офлайн-проверки locations, severity,
       запрещённых буквальных утверждений и точных дубликатов, а также
@@ -131,3 +136,10 @@
   варианты, замену стартовой пары без overview fallback, неизменяемость,
   несекретный детерминированный hash и строгую проверку наличия профилей.
   Остаётся то же некритичное предупреждение AnyIO о совместимости с pytest 10.
+- Для offline technical runner полный набор `src/benchmarks/tests` выполнен
+  через `pytest`: 269 тестов прошли без ошибок и пропусков. Адресные 138 тестов
+  подтвердили строгие статусные инварианты, настоящий lifecycle
+  `HarnessHandler`, санитизацию ошибок, противоречия completed event,
+  publisher failure после save и безопасное write-once сохранение. Live LLM,
+  реальные producer-артефакты и runtime telemetry не использовались. Остаётся
+  то же некритичное предупреждение AnyIO о совместимости с pytest 10.

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://piapav.local/schemas/technical_run.schema.json",
+  "title": "Offline benchmark technical run",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "project_id", "project_version", "project_sha256", "configuration_id", "configuration_sha256", "model", "prompt_version", "prompt_sha256", "context_variant", "toolset_variant", "tool_budget", "repeat", "status", "delivery_decision", "checks", "error", "llm_analysis", "result_sha256", "completed_event", "total_seconds"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "run_id": {"$ref": "#/$defs/safe"},
+    "project_id": {"$ref": "#/$defs/safe"},
+    "project_version": {"$ref": "#/$defs/semver"},
+    "project_sha256": {"$ref": "#/$defs/sha256"},
+    "configuration_id": {"$ref": "#/$defs/safe"},
+    "configuration_sha256": {"$ref": "#/$defs/sha256"},
+    "model": {"$ref": "#/$defs/safe"},
+    "prompt_version": {"$ref": "#/$defs/semver"},
+    "prompt_sha256": {"$ref": "#/$defs/sha256"},
+    "context_variant": {"$ref": "#/$defs/safe"},
+    "toolset_variant": {"$ref": "#/$defs/safe"},
+    "tool_budget": {"type": "integer", "minimum": 1},
+    "repeat": {"type": "integer", "minimum": 1},
+    "status": {"enum": ["passed", "failed", "infrastructure_error"]},
+    "delivery_decision": {"enum": ["ack", "reject", "retry", null]},
+    "checks": {"type": "array", "items": {"$ref": "#/$defs/check"}},
+    "error": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/error"}]},
+    "llm_analysis": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/analysis"}]},
+    "result_sha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/sha256"}]},
+    "completed_event": {"oneOf": [{"type": "null"}, {"type": "object"}]},
+    "total_seconds": {"type": "number", "minimum": 0}
+  },
+  "allOf": [
+    {"if": {"properties": {"status": {"const": "passed"}}, "required": ["status"]}, "then": {"properties": {"delivery_decision": {"const": "ack"}, "error": {"type": "null"}, "llm_analysis": {"$ref": "#/$defs/analysis"}, "result_sha256": {"$ref": "#/$defs/sha256"}, "completed_event": {"type": "object"}, "checks": {"minItems": 1, "items": {"properties": {"passed": {"const": true}}, "required": ["passed"]}}}}},
+    {"if": {"properties": {"status": {"const": "failed"}}, "required": ["status"]}, "then": {"properties": {"delivery_decision": {"enum": ["ack", "reject"]}, "error": {"$ref": "#/$defs/error"}, "llm_analysis": {"type": "null"}, "result_sha256": {"type": "null"}, "completed_event": {"type": "null"}}}},
+    {"if": {"properties": {"status": {"const": "infrastructure_error"}}, "required": ["status"]}, "then": {"properties": {"delivery_decision": {"enum": ["retry", null]}, "error": {"$ref": "#/$defs/error"}, "llm_analysis": {"type": "null"}, "result_sha256": {"type": "null"}, "completed_event": {"type": "null"}}}}
+  ],
+  "$defs": {
+    "safe": {"type": "string", "minLength": 1, "pattern": "^[^\\x00-\\x1f\\x7f/\\\\]+$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "semver": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"},
+    "check": {"type": "object", "additionalProperties": false, "required": ["name", "passed", "details"], "properties": {"name": {"$ref": "#/$defs/safe"}, "passed": {"type": "boolean"}, "details": {"type": ["string", "null"]}}},
+    "error": {"type": "object", "additionalProperties": false, "required": ["type", "message"], "properties": {"type": {"$ref": "#/$defs/safe"}, "message": {"$ref": "#/$defs/safe"}}},
+    "issue": {"type": "object", "additionalProperties": false, "required": ["title", "severity", "description", "location", "evidence", "recommendation"], "properties": {"title": {"type": "string"}, "severity": {"enum": ["critical", "high", "medium", "low"]}, "description": {"type": "string"}, "location": {"type": ["string", "null"]}, "evidence": {"type": "string"}, "recommendation": {"type": "string"}}},
+    "strength": {"type": "object", "additionalProperties": false, "required": ["title", "description", "location", "evidence", "recommendation"], "properties": {"title": {"type": "string"}, "description": {"type": "string"}, "location": {"type": ["string", "null"]}, "evidence": {"type": "string"}, "recommendation": {"type": "string"}}},
+    "analysis": {"type": "object", "additionalProperties": false, "required": ["issues", "strengths"], "properties": {"issues": {"type": "array", "maxItems": 5, "items": {"$ref": "#/$defs/issue"}}, "strengths": {"type": "array", "maxItems": 3, "items": {"$ref": "#/$defs/strength"}}}}
+  }
+}
