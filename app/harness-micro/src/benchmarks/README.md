@@ -40,6 +40,13 @@ Manifest описывает уже готовый producer export и не док
 graph/metrics DTO: полную materialization и проверку DTO выполняет штатный
 `InputMaterializer` при реальном запуске.
 
+`runners/run_configuration.py` разрешает baseline и однофакторные варианты в
+неизменяемую эффективную конфигурацию, вычисляет её несекретный SHA-256 и до
+запуска строго проверяет наличие выбранных профилей в staged bundle. Для
+вариантов контекста обязательны полные профили и выбранная стартовая пара без
+fallback на overview. Этот слой пока не запускает harness и не заменяет штатную
+materialization или runtime-применение выбранных context и toolset.
+
 ## Автономное ядро Этапа 4a
 
 - `evaluators/judge_client.py` реализует явный async lifecycle, ограниченные
