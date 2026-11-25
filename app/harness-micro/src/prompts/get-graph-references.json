@@ -13,6 +13,6 @@
       "required": ["OWNER-NODE-ID"],
       "additionalProperties": false
     },
-    "strict": true
+    "strict": false
   }
 }

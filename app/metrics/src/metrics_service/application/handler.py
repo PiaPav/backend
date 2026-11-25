@@ -8,12 +8,14 @@ from dataclasses import dataclass
 from datetime import timedelta, timezone
 from typing import Mapping
 
-from ..contracts import EventEnvelope, Failure, GraphReference, MetricsDescriptor, MetricsReady, Producer, from_mapping, to_mapping
+from ..contracts import EventEnvelope, Failure, MetricsDescriptor, MetricsReady, Producer, from_mapping, to_mapping
 from .errors import (ApplicationError, ArtifactConflictError, ErrorDisposition, GraphChecksumMismatchError,
                      GraphFingerprintMismatchError, IdempotencyPayloadConflictError)
 from .models import ClaimDisposition, DeliveryContext, DeliveryDecision, ProcessingState
 from .ports import CanonicalValidator, Clock, EventIdGenerator, EventPublisher, GraphInputResolver, IdempotencyStore, MetricsArtifactStore, MetricsGateway, MetricsStagingArea
+import logging
 
+logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class HandlerConfig:
@@ -42,12 +44,14 @@ class MetricsHandler:
         except (TypeError, ValueError):
             return DeliveryDecision.REJECT
         except Exception:
+            logger.exception("Metrics processing failed")
             return DeliveryDecision.RETRY
         try:
             canonical = json.dumps(to_mapping(event), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
             digest = hashlib.sha256(canonical).hexdigest()
             key = "metrics:" + hashlib.sha256(f"metrics\0{event.tenant_id}\0{event.event_id}".encode()).hexdigest()
         except Exception:
+            logger.exception("Metrics processing failed")
             return DeliveryDecision.RETRY
         try:
             token = self._ids.new_event_id()
@@ -57,11 +61,13 @@ class MetricsHandler:
         except ApplicationError as error:
             return self._decision(error)
         except Exception:
+            logger.exception("Metrics processing failed")
             return DeliveryDecision.RETRY
         try:
             if claimed.record.payload_digest != digest:
                 return DeliveryDecision.REJECT
             if claimed.disposition is ClaimDisposition.BUSY:
+                logger.warning("Active idempotency claim: %s", key)
                 return DeliveryDecision.RETRY
             if claimed.disposition is ClaimDisposition.EXISTING:
                 if claimed.record.state in {ProcessingState.PUBLISHED, ProcessingState.FAILED_PUBLISHED}:
@@ -70,6 +76,7 @@ class MetricsHandler:
                 self._idempotency.record_published(key, claimed.record.claim_token)
                 return DeliveryDecision.ACK
         except Exception:
+            logger.exception("Metrics processing failed")
             return DeliveryDecision.RETRY
         try:
             graph = event.payload.graph
@@ -90,23 +97,28 @@ class MetricsHandler:
                             or descriptor.sha256 != hashlib.sha256(artifact_bytes).hexdigest()):
                         raise ArtifactConflictError("Stored metrics descriptor does not match canonical content")
             ready = self._envelope(event, "metrics.ready.v1", MetricsReady(
-                GraphReference(graph.uri, fingerprint), MetricsDescriptor(
-                    descriptor.uri, descriptor.sha256, descriptor.size_bytes, 1, 4)))
+                source_uri=event.payload.source_uri, graph=graph,
+                metrics=MetricsDescriptor(descriptor.uri, descriptor.sha256, descriptor.size_bytes, 1, 4, fingerprint),
+                source_index=event.payload.source_index,
+            ))
         except ApplicationError as error:
             if error.disposition is not ErrorDisposition.FAILURE:
                 return self._decision(error)
             return self._persist_failure(key, token, event, error)
         except Exception:
+            logger.exception("Metrics processing failed")
             return DeliveryDecision.RETRY
         try:
             self._idempotency.record_saved(key, token, ready)
         except Exception:
+            logger.exception("Metrics processing failed")
             return DeliveryDecision.RETRY
         try:
             self._publisher.publish(ready)
             self._idempotency.record_published(key, token)
             return DeliveryDecision.ACK
         except Exception:
+            logger.exception("Metrics processing failed")
             return DeliveryDecision.RETRY
 
     def _envelope(self, source: EventEnvelope, event_type: str, payload: object) -> EventEnvelope:
@@ -122,6 +134,7 @@ class MetricsHandler:
             self._idempotency.record_published(key, token)
             return DeliveryDecision.ACK
         except Exception:
+            logger.exception("Metrics processing failed")
             return DeliveryDecision.RETRY
 
     @staticmethod
@@ -130,6 +143,7 @@ class MetricsHandler:
             return DeliveryDecision.REJECT
         if error.disposition is ErrorDisposition.FAILURE:
             return DeliveryDecision.ACK
+        logger.exception("Metrics processing failed")
         return DeliveryDecision.RETRY
 
 

@@ -14,7 +14,9 @@ from typing import Mapping, Protocol
 
 from core_server.interfaces.errors import InvalidHarnessInput
 from harness_service.harness_runner import HarnessRequest, HarnessRunner
+import logging
 
+logger = logging.getLogger(__name__)
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _RFC3339_UTC = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z")
 _ENVELOPE_FIELDS = {
@@ -316,8 +318,10 @@ class HarnessHandler:
                 output_event=output_event,
             )
         except (RejectedInputError, InvalidHarnessInput):
+            logger.exception("Invalid Harness input")
             return DeliveryDecision.REJECT
         except Exception:
+            logger.exception("Harness execution failed")
             return DeliveryDecision.RETRY
 
         try:

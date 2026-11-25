@@ -1,0 +1,99 @@
+services:
+
+  rabbitmq:
+    container_name: PiaPav-RabbitMQ
+    image: rabbitmq:4-management
+    hostname: rabbitmq
+    restart: unless-stopped
+
+    environment:
+      RABBITMQ_DEFAULT_USER: analysis
+      RABBITMQ_DEFAULT_PASS: analysis
+
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  parser:
+    build:
+      context: ./app
+      dockerfile: parser/Dockerfile
+
+    env_file:
+      - .env
+
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+    volumes:
+      - ./data:/data
+      - parser_state:/state
+
+  metrics:
+    build:
+      context: ./app
+      dockerfile: metrics/Dockerfile
+
+    env_file:
+      - .env
+
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+    volumes:
+      - ./data:/data
+      - metrics_state:/state
+
+  harness:
+    build:
+      context: ./app
+      dockerfile: harness-micro/Dockerfile
+
+    env_file:
+      - .env
+
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+    volumes:
+      - ./data:/data
+      - harness_state:/state
+
+  postgres:
+    image: postgres:18.7
+    restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:5433:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U piapav_user -d harness_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  rabbitmq_data:
+  parser_state:
+  metrics_state:
+  harness_state:
+  postgres_data:
+    external: true
+    name: c5dfb4683dc5b6177e06fa6df2dceca6ddc7800b9af646eedad0114f5572e250

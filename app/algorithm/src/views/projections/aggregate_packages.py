@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+# ЛОКАЛЬНО:
+# from ...graph_dto import validate_graph_v1
+# В КОНТЕЙНЕРЕ:
 from graph_dto import validate_graph_v1
 
 from ..aggregate_packages_contract import (

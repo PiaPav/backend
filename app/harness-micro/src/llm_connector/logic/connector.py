@@ -3,7 +3,9 @@ from utils.config import CONFIG
 
 from llm_connector.interfaces.connector import LLMConnectorInterface, AbstractLLMSession
 from response_models.models import Prompt, ModelMessage, ToolResponse, Request, ToolData, ModelResponse
+import logging
 
+from openai import AsyncOpenAI, BadRequestError
 
 class LLMSession(AbstractLLMSession):
     """Сессия для общения с нейронкой
@@ -18,12 +20,29 @@ class LLMSession(AbstractLLMSession):
         self.last_request: Request | None = None
 
     async def _execute(self, request: Request) -> ModelResponse:
-        # Keep an immutable snapshot: retries must repeat the same provider
-        # operation, not turn a transient response into conversation history.
         self.last_request = request.model_copy(deep=True)
-        response = await self.client.chat.completions.create(
-            **request.model_dump(exclude_none=True)
-        )
+
+        # for tool in request.model_dump(exclude_none=True).get("tools") or []:
+        #     function = tool["function"]
+        #     parameters = function.get("parameters", {})
+        #     properties = set(parameters.get("properties", {}))
+        #     required = set(parameters.get("required", []))
+        #
+        #     if properties != required:
+        #         logging.getLogger(__name__).error(
+        #             "Invalid tool schema: %s, missing=%s, extra=%s",
+        #             function["name"], properties - required, required - properties,
+        #         )
+
+        try:
+            response = await self.client.chat.completions.create(
+                **request.model_dump(exclude_none=True),
+                extra_body={"thinking": {"type": "disabled"}},
+            )
+        except BadRequestError as error:
+            logging.getLogger(__name__).error("DeepSeek rejected request: %s", error.body)
+            raise
+
         answer = ModelResponse.model_validate(response.model_dump())
         if answer.choices[0].finish_reason != "insufficient_system_resource":
             self.messages.append(answer.choices[0].message)

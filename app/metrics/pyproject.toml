@@ -7,7 +7,10 @@ name = "metrics-service"
 version = "0.1.0"
 description = "Canonical metrics core and local service shell"
 requires-python = ">=3.13"
-dependencies = ["networkx>=3.5"]
+dependencies = [
+    "aio-pika>=10.2.3",
+    "networkx>=3.5",
+]
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10"]

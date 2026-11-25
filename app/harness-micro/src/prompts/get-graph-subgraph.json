@@ -15,6 +15,6 @@
       "required": ["PROFILE-ID", "NODE-ID", "DEPTH"],
       "additionalProperties": false
     },
-    "strict": true
+    "strict": false
   }
 }

@@ -14,6 +14,10 @@ from .errors import ApplicationError, ArtifactConflictError, ErrorDisposition, I
 from .models import ClaimDisposition, DeliveryContext, DeliveryDecision, ProcessingState
 from .ports import Clock, EventIdGenerator, EventPublisher, GraphArtifactStore, GraphStagingArea, GraphValidator, IdempotencyStore, ParserGateway, SourceResolver
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class HandlerConfig:
@@ -42,12 +46,14 @@ class ParserHandler:
         except (TypeError, ValueError):
             return DeliveryDecision.REJECT
         except Exception:
+            logger.exception("Parser processing failed")
             return DeliveryDecision.RETRY
         try:
             canonical = json.dumps(to_mapping(event), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
             digest = hashlib.sha256(canonical).hexdigest()
             key = "parser:" + hashlib.sha256(f"parser\0{event.tenant_id}\0{event.event_id}".encode()).hexdigest()
         except Exception:
+            logger.exception("Parser processing failed")
             return DeliveryDecision.RETRY
         try:
             token = self._ids.new_event_id()
@@ -57,11 +63,13 @@ class ParserHandler:
         except ApplicationError as error:
             return self._decision(error)
         except Exception:
+            logger.exception("Parser processing failed")
             return DeliveryDecision.RETRY
         try:
             if claimed.record.payload_digest != digest:
                 return DeliveryDecision.REJECT
             if claimed.disposition is ClaimDisposition.BUSY:
+                logger.exception("Parser processing failed if claimed.disposition is ClaimDisposition.BUSY")
                 return DeliveryDecision.RETRY
             if claimed.disposition is ClaimDisposition.EXISTING:
                 if claimed.record.state in {ProcessingState.PUBLISHED, ProcessingState.FAILED_PUBLISHED}:
@@ -70,6 +78,7 @@ class ParserHandler:
                 self._idempotency.record_published(key, claimed.record.claim_token)
                 return DeliveryDecision.ACK
         except Exception:
+            logger.exception("Parser processing failed")
             return DeliveryDecision.RETRY
         try:
             artifact_key = "graph/" + hashlib.sha256(f"{event.tenant_id}\0{event.event_id}\0{digest}".encode()).hexdigest()
@@ -102,16 +111,19 @@ class ParserHandler:
                 return self._decision(error)
             return self._persist_failure(key, token, event, error)
         except Exception:
+            logger.exception("Parser processing failed")
             return DeliveryDecision.RETRY
         try:
             self._idempotency.record_saved(key, token, ready)
         except Exception:
+            logger.exception("Parser processing failed")
             return DeliveryDecision.RETRY
         try:
             self._publisher.publish(ready)
             self._idempotency.record_published(key, token)
             return DeliveryDecision.ACK
         except Exception:
+            logger.exception("Parser processing failed")
             return DeliveryDecision.RETRY
 
     def _envelope(self, source: EventEnvelope, event_type: str, payload: object) -> EventEnvelope:
@@ -127,6 +139,7 @@ class ParserHandler:
             self._idempotency.record_published(key, token)
             return DeliveryDecision.ACK
         except Exception:
+            logger.exception("Parser processing failed")
             return DeliveryDecision.RETRY
 
     @staticmethod
@@ -135,6 +148,7 @@ class ParserHandler:
             return DeliveryDecision.REJECT
         if error.disposition is ErrorDisposition.FAILURE:
             return DeliveryDecision.ACK
+        logger.exception("Parser processing failed")
         return DeliveryDecision.RETRY
 
 

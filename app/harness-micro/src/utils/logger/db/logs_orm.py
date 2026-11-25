@@ -3,7 +3,7 @@ import json
 from typing import Literal, Any
 
 from pydantic import BaseModel
-from sqlalchemy import Text, DateTime, String, Integer, CheckConstraint
+from sqlalchemy import Text, DateTime, String, Integer, CheckConstraint, BigInteger
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import SQLBase
@@ -59,7 +59,7 @@ class HarnessLogs(SQLBase):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    unique_id: Mapped[int] = mapped_column(Integer)
+    unique_id: Mapped[int] = mapped_column(BigInteger)
     date: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True),
                                                     default=lambda: datetime.datetime.now(datetime.timezone.utc))
     type: Mapped[str] = mapped_column(String(16), nullable=False)

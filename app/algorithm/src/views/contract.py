@@ -7,6 +7,9 @@ import re
 from pathlib import PurePosixPath
 from typing import Any, Mapping
 
+# ЛОКАЛЬНО:
+# from ..graph_dto import CLASS_KINDS, CONTROL_KINDS, NODE_KINDS, OCCURRENCE_KINDS
+# В КОНТЕЙНЕРЕ:
 from graph_dto import CLASS_KINDS, CONTROL_KINDS, NODE_KINDS, OCCURRENCE_KINDS
 
 from .registry import profile_metadata

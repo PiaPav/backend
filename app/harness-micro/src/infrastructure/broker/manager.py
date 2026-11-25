@@ -4,7 +4,10 @@ import aio_pika
 from aio_pika import DeliveryMode, ExchangeType, IncomingMessage, Message
 
 from .interface import BrokerInterface, Handler, DeliveryDecision
+import asyncio
+import logging
 
+logger = logging.getLogger(__name__)
 
 class RabbitMQManager(BrokerInterface):
     def __init__(self, url: str, exchange_name: str = "analysis.events") -> None:
@@ -16,7 +19,7 @@ class RabbitMQManager(BrokerInterface):
 
     async def connect(self, prefetch_count: int = 2) -> None:
         self.connection = await aio_pika.connect_robust(self.url)
-        self.channel = await self.connection.channel(publisher_confirms=True)
+        self.channel = await self.connection.channel(publisher_confirms=True, on_return_raises=True)
         await self.channel.set_qos(prefetch_count=prefetch_count)
         self.exchange = await self.channel.declare_exchange(self.exchange_name, ExchangeType.TOPIC, durable=True)
 
@@ -26,7 +29,7 @@ class RabbitMQManager(BrokerInterface):
 
         body = json.dumps(event, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         message = Message(body=body, content_type="application/json", delivery_mode=DeliveryMode.PERSISTENT)
-        await self.exchange.publish(message, routing_key=routing_key)
+        await self.exchange.publish(message, routing_key=routing_key, mandatory=True)
 
     async def consume(self, queue_name: str, routing_key: str, handler: Handler) -> None:
         if self.channel is None or self.exchange is None:
@@ -43,12 +46,16 @@ class RabbitMQManager(BrokerInterface):
                 await message.reject(requeue=False)
                 return
             except Exception:
+                logger.exception("Unhandled consumer exception")
+                await asyncio.sleep(2)
                 await message.reject(requeue=True)
                 return
 
             if decision is DeliveryDecision.ACK:
                 await message.ack()
             elif decision is DeliveryDecision.RETRY:
+                logger.warning("Retrying event %s", event.get("event_id"))
+                await asyncio.sleep(2)
                 await message.reject(requeue=True)
             else:
                 await message.reject(requeue=False)
@@ -58,3 +65,11 @@ class RabbitMQManager(BrokerInterface):
     async def close(self) -> None:
         if self.connection is not None:
             await self.connection.close()
+
+    async def declare_queue(self, queue_name: str, routing_key: str) -> None:
+        if self.channel is None or self.exchange is None:
+            raise RuntimeError("Broker is not connected")
+
+        queue = await self.channel.declare_queue(queue_name, durable=True)
+
+        await queue.bind(self.exchange, routing_key=routing_key)

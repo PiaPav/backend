@@ -4,6 +4,9 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any, Mapping
 
+# ЛОКАЛЬНО:
+# from ...graph_dto import validate_graph_v1
+# В КОНТЕЙНЕРЕ:
 from graph_dto import validate_graph_v1
 from ..aggregate_overview_contract import aggregate_overview_package_id
 from ..registry import summary_profile_metadata

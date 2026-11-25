@@ -7,7 +7,9 @@ name = "parser-service"
 version = "0.1.0"
 description = "Canonical parser core and local service shell"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "aio-pika>=10.2.3",
+]
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10"]

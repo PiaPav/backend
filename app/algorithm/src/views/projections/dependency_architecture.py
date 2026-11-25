@@ -4,6 +4,9 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Mapping
 
+# ЛОКАЛЬНО:
+# from ...graph_dto import validate_graph_v1
+# В КОНТЕЙНЕРЕ:
 from graph_dto import validate_graph_v1
 
 from ..contract import aggregate_import_edge_id, graph_view_fingerprint, validate_graph_view_v1

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-
+from .commands import GraphDescriptor, SourceIndexDescriptor
 from .envelope import require_bool, require_hash, require_int, require_keys, require_literal_int, require_mapping, require_string
 
 
@@ -33,49 +33,64 @@ class MetricsDescriptor:
     size_bytes: int
     schema_version: int
     metrics_semantics_version: int
+    graph_fingerprint: str
 
     def __post_init__(self) -> None:
         require_string(self.uri, "metrics.uri")
         require_hash(self.sha256, "metrics.sha256")
-        size = require_int(self.size_bytes, "metrics.size_bytes")
-        if size < 0:
+        if require_int(self.size_bytes, "metrics.size_bytes") < 0:
             raise ValueError("metrics.size_bytes must be nonnegative")
         require_literal_int(self.schema_version, 1, "metrics.schema_version")
         require_literal_int(self.metrics_semantics_version, 4, "metrics.metrics_semantics_version")
+        require_hash(self.graph_fingerprint, "metrics.graph_fingerprint")
 
     @classmethod
     def from_mapping(cls, value: object) -> MetricsDescriptor:
         mapping = require_mapping(value, "metrics")
-        require_keys(mapping, {"uri", "sha256", "size_bytes", "schema_version", "metrics_semantics_version"}, "metrics")
-        size = require_int(mapping["size_bytes"], "metrics.size_bytes")
-        if size < 0:
-            raise ValueError("metrics.size_bytes must be nonnegative")
-        return cls(require_string(mapping["uri"], "metrics.uri"), require_hash(mapping["sha256"], "metrics.sha256"), size, require_literal_int(mapping["schema_version"], 1, "metrics.schema_version"), require_literal_int(mapping["metrics_semantics_version"], 4, "metrics.metrics_semantics_version"))
+        require_keys(mapping, {"uri", "sha256", "size_bytes", "schema_version",
+                               "metrics_semantics_version", "graph_fingerprint"}, "metrics")
+        return cls(**mapping)
 
     def to_mapping(self) -> dict[str, object]:
-        return {"uri": self.uri, "sha256": self.sha256, "size_bytes": self.size_bytes, "schema_version": self.schema_version, "metrics_semantics_version": self.metrics_semantics_version}
+        return {
+            "uri": self.uri, "sha256": self.sha256, "size_bytes": self.size_bytes,
+            "schema_version": self.schema_version, "metrics_semantics_version": self.metrics_semantics_version,
+            "graph_fingerprint": self.graph_fingerprint,
+        }
 
 
 @dataclass(frozen=True)
 class MetricsReady:
-    graph: GraphReference
+    source_uri: str
+    graph: GraphDescriptor
     metrics: MetricsDescriptor
+    source_index: SourceIndexDescriptor | None = None
 
     def __post_init__(self) -> None:
-        if type(self.graph) is not GraphReference:
-            raise TypeError("graph must be a GraphReference")
+        require_string(self.source_uri, "source_uri")
+        if type(self.graph) is not GraphDescriptor:
+            raise TypeError("graph must be a GraphDescriptor")
         if type(self.metrics) is not MetricsDescriptor:
             raise TypeError("metrics must be a MetricsDescriptor")
+        if self.source_index is not None and type(self.source_index) is not SourceIndexDescriptor:
+            raise TypeError("source_index must be a SourceIndexDescriptor")
+        if self.graph.graph_fingerprint != self.metrics.graph_fingerprint:
+            raise ValueError("Graph fingerprints differ")
 
     @classmethod
     def from_mapping(cls, value: object) -> MetricsReady:
         mapping = require_mapping(value, "payload")
-        require_keys(mapping, {"graph", "metrics"}, "payload")
-        return cls(GraphReference.from_mapping(mapping["graph"]), MetricsDescriptor.from_mapping(mapping["metrics"]))
+        expected = {"source_uri", "graph", "metrics"} | ({"source_index"} if "source_index" in mapping else set())
+        require_keys(mapping, expected, "payload")
+        source_index = SourceIndexDescriptor.from_mapping(mapping["source_index"]) if "source_index" in mapping else None
+        return cls(mapping["source_uri"], GraphDescriptor.from_mapping(mapping["graph"]),
+                   MetricsDescriptor.from_mapping(mapping["metrics"]), source_index)
 
     def to_mapping(self) -> dict[str, object]:
-        return {"graph": self.graph.to_mapping(), "metrics": self.metrics.to_mapping()}
-
+        result = {"source_uri": self.source_uri, "graph": self.graph.to_mapping(), "metrics": self.metrics.to_mapping()}
+        if self.source_index is not None:
+            result["source_index"] = self.source_index.to_mapping()
+        return result
 
 @dataclass(frozen=True)
 class Failure:

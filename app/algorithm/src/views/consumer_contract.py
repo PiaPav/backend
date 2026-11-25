@@ -4,6 +4,9 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+# ЛОКАЛЬНО:
+# from ..graph_dto import validate_graph_v1
+# В КОНТЕЙНЕРЕ:
 from graph_dto import validate_graph_v1
 
 from .contract import validate_graph_view_v1

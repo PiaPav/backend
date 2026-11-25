@@ -5,7 +5,10 @@ from typing import Any
 import json
 from collections import Counter
 
-from graph_dto import PARSER_SEMANTICS_VERSION, graph_fingerprint, validate_graph_v1
+# ЛОКАЛЬНО:
+# from backend.app.algorithm.src.graph_dto import graph_fingerprint, validate_graph_v1, PARSER_SEMANTICS_VERSION
+# В КОНТЕЙНЕРЕ:
+from graph_dto import graph_fingerprint, validate_graph_v1, PARSER_SEMANTICS_VERSION
 from .logic.models import FunctionComplexityFacts, ModuleInfo
 from .logic.project_index import ProjectIndex
 

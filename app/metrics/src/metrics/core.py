@@ -5,8 +5,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from graph_dto import graph_fingerprint, validate_graph_v1
-
+# ЛОКАЛЬНО:
+# from backend.app.algorithm.src.graph_dto import validate_graph_v1, graph_fingerprint
+# В КОНТЕЙНЕРЕ:
+from graph_dto import validate_graph_v1, graph_fingerprint
 from .logic.calculator import calculate_graph_metrics
 from .logic.serialization import _save_metrics_dto
 
