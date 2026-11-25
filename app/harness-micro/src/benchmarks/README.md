@@ -40,6 +40,17 @@ Manifest описывает уже готовый producer export и не док
 graph/metrics DTO: полную materialization и проверку DTO выполняет штатный
 `InputMaterializer` при реальном запуске.
 
+## Автономное ядро Этапа 4a
+
+- `evaluators/judge_client.py` реализует явный async lifecycle, ограниченные
+  повторы только транспортных сбоев и строгую проверку ответа по judge schema;
+- `evaluators/judge.py` формирует минимальный двухсообщенческий запрос,
+  последовательные повторные оценки и консервативный majority consensus;
+- unit-тесты используют только инъецируемый offline transport: live API не
+  вызывается и ключи не записываются в результаты;
+- этап не включает calibration судьи и integration с benchmark runner. Rubric
+  остаётся `uncalibrated`.
+
 ## Версионирование
 
 - schema-контракты используют целочисленный `schema_version`; несовместимое
